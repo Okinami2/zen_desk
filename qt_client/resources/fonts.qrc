@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/fonts">
+        <file>fonts/Inter_28pt-Bold.ttf</file>
+        <file>fonts/SourceHanSansCN-Medium.otf</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,37 @@
+/* style.qss */
+
+QMainWindow {
+    background: #F4F5F7;
+    color: #1F2937;
+    font-family: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei";
+}
+
+QWidget {
+    color: #1F2937;
+    font-family: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei";
+}
+
+QLabel {
+    color: #1F2937;
+}
+
+QPushButton {
+    background: #4F46E5;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background: #4338CA;
+}
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(229, 231, 235, 0.6);
+    border-radius: 16px;
+    padding: 16px;
+}
