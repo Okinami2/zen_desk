@@ -15,15 +15,21 @@ LIB_DIR := $(OUT_DIR)/lib
 TARGET_PATH := $(BIN_DIR)
 COMMON_LIB := $(LIB_DIR)/libcommon.a
 
-SMP_SRCS := $(wildcard $(THIS_DIR)/src/*.c)
+SMP_SRCS := $(wildcard $(THIS_DIR)/src/*.c)	\
+			$(wildcard $(THIS_DIR)/common/*.c)
 
 # target source
 OBJS := $(SMP_SRCS:%.c=%.o)
 
+CFLAGS += -I$(REL_INC)/svp_npu
+CFLAGS += -fstack-protector-strong
 CFLAGS += -I$(THIS_DIR)/include
+CFLAGS += -I$(THIS_DIR)/common
 CFLAGS += -I$(TOP_DIR)/common/include
 CFLAGS += $(COMM_INC)
 
+MPI_LIBS += $(REL_LIB)/svp_npu/libsvp_acl.a
+MPI_LIBS += -L$(REL_LIB)/svp_npu -lprotobuf-c
 MPI_LIBS += $(REL_LIB)/libss_hdmi.a
 MPI_LIBS += $(LIBS_LD_CFLAGS)
 

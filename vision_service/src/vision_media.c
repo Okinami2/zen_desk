@@ -864,3 +864,42 @@ td_s32 sample_uvc_media_release_frame(const ot_video_frame_info *frame)
 
     return ss_mpi_vpss_release_chn_frame(0, 1, frame);
 }
+
+static inline uint8_t clip_u8(int v)
+{
+    if (v < 0) {
+        return 0;
+    }
+    if (v > 255) {
+        return 255;
+    }
+    return (uint8_t)v;
+}
+
+/* NV21(Y + VU) -> RGB888 */
+void nv21_to_rgb888_safe(const uint8_t *y_plane, const uint8_t *vu_plane,
+    int width, int height, int y_stride, int vu_stride, uint8_t *rgb)
+{
+    int x, y;
+
+    for (y = 0; y < height; y++) {
+        const uint8_t *py = y_plane + y * y_stride;
+        const uint8_t *pvu = vu_plane + (y / 2) * vu_stride;
+        uint8_t *prgb = rgb + y * width * 3;
+
+        for (x = 0; x < width; x++) {
+            int Y = py[x];
+            int vu_index = (x / 2) * 2;
+            int V = pvu[vu_index + 0] - 128;
+            int U = pvu[vu_index + 1] - 128;
+
+            int R = (int)(Y + 1.402 * V);
+            int G = (int)(Y - 0.344136 * U - 0.714136 * V);
+            int B = (int)(Y + 1.772 * U);
+
+            prgb[x * 3 + 0] = clip_u8(R);
+            prgb[x * 3 + 1] = clip_u8(G);
+            prgb[x * 3 + 2] = clip_u8(B);
+        }
+    }
+}

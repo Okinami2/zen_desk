@@ -29,4 +29,6 @@ td_s32 sample_uvc_media_stop_receive_data(td_void);
 td_s32 sample_uvc_media_get_frame(ot_video_frame_info *frame, td_s32 milli_sec);
 td_s32 sample_uvc_media_release_frame(const ot_video_frame_info *frame);
 td_void sample_uvc_media_set_preview_enable(td_bool enable);
+void nv21_to_rgb888_safe(const uint8_t *y_plane, const uint8_t *vu_plane,
+    int width, int height, int y_stride, int vu_stride, uint8_t *rgb);
 #endif /* end of #ifndef __MEDIA_VDEC_H__ */

@@ -289,39 +289,32 @@ td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
     sigaction(SIGINT, &sig_exit, TD_NULL);
     sigaction(SIGTERM, &sig_exit, TD_NULL);
 
-    SDK_init();
-
     ret = uvc_lite_open(&ctx, dev_name);
     if (ret != TD_SUCCESS) {
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_set_format(&ctx, type_name, width, height);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&ctx);
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_reqbufs(&ctx, 4);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&ctx);
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_queue_all(&ctx);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&ctx);
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_stream_on(&ctx);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&ctx);
-        SDK_exit();
         return ret;
     }
 
@@ -329,7 +322,6 @@ td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
     if (ret != TD_SUCCESS) {
         uvc_lite_stream_off(&ctx);
         uvc_lite_close(&ctx);
-        SDK_exit();
         return ret;
     }
 
@@ -339,7 +331,6 @@ td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
     sample_uvc_media_exit();
     uvc_lite_stream_off(&ctx);
     uvc_lite_close(&ctx);
-    SDK_exit();
 
     return ret;
 }
@@ -347,7 +338,7 @@ td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
 td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
     const td_char *dev_name, const td_char *type_name, td_u32 width, td_u32 height)
 {
-    td_void sample_uvc_media_set_preview_enable(td_bool enable);
+    sample_uvc_media_set_preview_enable(TD_FALSE);
     td_s32 ret;
     errno_t sret;
 
@@ -366,39 +357,33 @@ td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
         return TD_FAILURE;
     }
 
-    SDK_init();
 
     ret = uvc_lite_open(&cap->uvc, dev_name);
     if (ret != TD_SUCCESS) {
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_set_format(&cap->uvc, type_name, width, height);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&cap->uvc);
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_reqbufs(&cap->uvc, 4);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&cap->uvc);
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_queue_all(&cap->uvc);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&cap->uvc);
-        SDK_exit();
         return ret;
     }
 
     ret = uvc_lite_stream_on(&cap->uvc);
     if (ret != TD_SUCCESS) {
         uvc_lite_close(&cap->uvc);
-        SDK_exit();
         return ret;
     }
 
@@ -406,7 +391,6 @@ td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
     if (ret != TD_SUCCESS) {
         uvc_lite_stream_off(&cap->uvc);
         uvc_lite_close(&cap->uvc);
-        SDK_exit();
         return ret;
     }
 
@@ -480,7 +464,6 @@ td_s32 sample_uvc_capture_close(sample_uvc_capture_ctx *cap)
         sample_uvc_media_exit();
         uvc_lite_stream_off(&cap->uvc);
         uvc_lite_close(&cap->uvc);
-        SDK_exit();
         cap->opened = TD_FALSE;
     }
 
