@@ -20,13 +20,9 @@ extern td_s32 sample_svp_npu_set_face_det_frame(const ot_video_frame_info *frame
 
 #define UVC_DEV_PATH            "/dev/video0"
 #define UVC_PIX_FMT             "MJPEG"
-#define UVC_WIDTH               1920
-#define UVC_HEIGHT              1080
+#define UVC_WIDTH               1280
+#define UVC_HEIGHT              720
 #define UVC_TIMEOUT_MS          2000
-
-#define SAVE_INTERVAL_SEC       1
-
-#define DEBUG_FRAME_DIR         "./frames"
 #define DATA_DIR                "./data"
 #define DATA_INPUT_DIR          "./data/input"
 
@@ -63,102 +59,11 @@ static int ensure_dir(const char *dir_path)
     return 0;
 }
 
-static int save_rgb_to_ppm(const char *filename, const uint8_t *rgb, int width, int height)
+static double now_monotonic_seconds(void)
 {
-    FILE *fp = fopen(filename, "wb");
-    size_t size;
-
-    if (fp == NULL) {
-        perror("fopen ppm failed");
-        return -1;
-    }
-
-    if (fprintf(fp, "P6\n%d %d\n255\n", width, height) < 0) {
-        perror("fprintf ppm failed");
-        fclose(fp);
-        return -1;
-    }
-
-    size = (size_t)width * (size_t)height * 3;
-    if (fwrite(rgb, 1, size, fp) != size) {
-        perror("fwrite ppm failed");
-        fclose(fp);
-        return -1;
-    }
-
-    fclose(fp);
-    return 0;
-}
-
-static void draw_red_box_rgb888(uint8_t *rgb, int width, int height,
-    float x1f, float y1f, float x2f, float y2f)
-{
-    int x1;
-    int y1;
-    int x2;
-    int y2;
-    int x;
-    int y;
-    int t;
-    const int thick = 3;
-
-    if (rgb == NULL || width <= 0 || height <= 0) {
-        return;
-    }
-
-    x1 = (int)floorf(x1f);
-    y1 = (int)floorf(y1f);
-    x2 = (int)ceilf(x2f);
-    y2 = (int)ceilf(y2f);
-
-    if (x1 < 0) x1 = 0;
-    if (y1 < 0) y1 = 0;
-    if (x2 >= width) x2 = width - 1;
-    if (y2 >= height) y2 = height - 1;
-
-    if (x1 >= x2 || y1 >= y2) {
-        return;
-    }
-
-    for (t = 0; t < thick; t++) {
-        int yt = y1 + t;
-        int yb = y2 - t;
-        int xl = x1 + t;
-        int xr = x2 - t;
-
-        if (yt >= 0 && yt < height) {
-            for (x = x1; x <= x2; x++) {
-                uint8_t *p = rgb + ((size_t)yt * (size_t)width + (size_t)x) * 3;
-                p[0] = 255;
-                p[1] = 0;
-                p[2] = 0;
-            }
-        }
-        if (yb >= 0 && yb < height) {
-            for (x = x1; x <= x2; x++) {
-                uint8_t *p = rgb + ((size_t)yb * (size_t)width + (size_t)x) * 3;
-                p[0] = 255;
-                p[1] = 0;
-                p[2] = 0;
-            }
-        }
-        if (xl >= 0 && xl < width) {
-            for (y = y1; y <= y2; y++) {
-                uint8_t *p = rgb + ((size_t)y * (size_t)width + (size_t)xl) * 3;
-                p[0] = 255;
-                p[1] = 0;
-                p[2] = 0;
-            }
-        }
-        if (xr >= 0 && xr < width) {
-            for (y = y1; y <= y2; y++) {
-                uint8_t *p = rgb + ((size_t)y * (size_t)width + (size_t)xr) * 3;
-                p[0] = 255;
-                p[1] = 0;
-                p[2] = 0;
-            }
-        }
-    }
+    struct timespec ts;
+    (void)clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
 }
 
 int main(void)
@@ -166,15 +71,25 @@ int main(void)
     sample_uvc_capture_ctx cap;
     ot_video_frame_info frame;
     td_s32 ret;
-    time_t last_save_sec = 0;
-    unsigned int save_index = 0;
+    td_u64 fps_frames = 0;
+    td_u64 fps_ok_frames = 0;
+    td_u64 fps_face_frames = 0;
+    double fps_window_start = 0.0;
+    double t_sum_read = 0.0;
+    double t_sum_mmap = 0.0;
+    double t_sum_convert = 0.0;
+    double t_sum_set_frame = 0.0;
+    double t_sum_pipeline = 0.0;
+    double t_sum_release = 0.0;
+    double t_sum_loop = 0.0;
+    double t_max_read = 0.0;
+    double t_max_convert = 0.0;
+    double t_max_pipeline = 0.0;
+    double t_max_loop = 0.0;
 
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    if (ensure_dir(DEBUG_FRAME_DIR) != 0) {
-        return -1;
-    }
     if (ensure_dir(DATA_DIR) != 0) {
         return -1;
     }
@@ -199,6 +114,8 @@ int main(void)
         return -1;
     }
 
+    fps_window_start = now_monotonic_seconds();
+
     while (!g_exit) {
         int width;
         int height;
@@ -207,27 +124,24 @@ int main(void)
         size_t y_size;
         size_t frame_size;
         uint8_t *base = NULL;
-        uint8_t *rgb = NULL;
-        const uint8_t *y_plane;
-        const uint8_t *vu_plane;
-        time_t now_sec;
         sample_svp_frame_result infer_result;
-        char ppm_name[256];
+        double t0;
+        double t1;
+        double t2;
+        double t3;
+        double t4;
+        double t5;
+        double t6;
+        double v;
+
+        t0 = now_monotonic_seconds();
 
         ret = sample_uvc_capture_read_frame(&cap, &frame, UVC_TIMEOUT_MS);
+        t1 = now_monotonic_seconds();
         if (ret != TD_SUCCESS) {
             printf("sample_uvc_capture_read_frame failed\n");
             continue;
         }
-
-        printf("get frame ok: %ux%u stride0=%u stride1=%u pixel_format=%d phys0=0x%llx phys1=0x%llx\n",
-            frame.video_frame.width,
-            frame.video_frame.height,
-            frame.video_frame.stride[0],
-            frame.video_frame.stride[1],
-            frame.video_frame.pixel_format,
-            (unsigned long long)frame.video_frame.phys_addr[0],
-            (unsigned long long)frame.video_frame.phys_addr[1]);
 
         width = (int)frame.video_frame.width;
         height = (int)frame.video_frame.height;
@@ -244,30 +158,19 @@ int main(void)
         }
 
         base = (uint8_t *)ss_mpi_sys_mmap(frame.video_frame.phys_addr[0], frame_size);
+        t2 = now_monotonic_seconds();
         if (base == NULL) {
             printf("ss_mpi_sys_mmap failed\n");
             (td_void)sample_uvc_capture_release_frame(&frame);
             continue;
         }
 
-        y_plane = base;
-        vu_plane = base + y_size;
-
-        rgb = (uint8_t *)malloc((size_t)width * (size_t)height * 3);
-        if (rgb == NULL) {
-            printf("malloc rgb failed\n");
-            ss_mpi_sys_munmap(base, frame_size);
-            (td_void)sample_uvc_capture_release_frame(&frame);
-            continue;
-        }
-
-        printf("start convert nv21 -> rgb\n");
-        nv21_to_rgb888_safe(y_plane, vu_plane, width, height, stride0, stride1, rgb);
+        t3 = now_monotonic_seconds();
 
         ret = sample_svp_npu_set_face_det_frame(&frame, base);
+        t4 = now_monotonic_seconds();
         if (ret != TD_SUCCESS) {
             printf("sample_svp_npu_set_face_det_frame failed\n");
-            free(rgb);
             ss_mpi_sys_munmap(base, frame_size);
             (td_void)sample_uvc_capture_release_frame(&frame);
             (void)memset(&frame, 0, sizeof(frame));
@@ -275,51 +178,106 @@ int main(void)
         }
 
         (void)memset(&infer_result, 0, sizeof(infer_result));
-        ret = sample_svp_npu_run_frame_pipeline_rgb888(rgb, (td_u32)width, (td_u32)height, &infer_result);
+        ret = sample_svp_npu_run_frame_pipeline_rgb888(TD_NULL, (td_u32)width, (td_u32)height, &infer_result);
+        t5 = now_monotonic_seconds();
+        fps_frames++;
         if (ret != TD_SUCCESS) {
             printf("sample_svp_npu_run_frame_pipeline_rgb888 failed\n");
         } else {
+            fps_ok_frames++;
             if (infer_result.has_face) {
-                printf("[NPU] face=(%.1f, %.1f, %.1f, %.1f) score=%.3f yaw=%.2f pitch=%.2f\n",
-                    infer_result.face.x1, infer_result.face.y1,
-                    infer_result.face.x2, infer_result.face.y2,
-                    infer_result.face.score,
-                    infer_result.gaze.yaw_deg,
-                    infer_result.gaze.pitch_deg);
-            } else {
-                printf("[NPU] no face\n");
-            }
-
-            now_sec = time(NULL);
-            if (last_save_sec == 0 || (now_sec - last_save_sec) >= SAVE_INTERVAL_SEC) {
-                if (infer_result.has_face) {
-                    draw_red_box_rgb888(rgb, width, height,
-                        infer_result.face.x1, infer_result.face.y1,
-                        infer_result.face.x2, infer_result.face.y2);
-                }
-
-                snprintf(ppm_name, sizeof(ppm_name), "%s/det_%04u.ppm", DEBUG_FRAME_DIR, save_index);
-                if (save_rgb_to_ppm(ppm_name, rgb, width, height) == 0) {
-                    printf("saved det image: %s (has_face=%d)\n", ppm_name, infer_result.has_face ? 1 : 0);
-                } else {
-                    printf("save det ppm failed\n");
-                }
-
-                last_save_sec = now_sec;
-                save_index++;
+                fps_face_frames++;
             }
         }
 
-        free(rgb);
+        {
+            double now = now_monotonic_seconds();
+            double dt = now - fps_window_start;
+            if (dt >= 1.0) {
+                double fps_total = (double)fps_frames / dt;
+                double fps_ok = (double)fps_ok_frames / dt;
+                double face_ratio = (fps_ok_frames == 0) ? 0.0 : ((double)fps_face_frames * 100.0 / (double)fps_ok_frames);
+                printf("[PERF] fps_total=%.2f fps_ok=%.2f face_ratio=%.1f%% window=%.2fs\n",
+                    fps_total, fps_ok, face_ratio, dt);
+                fps_window_start = now;
+                fps_frames = 0;
+                fps_ok_frames = 0;
+                fps_face_frames = 0;
+            }
+        }
+
         ss_mpi_sys_munmap(base, frame_size);
 
         ret = sample_uvc_capture_release_frame(&frame);
+        t6 = now_monotonic_seconds();
         if (ret != TD_SUCCESS) {
             printf("sample_uvc_capture_release_frame failed\n");
             break;
         }
 
+        v = t1 - t0;
+        t_sum_read += v;
+        if (v > t_max_read) {
+            t_max_read = v;
+        }
+
+        t_sum_mmap += (t2 - t1);
+
+        v = t3 - t2;
+        t_sum_convert += v;
+        if (v > t_max_convert) {
+            t_max_convert = v;
+        }
+
+        t_sum_set_frame += (t4 - t3);
+
+        v = t5 - t4;
+        t_sum_pipeline += v;
+        if (v > t_max_pipeline) {
+            t_max_pipeline = v;
+        }
+
+        t_sum_release += (t6 - t5);
+
+        v = t6 - t0;
+        t_sum_loop += v;
+        if (v > t_max_loop) {
+            t_max_loop = v;
+        }
+
         (void)memset(&frame, 0, sizeof(frame));
+
+        {
+            double now = now_monotonic_seconds();
+            double dt = now - fps_window_start;
+            if (dt >= 1.0 && fps_frames > 0) {
+                double inv_n = 1.0 / (double)fps_frames;
+                printf("[PERF-DETAIL] avg_ms read=%.2f mmap=%.2f convert=%.2f set=%.2f pipeline=%.2f release=%.2f loop=%.2f | max_ms read=%.2f convert=%.2f pipeline=%.2f loop=%.2f\n",
+                    t_sum_read * 1000.0 * inv_n,
+                    t_sum_mmap * 1000.0 * inv_n,
+                    t_sum_convert * 1000.0 * inv_n,
+                    t_sum_set_frame * 1000.0 * inv_n,
+                    t_sum_pipeline * 1000.0 * inv_n,
+                    t_sum_release * 1000.0 * inv_n,
+                    t_sum_loop * 1000.0 * inv_n,
+                    t_max_read * 1000.0,
+                    t_max_convert * 1000.0,
+                    t_max_pipeline * 1000.0,
+                    t_max_loop * 1000.0);
+
+                t_sum_read = 0.0;
+                t_sum_mmap = 0.0;
+                t_sum_convert = 0.0;
+                t_sum_set_frame = 0.0;
+                t_sum_pipeline = 0.0;
+                t_sum_release = 0.0;
+                t_sum_loop = 0.0;
+                t_max_read = 0.0;
+                t_max_convert = 0.0;
+                t_max_pipeline = 0.0;
+                t_max_loop = 0.0;
+            }
+        }
     }
 
     sample_svp_npu_deinit_runtime();
