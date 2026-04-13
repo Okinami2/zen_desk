@@ -7,8 +7,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <math.h>
 
 #include "vision_uvc.h"
+#include "vision_media.h"
 #include "ot_common_sys.h"
 #include "npu_process.h"
 #include "sdk_module_init.h"
@@ -86,6 +88,77 @@ static int save_rgb_to_ppm(const char *filename, const uint8_t *rgb, int width, 
 
     fclose(fp);
     return 0;
+}
+
+static void draw_red_box_rgb888(uint8_t *rgb, int width, int height,
+    float x1f, float y1f, float x2f, float y2f)
+{
+    int x1;
+    int y1;
+    int x2;
+    int y2;
+    int x;
+    int y;
+    int t;
+    const int thick = 3;
+
+    if (rgb == NULL || width <= 0 || height <= 0) {
+        return;
+    }
+
+    x1 = (int)floorf(x1f);
+    y1 = (int)floorf(y1f);
+    x2 = (int)ceilf(x2f);
+    y2 = (int)ceilf(y2f);
+
+    if (x1 < 0) x1 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x2 >= width) x2 = width - 1;
+    if (y2 >= height) y2 = height - 1;
+
+    if (x1 >= x2 || y1 >= y2) {
+        return;
+    }
+
+    for (t = 0; t < thick; t++) {
+        int yt = y1 + t;
+        int yb = y2 - t;
+        int xl = x1 + t;
+        int xr = x2 - t;
+
+        if (yt >= 0 && yt < height) {
+            for (x = x1; x <= x2; x++) {
+                uint8_t *p = rgb + ((size_t)yt * (size_t)width + (size_t)x) * 3;
+                p[0] = 255;
+                p[1] = 0;
+                p[2] = 0;
+            }
+        }
+        if (yb >= 0 && yb < height) {
+            for (x = x1; x <= x2; x++) {
+                uint8_t *p = rgb + ((size_t)yb * (size_t)width + (size_t)x) * 3;
+                p[0] = 255;
+                p[1] = 0;
+                p[2] = 0;
+            }
+        }
+        if (xl >= 0 && xl < width) {
+            for (y = y1; y <= y2; y++) {
+                uint8_t *p = rgb + ((size_t)y * (size_t)width + (size_t)xl) * 3;
+                p[0] = 255;
+                p[1] = 0;
+                p[2] = 0;
+            }
+        }
+        if (xr >= 0 && xr < width) {
+            for (y = y1; y <= y2; y++) {
+                uint8_t *p = rgb + ((size_t)y * (size_t)width + (size_t)xr) * 3;
+                p[0] = 255;
+                p[1] = 0;
+                p[2] = 0;
+            }
+        }
+    }
 }
 
 int main(void)
@@ -191,20 +264,6 @@ int main(void)
         printf("start convert nv21 -> rgb\n");
         nv21_to_rgb888_safe(y_plane, vu_plane, width, height, stride0, stride1, rgb);
 
-        now_sec = time(NULL);
-        if (last_save_sec == 0 || (now_sec - last_save_sec) >= SAVE_INTERVAL_SEC) {
-            snprintf(ppm_name, sizeof(ppm_name), "%s/frame_%04u.ppm", DEBUG_FRAME_DIR, save_index);
-
-            if (save_rgb_to_ppm(ppm_name, rgb, width, height) == 0) {
-                printf("saved rgb image: %s\n", ppm_name);
-            } else {
-                printf("save ppm failed\n");
-            }
-
-            last_save_sec = now_sec;
-            save_index++;
-        }
-
         ret = sample_svp_npu_set_face_det_frame(&frame, base);
         if (ret != TD_SUCCESS) {
             printf("sample_svp_npu_set_face_det_frame failed\n");
@@ -229,6 +288,25 @@ int main(void)
                     infer_result.gaze.pitch_deg);
             } else {
                 printf("[NPU] no face\n");
+            }
+
+            now_sec = time(NULL);
+            if (last_save_sec == 0 || (now_sec - last_save_sec) >= SAVE_INTERVAL_SEC) {
+                if (infer_result.has_face) {
+                    draw_red_box_rgb888(rgb, width, height,
+                        infer_result.face.x1, infer_result.face.y1,
+                        infer_result.face.x2, infer_result.face.y2);
+                }
+
+                snprintf(ppm_name, sizeof(ppm_name), "%s/det_%04u.ppm", DEBUG_FRAME_DIR, save_index);
+                if (save_rgb_to_ppm(ppm_name, rgb, width, height) == 0) {
+                    printf("saved det image: %s (has_face=%d)\n", ppm_name, infer_result.has_face ? 1 : 0);
+                } else {
+                    printf("save det ppm failed\n");
+                }
+
+                last_save_sec = now_sec;
+                save_index++;
             }
         }
 
