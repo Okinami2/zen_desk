@@ -13,11 +13,13 @@
 #include <errno.h>
 
 static FusionService g_fusion_service;
-static pthread_t g_fusion_thread;
 static pthread_t g_server_thread;
 static int g_running = 0;
 static int g_server_fd = -1;
 static int g_server_running = 0;
+
+/* ==================== 前置声明 ==================== */
+static void radar_to_fusion_and_dispatch(const RadarState *rs);
 
 /* ==================== TCP 服务器 ==================== */
 
@@ -107,8 +109,9 @@ static void* tcp_server_thread(void *arg)
             if (msg_type == MSG_RADAR_STATE && msg_len == sizeof(RadarState)) {
                 RadarState *rs = (RadarState *)payload;
                 fusion_update_radar(rs);
-                LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m, quality=%.2f",
-                         rs->presence, rs->motion_level, rs->distance, rs->radar_quality);
+                LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m",
+                         rs->presence, rs->motion_level, rs->distance);
+                radar_to_fusion_and_dispatch(rs);
             } else {
                 LOG_DEBUG("Recv unknown msg: type=0x%02X len=%u", msg_type, msg_len);
             }
@@ -124,46 +127,23 @@ static void* tcp_server_thread(void *arg)
     return NULL;
 }
 
-static const LearningState g_simulated_states[] = {
-    STATE_SEATED_IDLE,
-    STATE_FOCUSED,
-    STATE_DISTRACTED,
-    STATE_TIRED,
-    STATE_ABSENT
-};
+/* 雷达 → 融合状态: 雷达作为第一优先级
+ * presence=1 → 入座, presence=0 → 离座 */
+static void radar_to_fusion_and_dispatch(const RadarState *rs)
+{
+    FusionState fs;
 
-// 融合处理线程
-static void* fusion_process_thread(void *arg) {
-    LOG_INFO("Fusion process thread started");
+    fs.current_state     = rs->presence ? STATE_SEATED_IDLE : STATE_ABSENT;
+    fs.state_score       = rs->radar_quality;
+    fs.intervention_level = 0;
+    fs.timestamp         = time(NULL);
 
-    size_t state_index = 0;
+    pthread_mutex_lock(&g_fusion_service.mutex);
+    g_fusion_service.current_state = fs.current_state;
+    pthread_mutex_unlock(&g_fusion_service.mutex);
 
-    while (g_running) {
-        FusionState fusion_state;
-        LearningState state = g_simulated_states[state_index];
-
-        pthread_mutex_lock(&g_fusion_service.mutex);
-        g_fusion_service.current_state = state;
-        pthread_mutex_unlock(&g_fusion_service.mutex);
-
-        fusion_state.current_state = state;
-        fusion_state.state_score = 1.0f;
-        fusion_state.intervention_level = (state == STATE_TIRED) ? 2 :
-                                          (state == STATE_DISTRACTED) ? 1 : 0;
-        fusion_state.timestamp = time(NULL);
-
-        fusion_send_state(&fusion_state);
-        device_handle_fusion_state(&fusion_state);
-
-        LOG_INFO("Simulated fusion state: %d", state);
-
-        state_index = (state_index + 1) %
-                      (sizeof(g_simulated_states) / sizeof(g_simulated_states[0]));
-        sleep(30);
-    }
-
-    LOG_INFO("Fusion process thread stopped");
-    return NULL;
+    fusion_send_state(&fs);
+    device_handle_fusion_state(&fs);
 }
 
 int fusion_service_init(const Config *config) {
@@ -196,17 +176,10 @@ int fusion_service_start() {
     g_running = 1;
     g_fusion_service.running = 1;
 
-    if (pthread_create(&g_fusion_thread, NULL, fusion_process_thread, NULL) != 0) {
-        LOG_ERROR("Failed to create fusion process thread");
-        device_service_stop();
-        return -1;
-    }
-
     if (pthread_create(&g_server_thread, NULL, tcp_server_thread, NULL) != 0) {
         LOG_ERROR("Failed to create TCP server thread");
         g_running = 0;
         g_fusion_service.running = 0;
-        pthread_join(g_fusion_thread, NULL);
         device_service_stop();
         return -1;
     }
@@ -223,7 +196,6 @@ void fusion_service_stop() {
 
     g_server_running = 0;
     pthread_join(g_server_thread, NULL);
-    pthread_join(g_fusion_thread, NULL);
     device_service_stop();
 
     LOG_INFO("Fusion service stopped");
