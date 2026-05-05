@@ -12,7 +12,7 @@ typedef struct {
 } RadarService;
 
 // 初始化雷达服务
-int radar_service_init(const Config *config);
+int radar_service_init(const Config *config, int uart_fd);
 
 // 启动雷达服务
 int radar_service_start();
