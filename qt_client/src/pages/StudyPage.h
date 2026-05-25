@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QLabel>
 #include <QPropertyAnimation>
+#include <QPushButton> // 新增：解决 QPushButton 未定义的报错
 
 // ── 圆环进度条（自绘） ────────────────────────────────────────────────────
 class RingProgressWidget : public QWidget {
@@ -35,6 +36,9 @@ public:
     void startTimer(int minutes);   // <0 = 正计时
     void stopTimer();
 
+    QPushButton* getPauseBtn() const { return pauseBtn; } // 新增 Getter
+    QPushButton* getStopBtn() const { return stopBtn; }   // 新增 Getter
+
 signals:
     void studyFinished();   // 倒计时结束 / 用户点击结束
 
@@ -51,6 +55,9 @@ private:
     QLabel *statusLabel;
     QLabel *tipWidget;
     QLabel *pomodoroLabel;   // 番茄计数 "番茄钟 1/4"
+
+    QPushButton *pauseBtn; // 新增成员变量
+    QPushButton *stopBtn;  // 新增成员变量
 
     QTimer *timer;
     QTimer *tipHideTimer;

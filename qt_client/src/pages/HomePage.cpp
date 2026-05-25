@@ -164,7 +164,8 @@ HomePage::HomePage(QWidget *parent) : QWidget(parent)
     );
     cardLay->addWidget(quoteLabel);
 
-    QPushButton *enterBtn = new QPushButton("▶  进入专注", glassCard);
+    //QPushButton *enterBtn = new QPushButton("▶  进入专注", glassCard);
+    enterBtn = new QPushButton("▶  进入专注", glassCard); //  移除局部声明，使用成员变量
     enterBtn->setFixedHeight(52);
     enterBtn->setCursor(Qt::PointingHandCursor);
     enterBtn->setStyleSheet(
@@ -184,6 +185,10 @@ HomePage::HomePage(QWidget *parent) : QWidget(parent)
         "}"
         "QPushButton:pressed {"
         "  background: #3730A3;"
+        "}"
+        /* 新增高亮边框样式 */
+        "QPushButton[zenFocus=\"true\"] {"
+        "  border: 3px solid #10B981;"
         "}"
     );
     connect(enterBtn, &QPushButton::clicked, this, &HomePage::enterStudyRequested);

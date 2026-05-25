@@ -184,14 +184,21 @@ StudyPage::StudyPage(QWidget *parent) : QWidget(parent)
             "}"
             "QPushButton:hover { background: rgba(255,255,255,0.18); }"
             "QPushButton:pressed { background: rgba(255,255,255,0.08); }"
+            /* 新增高亮边框样式 */
+            "QPushButton[zenFocus=\"true\"] {"
+            "  border: 3px solid #10B981;"
+            "}"
         ).arg(bg));
         return b;
     };
 
-    QPushButton *pauseBtn = makeCtrlBtn("⏸  暂停", "rgba(255,255,255,0.10)");
-    QPushButton *stopBtn  = makeCtrlBtn("⏹  结束", "rgba(239,68,68,0.25)");
+    // QPushButton *pauseBtn = makeCtrlBtn("⏸  暂停", "rgba(255,255,255,0.10)");
+    // QPushButton *stopBtn  = makeCtrlBtn("⏹  结束", "rgba(239,68,68,0.25)");
+    pauseBtn = makeCtrlBtn("⏸  暂停", "rgba(255,255,255,0.10)"); // 移除局部声明
+    stopBtn  = makeCtrlBtn("⏹  结束", "rgba(239,68,68,0.25)"); // 移除局部声明
 
-    connect(pauseBtn, &QPushButton::clicked, this, [this, pauseBtn](){
+
+    connect(pauseBtn, &QPushButton::clicked, this, [this](){
         if (timer->isActive()) {
             timer->stop();
             pauseBtn->setText("▶  继续");
