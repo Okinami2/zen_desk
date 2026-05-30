@@ -1,4 +1,5 @@
 #include "device_service.h"
+#include "ec11.h"
 #include "logger.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -260,6 +261,11 @@ int device_service_init(const Config *config) {
     g_current_color_ratio = 0.45f;
     set_lamp_scene(0, 0.45f, LAMP_MODE_STATIC, 1500, 0);
 
+    if (ec11_init() != 0) {
+        LOG_ERROR("EC11 init failed");
+        return -1;
+    }
+
     LOG_INFO("Device service initialized");
     return 0;
 }
@@ -275,6 +281,16 @@ int device_service_start() {
     }
     g_lamp_thread_started = 1;
 
+    if (ec11_start() != 0) {
+        LOG_ERROR("EC11 start failed");
+        g_device_service.running = 0;
+        if (g_lamp_thread_started) {
+            pthread_join(g_lamp_thread, NULL);
+            g_lamp_thread_started = 0;
+        }
+        return -1;
+    }
+
     LOG_INFO("Device service started");
     return 0;
 }
@@ -283,6 +299,7 @@ void device_service_stop() {
     LOG_INFO("Stopping device service...");
 
     g_device_service.running = 0;
+    ec11_stop();
     if (g_lamp_thread_started) {
         pthread_join(g_lamp_thread, NULL);
         g_lamp_thread_started = 0;
@@ -293,6 +310,8 @@ void device_service_stop() {
 
 void device_service_cleanup() {
     LOG_INFO("Cleaning up device service...");
+
+    ec11_cleanup();
 
     if (g_pwm_initialized) {
         pwm_write(PWM_WARM_CHANNEL, "duty_cycle", PWM_PERIOD);

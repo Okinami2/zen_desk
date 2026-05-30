@@ -17,9 +17,11 @@ SRCS := $(wildcard $(THIS_DIR)/src/*.c)
 
 # 临时把 device_service 的实现一起编进来，解决当前链接依赖
 DEVICE_SERVICE_SRC := $(TOP_DIR)/device_service/src/device_service.c
+EC11_SRC := $(TOP_DIR)/device_service/src/ec11.c
 
 OBJS := $(SRCS:%.c=%.o)
 DEVICE_SERVICE_OBJ := $(DEVICE_SERVICE_SRC:.c=.o)
+EC11_OBJ := $(EC11_SRC:.c=.o)
 
 CFLAGS += -I$(THIS_DIR)/include
 CFLAGS += -I$(TOP_DIR)/common/include
@@ -31,11 +33,12 @@ LDLIBS += $(COMMON_LIB) -lpthread -lm -ldl
 
 all: $(TARGET)
 
-$(TARGET): $(COMMON_LIB) $(OBJS) $(DEVICE_SERVICE_OBJ)
+$(TARGET): $(COMMON_LIB) $(OBJS) $(DEVICE_SERVICE_OBJ) $(EC11_OBJ)
 	@mkdir -p $(TARGET_PATH)
-	$(CC) $(OBJS) $(DEVICE_SERVICE_OBJ) -o $(TARGET_PATH)/$@ $(LDLIBS)
+	$(CC) $(OBJS) $(DEVICE_SERVICE_OBJ) $(EC11_OBJ) -o $(TARGET_PATH)/$@ $(LDLIBS)
 
 clean:
 	@rm -f $(TARGET_PATH)/$(TARGET)
 	@rm -f $(OBJS)
 	@rm -f $(DEVICE_SERVICE_OBJ)
+	@rm -f $(EC11_OBJ)
