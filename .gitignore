@@ -1,0 +1,50 @@
+# Build artifacts
+*.o
+*.obj
+*.a
+*.so
+
+# Generated dependency / intermediate files
+*.d
+*.dep
+*.tmp
+*.swp
+*.swo
+*~
+
+# Qt / IDE files
+*.pro.user
+*.pro.user.*
+.qmake.stash
+.vs/
+.idea/
+
+# Logs and runtime files
+*.log
+*.pid
+*.seed
+*.stackdump
+
+# Environment and secrets
+.env
+.env.*
+*.env
+*.local
+*.secret
+*.key
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.der
+*.csr
+
+# Python cache if any tooling is used
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
