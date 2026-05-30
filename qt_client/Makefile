@@ -37,7 +37,7 @@ MOVE          = mv -f
 TAR           = tar -cf
 COMPRESS      = gzip -9f
 DISTNAME      = qt_client1.0.0
-DISTDIR = /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/.tmp/qt_client1.0.0
+DISTDIR = /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/.tmp/qt_client1.0.0
 LINK          = aarch64-openeuler-linux-gnu-g++
 LFLAGS        = -Wl,-O1
 LIBS          = $(SUBLIBS) /home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/lib/libQt5Widgets.so /home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/lib/libQt5Gui.so /home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/lib/libQt5Core.so -lpthread   
@@ -763,9 +763,11 @@ moc_MainWindow.cpp: src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QLabel \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qlabel.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qlabel.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QEvent \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/QKeyEvent \
 		moc_predefs.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc
-	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/MainWindow.h -o moc_MainWindow.cpp
+	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/MainWindow.h -o moc_MainWindow.cpp
 
 moc_HomePage.cpp: src/pages/HomePage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QWidget \
@@ -983,9 +985,16 @@ moc_HomePage.cpp: src/pages/HomePage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/kernel/qtimer.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qbasictimer.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/kernel/qbasictimer.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QPushButton \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qicon.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/image/qicon.h \
 		moc_predefs.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc
-	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/HomePage.h -o moc_HomePage.cpp
+	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/HomePage.h -o moc_HomePage.cpp
 
 moc_StatsPage.cpp: src/pages/StatsPage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QWidget \
@@ -1201,7 +1210,7 @@ moc_StatsPage.cpp: src/pages/StatsPage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QVector \
 		moc_predefs.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc
-	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatsPage.h -o moc_StatsPage.cpp
+	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatsPage.h -o moc_StatsPage.cpp
 
 moc_StudyPage.cpp: src/pages/StudyPage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QWidget \
@@ -1428,9 +1437,16 @@ moc_StudyPage.cpp: src/pages/StudyPage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/tools/qeasingcurve.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qabstractanimation.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/animation/qabstractanimation.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QPushButton \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qicon.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/image/qicon.h \
 		moc_predefs.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc
-	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StudyPage.h -o moc_StudyPage.cpp
+	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StudyPage.h -o moc_StudyPage.cpp
 
 moc_MockFusionClient.cpp: src/services/MockFusionClient.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QObject \
@@ -1546,7 +1562,7 @@ moc_MockFusionClient.cpp: src/services/MockFusionClient.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QString \
 		moc_predefs.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc
-	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/sample/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/services/MockFusionClient.h -o moc_MockFusionClient.cpp
+	/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui -I/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/services/MockFusionClient.h -o moc_MockFusionClient.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -1789,6 +1805,8 @@ main.o: src/main.cpp src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QLabel \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qlabel.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qlabel.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QEvent \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/QKeyEvent \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QApplication \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qapplication.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/kernel/qapplication.h \
@@ -2036,6 +2054,8 @@ MainWindow.o: src/MainWindow.cpp src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QLabel \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qlabel.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qlabel.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QEvent \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/QKeyEvent \
 		src/pages/HomePage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QWidget \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QTimer \
@@ -2092,7 +2112,23 @@ MainWindow.o: src/MainWindow.cpp src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qparallelanimationgroup.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/animation/qparallelanimationgroup.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qanimationgroup.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/animation/qanimationgroup.h
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/animation/qanimationgroup.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QApplication \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qapplication.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/kernel/qapplication.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qcoreapplication.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/kernel/qcoreapplication.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qeventloop.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/kernel/qeventloop.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qdesktopwidget.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/kernel/qdesktopwidget.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qguiapplication.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/kernel/qguiapplication.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qinputmethod.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/kernel/qinputmethod.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QStyle \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qstyle.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/styles/qstyle.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o MainWindow.o src/MainWindow.cpp
 
 HomePage.o: src/pages/HomePage.cpp src/pages/HomePage.h \
@@ -2311,6 +2347,13 @@ HomePage.o: src/pages/HomePage.cpp src/pages/HomePage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/kernel/qtimer.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qbasictimer.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/kernel/qbasictimer.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QPushButton \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qicon.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/image/qicon.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/QPainter \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qpainter.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/painting/qpainter.h \
@@ -2336,13 +2379,6 @@ HomePage.o: src/pages/HomePage.cpp src/pages/HomePage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/QDateTime \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qdatetime.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/time/qdatetime.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QPushButton \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qpushbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qpushbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qabstractbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qabstractbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qicon.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/image/qicon.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/QFontDatabase \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qfontdatabase.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/text/qfontdatabase.h \
@@ -2825,6 +2861,13 @@ StudyPage.o: src/pages/StudyPage.cpp src/pages/StudyPage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/tools/qeasingcurve.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtCore/qabstractanimation.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/corelib/animation/qabstractanimation.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QPushButton \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qpushbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qabstractbutton.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qicon.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/image/qicon.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/QPainter \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qpainter.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/painting/qpainter.h \
@@ -2854,13 +2897,6 @@ StudyPage.o: src/pages/StudyPage.cpp src/pages/StudyPage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/QFontDatabase \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qfontdatabase.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/text/qfontdatabase.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QPushButton \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qpushbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qpushbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qabstractbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/widgets/qabstractbutton.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtGui/qicon.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/gui/image/qicon.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/QGraphicsOpacityEffect \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/include/QtWidgets/qgraphicseffect.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/qtbase/src/widgets/effects/qgraphicseffect.h \
