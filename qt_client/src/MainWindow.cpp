@@ -19,6 +19,7 @@
 
 #include <QApplication>
 #include <QStyle>
+#include <QDebug>
 
 // ════════════════════════════════════════════════════════════
 //  NavButton
@@ -470,6 +471,7 @@ void MainWindow::closeActiveDialog() {
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::KeyPress) {
         QKeyEvent *ke = static_cast<QKeyEvent*>(event);
+        qDebug() << "[QT KEY]" << ke->key();
         int key = ke->key();
         
         // 我们只接管四大天王按键
