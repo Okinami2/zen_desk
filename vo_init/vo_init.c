@@ -259,6 +259,16 @@ static int open_and_config_fb0(app_fb_ctx *ctx)
         return -1;
     }
 
+    {
+        ot_fb_rotate_mode rotate_mode = OT_FB_ROTATE_180;
+        if (ioctl(ctx->fb_fd, FBIOPUT_ROTATE_MODE, &rotate_mode) < 0) {
+            perror("FBIOPUT_ROTATE_MODE failed");
+            close(ctx->fb_fd);
+            ctx->fb_fd = -1;
+            return -1;
+        }
+    }
+
     ctx->canvas_size = ctx->fix.line_length * ctx->var.yres;
     if (ss_mpi_sys_mmz_alloc(&ctx->canvas_phys_addr,
                              &ctx->canvas_virt_addr,
@@ -301,6 +311,7 @@ static int open_and_config_fb0(app_fb_ctx *ctx)
         ctx->fb_fd = -1;
         return -1;
     }
+    
 
     printf("fb0 configured:\n");
     printf("  xres=%u yres=%u\n", ctx->var.xres, ctx->var.yres);
