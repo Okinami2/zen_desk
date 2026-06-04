@@ -1,0 +1,46 @@
+# ASR 语音控制及全链路网络联动更新日志
+
+本文档记录了我们在本次开发过程中，为实现**语音模块接入**、**融合中心流转**以及**Qt 客户端 UI 联动**所做出的所有核心代码修改。如果在未来的调试或上板测试中遇到问题，可以参考此文档进行回溯。
+
+---
+
+## 1. 语音服务模块 (`asr_service`) 核心集成
+我们从零构建了 `asr_service` 独立进程，以保障系统的健壮性和解耦：
+- **目录结构建立**：提取原始代码至 `asr_service/src` 与 `include`。
+- **串口设备配置**：在 `serial_setup.h` 中将默认串口设为 `/dev/ttyUSB0`（上板若使用板载引脚，需修改为 `/dev/ttyAMA1` 等）。
+- **进程鲁棒性修复**：
+  - 在 `main.c` 中添加了 `signal(SIGPIPE, SIG_IGN)`，防止因对端 Socket 强退导致整个语音进程崩溃。
+  - 在 `asr_controller.c` 中修复了连接失败或断开时的文件描述符泄漏问题（`close(g_socket_fd)` 并置为 `-1`），并加入了**断线自动重连**机制。
+- **指令解析拓宽**：除基础指令外，新增了唤醒 (`0x00`)、专注25分钟 (`0x25`)、45分钟 (`0x26`)、60分钟 (`0x27`) 的十六进制指令解析并向融合中心转发。
+
+## 2. 核心通信协议更新 (`common/include/protocol.h`)
+为支持语音和 UI 联动，扩展了公共协议结构：
+- **新消息类型**：加入 `MSG_ASR_COMMAND = 0x06`。
+- **状态携带时长**：在 `FusionState` 结构体中新增了 `uint16_t duration_minutes;`，以支持向 UI 传递专注倒计时时长。
+- **UI 专属事件包**：新增了 `UiEventType` 枚举和 `UiEventMessage` 结构体，专用于 `fusion_service` 通过 UDP 广播向外下发界面绘制指令（如弹出麦克风、同步状态等）。
+
+## 3. 融合中心状态机重构 (`fusion_service/src/fusion_service.c`)
+融合中心不仅要能接纳语音数据，还要解决多传感器的数据冲突：
+- **TCP 分支新增**：在 `tcp_server_thread` 中加入了处理 `MSG_ASR_COMMAND` 的分支，根据接收到的具体十六进制码，设置 `duration_minutes` 时长参数，并将系统置为 `STATE_FOCUSED`。
+- **🔥 雷达强制覆盖 Bug 修复**：
+  - **原逻辑缺陷**：雷达只要探测到有人（`presence=1`），就会无脑将全局状态覆盖为 `STATE_SEATED_IDLE`，导致语音刚开启的专注模式瞬间被打断。
+  - **新逻辑**：雷达只在“无人(`STATE_ABSENT`)”时，发现有人才切换为“闲置(`STATE_SEATED_IDLE`)”。如果当前已经是专注模式，雷达的“有人”信号将被静默吸收，专注状态得以受到保护。雷达探测到“无人”时，仍旧执行离座操作。
+- **UDP 广播通道建设**：
+  - 新增 `g_udp_fd` 套接字，指向本机 `127.0.0.1:8889` 端口。
+  - 收到语音唤醒 (`0x00`) 时触发 `fusion_send_ui_event(UI_EVENT_WAKEUP_ASR)`。
+  - 状态切换时通过 `fusion_send_state` 发送 `UI_EVENT_STATE_UPDATE` UDP 包。
+
+## 4. Qt 客户端免手势全自动联动 (`qt_client`)
+通过网络监听，使界面可以自行“动”起来：
+- **工程配置**：`qt_client.pro` 追加 `network` 模块支持。
+- **UDP 监听引擎**：在 `MainWindow` 构造函数中挂载 `QUdpSocket` 绑定 `8889` 端口，实时监听后台事件。
+- **状态同步跳转 (`UI_EVENT_STATE_UPDATE`)**：
+  - 收到专注事件时：自动关闭当前的一切交互弹窗，并调用 `startStudy(minutes)` 丝滑切入全屏倒计时界面。
+  - 收到离座/结束事件时：自动调用 `stopStudy()` 返回主页。
+- **唤醒视觉反馈 (`UI_EVENT_WAKEUP_ASR`)**：
+  - 在 `MainWindow` 的右下角悬浮创建了一个紫色半透明边框的麦克风（🎤）`QLabel`。
+  - 配合 `QTimer::singleShot`，实现收到唤醒指令后图标立即浮现，并在 3 秒后无人值守式地自动渐隐消失。
+
+## 5. 环境妥协与编译配置 (`Makefile` & `sample_comm_isp.c`)
+- **虚拟机缺库屏蔽**：由于当前 Ubuntu 虚拟机的海思 SDK 库文件缺失（缺少 `libsns_os08a20.a` 等驱动），为了能在本地完成 `make` 全局编译验证，注释了 `sample_comm_isp.c` 中相关的报错摄像头调用逻辑。
+- *(注：上板时若物理硬件确实使用了 OS08A20 摄像头，需要将其取消注释，并确保板子的 SDK 环境完整。)*
