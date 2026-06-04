@@ -18,6 +18,17 @@ static int g_running = 0;
 static int g_server_fd = -1;
 static int g_server_running = 0;
 
+static int g_udp_fd = -1;
+static struct sockaddr_in g_udp_addr;
+
+void fusion_send_ui_event(UiEventType type) {
+    if (g_udp_fd < 0) return;
+    UiEventMessage msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.event_type = type;
+    sendto(g_udp_fd, &msg, sizeof(msg), 0, (struct sockaddr*)&g_udp_addr, sizeof(g_udp_addr));
+}
+
 /* ==================== 前置声明 ==================== */
 static void radar_to_fusion_and_dispatch(const RadarState *rs);
 
@@ -112,6 +123,58 @@ static void* tcp_server_thread(void *arg)
                 LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m",
                          rs->presence, rs->motion_level, rs->distance);
                 radar_to_fusion_and_dispatch(rs);
+            } else if (msg_type == MSG_ASR_COMMAND && msg_len == sizeof(AsrCommand)) {
+                AsrCommand *cmd = (AsrCommand *)payload;
+                LOG_INFO("Recv ASR Command: 0x%02X", cmd->command_id);
+                
+                FusionState fs;
+                fs.state_score = 1.0;
+                fs.intervention_level = 0;
+                fs.duration_minutes = 0;
+                fs.timestamp = time(NULL);
+                
+                pthread_mutex_lock(&g_fusion_service.mutex);
+                switch(cmd->command_id) {
+                    case ASR_CMD_WAKEUP:
+                        LOG_INFO("ASR Wakeup received, broadcasting to UI");
+                        fusion_send_ui_event(UI_EVENT_WAKEUP_ASR);
+                        break;
+                    case ASR_CMD_STUDY_START:
+                    case ASR_CMD_STUDY_RESUME:
+                        g_fusion_service.current_state = STATE_FOCUSED;
+                        fs.duration_minutes = 0; // 默认或正计时
+                        LOG_INFO("ASR overridden state to FOCUSED");
+                        break;
+                    case ASR_CMD_STUDY_START_25:
+                        g_fusion_service.current_state = STATE_FOCUSED;
+                        fs.duration_minutes = 25;
+                        LOG_INFO("ASR overridden state to FOCUSED (25 min)");
+                        break;
+                    case ASR_CMD_STUDY_START_45:
+                        g_fusion_service.current_state = STATE_FOCUSED;
+                        fs.duration_minutes = 45;
+                        LOG_INFO("ASR overridden state to FOCUSED (45 min)");
+                        break;
+                    case ASR_CMD_STUDY_START_60:
+                        g_fusion_service.current_state = STATE_FOCUSED;
+                        fs.duration_minutes = 60;
+                        LOG_INFO("ASR overridden state to FOCUSED (60 min)");
+                        break;
+                    case ASR_CMD_STUDY_PAUSE:
+                    case ASR_CMD_STUDY_STOP:
+                        g_fusion_service.current_state = STATE_SEATED_IDLE;
+                        fs.duration_minutes = 0;
+                        LOG_INFO("ASR overridden state to IDLE/PAUSE");
+                        break;
+                }
+                fs.current_state = g_fusion_service.current_state;
+                pthread_mutex_unlock(&g_fusion_service.mutex);
+                
+                // 只有状态改变时才向外广播状态，触发后续联动（UI/灯光）
+                if (cmd->command_id != ASR_CMD_WAKEUP) {
+                    fusion_send_state(&fs);
+                    device_handle_fusion_state(&fs);
+                }
             } else {
                 LOG_DEBUG("Recv unknown msg: type=0x%02X len=%u", msg_type, msg_len);
             }
@@ -133,13 +196,23 @@ static void radar_to_fusion_and_dispatch(const RadarState *rs)
 {
     FusionState fs;
 
-    fs.current_state     = rs->presence ? STATE_SEATED_IDLE : STATE_ABSENT;
     fs.state_score       = rs->radar_quality;
     fs.intervention_level = 0;
+    fs.duration_minutes  = 0;
     fs.timestamp         = time(NULL);
 
     pthread_mutex_lock(&g_fusion_service.mutex);
-    g_fusion_service.current_state = fs.current_state;
+    if (rs->presence) {
+        // 如果雷达探测到有人，且当前是“无人”状态，则切换为“闲置”
+        // 如果当前已经是专注状态，则保持不变，修复被雷达强制覆盖的Bug
+        if (g_fusion_service.current_state == STATE_ABSENT) {
+            g_fusion_service.current_state = STATE_SEATED_IDLE;
+        }
+    } else {
+        // 雷达探测不到人，直接切到无人态
+        g_fusion_service.current_state = STATE_ABSENT;
+    }
+    fs.current_state = g_fusion_service.current_state;
     pthread_mutex_unlock(&g_fusion_service.mutex);
 
     fusion_send_state(&fs);
@@ -159,6 +232,14 @@ int fusion_service_init(const Config *config) {
         LOG_ERROR("Failed to initialize device service from fusion service");
         pthread_mutex_destroy(&g_fusion_service.mutex);
         return -1;
+    }
+
+    g_udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (g_udp_fd >= 0) {
+        memset(&g_udp_addr, 0, sizeof(g_udp_addr));
+        g_udp_addr.sin_family = AF_INET;
+        g_udp_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        g_udp_addr.sin_port = htons(8889); // Qt 客户端监听的端口
     }
 
     LOG_INFO("Fusion service initialized");
@@ -209,6 +290,11 @@ void fusion_service_cleanup() {
         g_server_fd = -1;
     }
 
+    if (g_udp_fd >= 0) {
+        close(g_udp_fd);
+        g_udp_fd = -1;
+    }
+
     device_service_cleanup();
     pthread_mutex_destroy(&g_fusion_service.mutex);
 
@@ -228,8 +314,15 @@ void fusion_update_radar(const RadarState *state) {
 }
 
 int fusion_send_state(const FusionState *state) {
-    // TODO: 通过网络发送融合状态到设备服务和Qt客户端
-    LOG_INFO("Fusion state: state=%d, score=%.2f, intervention=%d",
-             state->current_state, state->state_score, state->intervention_level);
+    LOG_INFO("Fusion state: state=%d, score=%.2f, intervention=%d, duration=%d min",
+             state->current_state, state->state_score, state->intervention_level, state->duration_minutes);
+             
+    if (g_udp_fd >= 0) {
+        UiEventMessage msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.event_type = UI_EVENT_STATE_UPDATE;
+        msg.state = *state;
+        sendto(g_udp_fd, &msg, sizeof(msg), 0, (struct sockaddr*)&g_udp_addr, sizeof(g_udp_addr));
+    }
     return 0;
 }

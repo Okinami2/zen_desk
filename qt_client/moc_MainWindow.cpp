@@ -1,7 +1,7 @@
 /****************************************************************************
 ** Meta object code from reading C++ file 'MainWindow.h'
 **
-** Created by: The Qt Meta Object Compiler version 67 (Qt 5.15.16)
+** Created by: The Qt Meta Object Compiler version 67 (Qt 5.15.3)
 **
 ** WARNING! All changes made in this file will be lost!
 *****************************************************************************/
@@ -13,7 +13,7 @@
 #if !defined(Q_MOC_OUTPUT_REVISION)
 #error "The header file 'MainWindow.h' doesn't include <QObject>."
 #elif Q_MOC_OUTPUT_REVISION != 67
-#error "This file was generated using the moc from 5.15.16. It"
+#error "This file was generated using the moc from 5.15.3. It"
 #error "cannot be used with the include files from this version of Qt."
 #error "(The moc has changed too much.)"
 #endif
@@ -201,8 +201,8 @@ void Overlay::clicked()
     QMetaObject::activate(this, &staticMetaObject, 0, nullptr);
 }
 struct qt_meta_stringdata_MainWindow_t {
-    QByteArrayData data[9];
-    char stringdata0[99];
+    QByteArrayData data[11];
+    char stringdata0[126];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -219,12 +219,15 @@ QT_MOC_LITERAL(4, 31, 20), // "showStudySetupDialog"
 QT_MOC_LITERAL(5, 52, 10), // "startStudy"
 QT_MOC_LITERAL(6, 63, 7), // "minutes"
 QT_MOC_LITERAL(7, 71, 9), // "stopStudy"
-QT_MOC_LITERAL(8, 81, 17) // "closeActiveDialog"
+QT_MOC_LITERAL(8, 81, 17), // "closeActiveDialog"
+QT_MOC_LITERAL(9, 99, 14), // "onUdpReadyRead"
+QT_MOC_LITERAL(10, 114, 11) // "hideMicIcon"
 
     },
     "MainWindow\0showHome\0\0showStats\0"
     "showStudySetupDialog\0startStudy\0minutes\0"
-    "stopStudy\0closeActiveDialog"
+    "stopStudy\0closeActiveDialog\0onUdpReadyRead\0"
+    "hideMicIcon"
 };
 #undef QT_MOC_LITERAL
 
@@ -234,7 +237,7 @@ static const uint qt_meta_data_MainWindow[] = {
        8,       // revision
        0,       // classname
        0,    0, // classinfo
-       7,   14, // methods
+       9,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -242,19 +245,23 @@ static const uint qt_meta_data_MainWindow[] = {
        0,       // signalCount
 
  // slots: name, argc, parameters, tag, flags
-       1,    0,   49,    2, 0x08 /* Private */,
-       3,    0,   50,    2, 0x08 /* Private */,
-       4,    0,   51,    2, 0x08 /* Private */,
-       5,    1,   52,    2, 0x08 /* Private */,
-       5,    0,   55,    2, 0x28 /* Private | MethodCloned */,
-       7,    0,   56,    2, 0x08 /* Private */,
-       8,    0,   57,    2, 0x08 /* Private */,
+       1,    0,   59,    2, 0x08 /* Private */,
+       3,    0,   60,    2, 0x08 /* Private */,
+       4,    0,   61,    2, 0x08 /* Private */,
+       5,    1,   62,    2, 0x08 /* Private */,
+       5,    0,   65,    2, 0x28 /* Private | MethodCloned */,
+       7,    0,   66,    2, 0x08 /* Private */,
+       8,    0,   67,    2, 0x08 /* Private */,
+       9,    0,   68,    2, 0x08 /* Private */,
+      10,    0,   69,    2, 0x08 /* Private */,
 
  // slots: parameters
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void, QMetaType::Int,    6,
+    QMetaType::Void,
+    QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
@@ -275,6 +282,8 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 4: _t->startStudy(); break;
         case 5: _t->stopStudy(); break;
         case 6: _t->closeActiveDialog(); break;
+        case 7: _t->onUdpReadyRead(); break;
+        case 8: _t->hideMicIcon(); break;
         default: ;
         }
     }
@@ -309,13 +318,13 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 7)
+        if (_id < 9)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 7;
+        _id -= 9;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 7)
+        if (_id < 9)
             *reinterpret_cast<int*>(_a[0]) = -1;
-        _id -= 7;
+        _id -= 9;
     }
     return _id;
 }

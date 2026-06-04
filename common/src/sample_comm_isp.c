@@ -53,6 +53,11 @@ static ot_isp_sns_type g_sns_type[OT_VI_MAX_PIPE_NUM] = {(ot_isp_sns_type)SNS_TY
 static pthread_t g_isp_pid[OT_VI_MAX_DEV_NUM] = {0};
 
 extern ot_isp_sns_obj g_sns_hy_s0603_obj;
+// extern ot_isp_sns_obj g_sns_os08a20_obj;
+// extern ot_isp_sns_obj g_sns_os04a10_obj;
+// extern ot_isp_sns_obj g_sns_imx347_slave_obj;
+// extern ot_isp_sns_obj g_sns_sc450ai_obj;
+// extern ot_isp_sns_obj g_sns_sc450ai_2l_obj;
 
 /* IspPub attr */
 static ot_isp_pub_attr g_isp_pub_attr_hy_s0603_mipi_8m_30fps = {
@@ -263,19 +268,19 @@ ot_isp_sns_obj *sample_comm_isp_get_sns_obj(sample_sns_type sns_type)
         case HY_S0603_MIPI_8M_30FPS_12BIT:
         case HY_S0603_MIPI_8M_30FPS_10BIT_WDR2TO1:
             return &g_sns_hy_s0603_obj;
-        case OV_OS08A20_MIPI_8M_30FPS_12BIT:
-        case OV_OS08A20_MIPI_8M_30FPS_12BIT_WDR2TO1:
-            return &g_sns_os08a20_obj;
-        case OV_OS04A10_MIPI_4M_30FPS_12BIT:
-            return &g_sns_os04a10_obj;
-        case SONY_IMX347_SLAVE_MIPI_4M_30FPS_12BIT:
-            return &g_sns_imx347_slave_obj;
-        case SC450AI_MIPI_4M_30FPS_10BIT:
-        case SC450AI_MIPI_4M_30FPS_10BIT_WDR2TO1:
-            return &g_sns_sc450ai_obj;
-        case SC450AI_2L_MIPI_4M_30FPS_10BIT:
-        case SC450AI_2L_MIPI_2M_30FPS_10BIT:
-            return &g_sns_sc450ai_2l_obj;
+        // case OV_OS08A20_MIPI_8M_30FPS_12BIT:
+        // case OV_OS08A20_MIPI_8M_30FPS_12BIT_WDR2TO1:
+        //     return &g_sns_os08a20_obj;
+        // case OV_OS04A10_MIPI_4M_30FPS_12BIT:
+        //     return &g_sns_os04a10_obj;
+        // case SONY_IMX347_SLAVE_MIPI_4M_30FPS_12BIT:
+        //     return &g_sns_imx347_slave_obj;
+        // case SC450AI_MIPI_4M_30FPS_10BIT:
+        // case SC450AI_MIPI_4M_30FPS_10BIT_WDR2TO1:
+        //     return &g_sns_sc450ai_obj;
+        // case SC450AI_2L_MIPI_4M_30FPS_10BIT:
+        // case SC450AI_2L_MIPI_2M_30FPS_10BIT:
+        //     return &g_sns_sc450ai_2l_obj;
         default:
             return TD_NULL;
     }

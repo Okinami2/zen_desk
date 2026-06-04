@@ -1,4 +1,4 @@
-QT += core gui widgets
+QT += core gui widgets network
 CONFIG += c++17
 TEMPLATE = app
 TARGET = qt_client
