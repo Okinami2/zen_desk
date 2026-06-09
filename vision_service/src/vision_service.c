@@ -1,8 +1,11 @@
 #include "vision_service.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,11 +15,13 @@
 #include "npu_process.h"
 #include "ot_common_sys.h"
 #include "sdk_module_init.h"
+#include "vision_debug.h"
 #include "vision_uvc.h"
 
 #define VISION_FRAME_QUEUE_CAPACITY 2
 #define VISION_ERROR_RETRY_US       100000
 #define VISION_WAIT_INTERVAL_NS     100000000L
+#define VISION_MPP_LOCK_PATH        "/tmp/pegasus-mpp.lock"
 
 typedef struct {
     ot_video_frame_info frame;
@@ -48,6 +53,8 @@ typedef struct {
     td_u32 queue_head;
     td_u32 queue_count;
     vision_metrics metrics;
+    vision_debug_context debug;
+    td_s32 display_lock_fd;
 } vision_service_context;
 
 static volatile sig_atomic_t g_stop_requested = 0;
@@ -240,6 +247,7 @@ static td_s32 vision_process_loop(vision_service_context *ctx)
         td_double inference_started;
         td_double finished;
         td_s32 ret;
+        td_double inference_ms;
 
         if (vision_queue_pop(ctx, &item) != TD_TRUE) {
             continue;
@@ -249,6 +257,9 @@ static td_s32 vision_process_loop(vision_service_context *ctx)
         ret = vision_map_frame(&item.frame, &virt_addr, &mapped_size);
         if (ret == TD_SUCCESS) {
             ret = sample_svp_npu_process_frame(&item.frame, virt_addr, &result);
+            finished = vision_now_seconds();
+            inference_ms = (finished - inference_started) * 1000.0;
+            vision_debug_publish(&ctx->debug, &item.frame, virt_addr, &result, ret, inference_ms);
             (void)ss_mpi_sys_munmap(virt_addr, (td_u32)mapped_size);
         } else {
             fprintf(stderr, "vision: invalid or unmappable video frame\n");
@@ -264,6 +275,32 @@ static td_s32 vision_process_loop(vision_service_context *ctx)
 td_void vision_service_request_stop(td_void)
 {
     g_stop_requested = 1;
+}
+
+static td_s32 vision_display_lock_acquire(vision_service_context *ctx)
+{
+    ctx->display_lock_fd = open(VISION_MPP_LOCK_PATH, O_CREAT | O_RDWR, 0666);
+    if (ctx->display_lock_fd < 0) {
+        perror("vision: open MPP lock");
+        return TD_FAILURE;
+    }
+    if (flock(ctx->display_lock_fd, LOCK_EX | LOCK_NB) != 0) {
+        fprintf(stderr,
+            "vision: MPP resources are owned by vo_init/Qt or another vision process\n");
+        close(ctx->display_lock_fd);
+        ctx->display_lock_fd = -1;
+        return TD_FAILURE;
+    }
+    return TD_SUCCESS;
+}
+
+static td_void vision_display_lock_release(vision_service_context *ctx)
+{
+    if (ctx->display_lock_fd >= 0) {
+        (void)flock(ctx->display_lock_fd, LOCK_UN);
+        (void)close(ctx->display_lock_fd);
+        ctx->display_lock_fd = -1;
+    }
 }
 
 td_s32 vision_service_run(const vision_service_config *config)
@@ -282,6 +319,7 @@ td_s32 vision_service_run(const vision_service_config *config)
 
     (void)memset(&ctx, 0, sizeof(ctx));
     ctx.config = *config;
+    ctx.display_lock_fd = -1;
     ctx.metrics.window_start = vision_now_seconds();
     g_stop_requested = 0;
 
@@ -293,11 +331,22 @@ td_s32 vision_service_run(const vision_service_config *config)
         return TD_FAILURE;
     }
 
+    if (vision_display_lock_acquire(&ctx) != TD_SUCCESS) {
+        goto cleanup_sync;
+    }
+
     SDK_init();
     sdk_inited = TD_TRUE;
 
+    ret = vision_debug_init(&ctx.debug, config);
+    if (ret != TD_SUCCESS) {
+        fprintf(stderr, "vision: initialize debug outputs failed\n");
+        goto cleanup;
+    }
+
     ret = sample_uvc_capture_open(&ctx.capture, config->device_path,
-        config->pixel_format, config->width, config->height);
+        config->pixel_format, config->width, config->height,
+        config->hdmi_preview);
     if (ret != TD_SUCCESS) {
         fprintf(stderr, "vision: open capture failed, ret=%d\n", ret);
         goto cleanup;
@@ -319,8 +368,9 @@ td_s32 vision_service_run(const vision_service_config *config)
     }
     ctx.producer_started = TD_TRUE;
 
-    printf("vision: running device=%s format=%s size=%ux%u\n",
-        config->device_path, config->pixel_format, config->width, config->height);
+    printf("vision: running device=%s format=%s size=%ux%u hdmi=%s\n",
+        config->device_path, config->pixel_format, config->width, config->height,
+        config->hdmi_preview == TD_TRUE ? "exclusive" : "off");
     ret = vision_process_loop(&ctx);
 
 cleanup:
@@ -338,6 +388,9 @@ cleanup:
     if (sdk_inited == TD_TRUE) {
         SDK_exit();
     }
+    vision_debug_deinit(&ctx.debug);
+    vision_display_lock_release(&ctx);
+cleanup_sync:
     (void)pthread_cond_destroy(&ctx.queue_cond);
     (void)pthread_mutex_destroy(&ctx.queue_mutex);
     return ret;

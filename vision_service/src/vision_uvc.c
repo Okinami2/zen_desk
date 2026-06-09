@@ -320,9 +320,10 @@ td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
 }
 
 td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
-    const td_char *dev_name, const td_char *type_name, td_u32 width, td_u32 height)
+    const td_char *dev_name, const td_char *type_name, td_u32 width, td_u32 height,
+    td_bool preview_enable)
 {
-    sample_uvc_media_set_preview_enable(TD_FALSE);
+    sample_uvc_media_set_preview_enable(preview_enable);
     td_s32 ret;
     errno_t sret;
 

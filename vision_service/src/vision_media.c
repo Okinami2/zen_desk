@@ -462,7 +462,8 @@ td_s32 sample_uvc_media_exit(td_void)
     ot_vpss_grp vpss_grp = 0;
     td_bool vpss_chn_enable[OT_VPSS_MAX_CHN_NUM] = {0};
 
-    vpss_chn_enable[0] = TD_TRUE;
+    vpss_chn_enable[0] = g_enable_vo;
+    vpss_chn_enable[1] = TD_TRUE;
 
 #if (UVC_MEDIA_ENABLE_VO == 1)
     if (g_enable_vo == TD_TRUE) {
