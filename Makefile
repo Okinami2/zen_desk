@@ -9,7 +9,7 @@ BIN_DIR := $(OUT_DIR)/bin
 LIB_DIR := $(OUT_DIR)/lib
 OBJ_DIR := $(OUT_DIR)/obj
 
-APPS := vision_service radar_service fusion_service device_service vo_init
+APPS := pinmux_init vision_service radar_service fusion_service device_service vo_init
 TARGETS := common $(APPS)
 
 APPS_CLEAN := $(addsuffix _clean,$(APPS))

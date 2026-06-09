@@ -1,3 +1,4 @@
+#include "board_pins.h"
 #include "device_service.h"
 #include "ec11.h"
 #include "logger.h"
@@ -10,8 +11,8 @@
 
 #define PWM_CHIP_PATH "/sys/class/pwm/pwmchip0/"
 #define PWM_PERIOD 1000000
-#define PWM_WARM_CHANNEL 1
-#define PWM_COLD_CHANNEL 15
+#define PWM_WARM_CHANNEL BOARD_PWM_LAMP_WARM_CHANNEL
+#define PWM_COLD_CHANNEL BOARD_PWM_LAMP_COLD_CHANNEL
 #define LAMP_TICK_US 30000
 #define BREATH_PERIOD_MS 10000
 
@@ -238,6 +239,11 @@ int device_service_init(const Config *config) {
     int i;
 
     LOG_INFO("Initializing device service...");
+
+    if (board_pins_apply() != 0) {
+        LOG_ERROR("Failed to apply unified board pin mapping");
+        return -1;
+    }
 
     memset(&g_device_service, 0, sizeof(DeviceService));
     g_device_service.config = *config;

@@ -4,6 +4,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJ_DIR=$(dirname "$SCRIPT_DIR")
+PINMUX_BIN=${PINMUX_BIN:-"$PROJ_DIR/out/bin/pinmux_init"}
 VO_INIT_BIN=${VO_INIT_BIN:-"$PROJ_DIR/out/bin/vo_init"}
 QT_BIN=${QT_BIN:-"$PROJ_DIR/qt_client/qt_client"}
 RUN_DIR=${RUN_DIR:-"$PROJ_DIR/out/run"}
@@ -22,6 +23,10 @@ cleanup()
 
 trap cleanup EXIT INT TERM HUP
 
+if [ ! -x "$PINMUX_BIN" ]; then
+    echo "pinmux_init is not executable: $PINMUX_BIN" >&2
+    exit 1
+fi
 if [ ! -x "$VO_INIT_BIN" ]; then
     echo "vo_init is not executable: $VO_INIT_BIN" >&2
     exit 1
@@ -31,6 +36,8 @@ if [ ! -x "$QT_BIN" ]; then
     echo "Set QT_BIN=/path/to/qt_client when launching this script." >&2
     exit 1
 fi
+
+"$PINMUX_BIN" --apply
 
 mkdir -p "$RUN_DIR"
 rm -f "$READY_FILE"

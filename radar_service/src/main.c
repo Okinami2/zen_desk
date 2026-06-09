@@ -1,3 +1,4 @@
+#include "board_pins.h"
 #include "radar_service.h"
 #include "hi_uart.h"
 #include "logger.h"
@@ -5,7 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#define RADAR_UART_DEVICE   "/dev/ttyAMA4"
+#define RADAR_UART_DEVICE   BOARD_RADAR_UART_DEVICE
 #define RADAR_UART_BAUD     115200
 
 static int g_exit = 0;
@@ -21,6 +22,11 @@ int main(int argc, char *argv[]) {
     logger_init(LOG_LEVEL_INFO);
 
     LOG_INFO("Radar Service Starting...");
+    if (board_pins_apply() != 0) {
+        LOG_ERROR("Failed to apply unified board pin mapping");
+        return -1;
+    }
+
 
     // 打开串口
     int uart_fd = hi_serial_open(RADAR_UART_DEVICE);
