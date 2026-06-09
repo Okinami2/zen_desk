@@ -68,8 +68,10 @@ typedef struct {
 } sample_svp_face_box_list;
 
 #define SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX   30
-#define SAMPLE_SVP_FACE_DET_SCORE_TH          0.35f
-#define SAMPLE_SVP_FACE_DET_ANALYZE_FRAMES    12
+#define SAMPLE_SVP_FACE_DET_SCORE_TH          0.50f
+#define SAMPLE_SVP_FACE_DET_NMS_TH            0.40f
+#define SAMPLE_SVP_SCRFD_LEVEL_NUM            3
+#define SAMPLE_SVP_SCRFD_ANCHOR_NUM           2
 
 static ot_video_frame_info g_svp_npu_face_det_frame = {0};
 static const td_u8 *g_svp_npu_face_det_frame_virt = TD_NULL;
@@ -88,6 +90,9 @@ static td_u32 g_face_det_expect_size = 0;
 static td_u32 g_face_det_expect_stride = 0;
 static td_u8 *g_face_det_resized_buf = TD_NULL;
 static td_u8 *g_face_det_model_input_virt = TD_NULL;
+static td_float g_face_det_scale = 1.0f;
+static td_u32 g_face_det_pad_x = 0;
+static td_u32 g_face_det_pad_y = 0;
 static td_u32 g_landmark_expect_w = 0;
 static td_u32 g_landmark_expect_h = 0;
 static td_u32 g_landmark_expect_size = 0;
@@ -121,7 +126,260 @@ static sample_svp_pipeline_profile g_pipe_prof = {0};
 
 td_s32 sample_svp_npu_set_face_det_frame(const ot_video_frame_info *frame, const td_u8 *frame_virt);
 
+typedef struct {
+    const td_u8 *score;
+    const td_u8 *bbox;
+    td_u32 score_stride;
+    td_u32 bbox_stride;
+    td_u32 count;
+    td_u32 feature_w;
+    td_u32 feature_h;
+    td_u32 stride;
+} sample_svp_scrfd_level;
+
+static td_float sample_svp_face_box_iou(const sample_svp_face_box *a, const sample_svp_face_box *b)
+{
+    td_float xx1 = fmaxf(a->x1, b->x1);
+    td_float yy1 = fmaxf(a->y1, b->y1);
+    td_float xx2 = fminf(a->x2, b->x2);
+    td_float yy2 = fminf(a->y2, b->y2);
+    td_float w = fmaxf(0.0f, xx2 - xx1 + 1.0f);
+    td_float h = fmaxf(0.0f, yy2 - yy1 + 1.0f);
+    td_float inter = w * h;
+    td_float area_a = fmaxf(0.0f, a->x2 - a->x1 + 1.0f) *
+        fmaxf(0.0f, a->y2 - a->y1 + 1.0f);
+    td_float area_b = fmaxf(0.0f, b->x2 - b->x1 + 1.0f) *
+        fmaxf(0.0f, b->y2 - b->y1 + 1.0f);
+
+    return inter / (area_a + area_b - inter + 1e-6f);
+}
+
+static int sample_svp_face_box_score_desc(const td_void *lhs, const td_void *rhs)
+{
+    const sample_svp_face_box *a = (const sample_svp_face_box *)lhs;
+    const sample_svp_face_box *b = (const sample_svp_face_box *)rhs;
+
+    if (a->score < b->score) {
+        return 1;
+    }
+    if (a->score > b->score) {
+        return -1;
+    }
+    return 0;
+}
+
+static td_u32 sample_svp_dims_row_count(const svp_acl_mdl_io_dims *dims)
+{
+    td_u32 i;
+    td_u32 count = 1;
+
+    if (dims == TD_NULL || dims->dim_count < 2) {
+        return 0;
+    }
+    for (i = 0; i + 1 < dims->dim_count; i++) {
+        count *= (td_u32)dims->dims[i];
+    }
+    return count;
+}
+
+static td_s32 sample_svp_scrfd_bind_outputs(const sample_svp_npu_task_info *task,
+    sample_svp_scrfd_level levels[SAMPLE_SVP_SCRFD_LEVEL_NUM])
+{
+    static const td_u32 level_strides[SAMPLE_SVP_SCRFD_LEVEL_NUM] = {8, 16, 32};
+    sample_svp_npu_model_info *model_info;
+    td_u32 output_num;
+    td_u32 output_idx;
+
+    model_info = sample_common_svp_npu_get_model_info(SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX);
+    sample_svp_check_exps_return(model_info == TD_NULL || model_info->model_desc == TD_NULL,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "SCRFD model description is null\n");
+
+    output_num = (td_u32)svp_acl_mdl_get_dataset_num_buffers(task->output_dataset);
+    sample_svp_check_exps_return(output_num != SAMPLE_SVP_SCRFD_LEVEL_NUM * 2,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+        "SCRFD expects 6 outputs, got %u\n", output_num);
+
+    (td_void)memset_s(levels, sizeof(sample_svp_scrfd_level) * SAMPLE_SVP_SCRFD_LEVEL_NUM,
+        0, sizeof(sample_svp_scrfd_level) * SAMPLE_SVP_SCRFD_LEVEL_NUM);
+    for (output_idx = 0; output_idx < output_num; output_idx++) {
+        svp_acl_data_buffer *buf;
+        svp_acl_mdl_io_dims dims = {0};
+        const td_u8 *addr;
+        size_t size;
+        size_t row_stride;
+        td_u32 row_count;
+        td_u32 channels;
+        td_u32 level_idx;
+        td_bool matched = TD_FALSE;
+        svp_acl_error acl_ret;
+
+        acl_ret = svp_acl_mdl_get_output_dims(model_info->model_desc, output_idx, &dims);
+        sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS || dims.dim_count < 2,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+            "get SCRFD output[%u] dims failed\n", output_idx);
+
+        row_count = sample_svp_dims_row_count(&dims);
+        channels = (td_u32)dims.dims[dims.dim_count - 1];
+        buf = svp_acl_mdl_get_dataset_buffer(task->output_dataset, output_idx);
+        sample_svp_check_exps_return(buf == TD_NULL, TD_FAILURE,
+            SAMPLE_SVP_ERR_LEVEL_ERROR, "SCRFD output[%u] buffer is null\n", output_idx);
+        addr = (const td_u8 *)svp_acl_get_data_buffer_addr(buf);
+        size = svp_acl_get_data_buffer_size(buf);
+        row_stride = svp_acl_get_data_buffer_stride(buf);
+        sample_svp_check_exps_return(addr == TD_NULL || row_stride < channels * sizeof(td_float) ||
+            size < (size_t)row_count * row_stride,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+            "SCRFD output[%u] layout invalid: rows=%u channels=%u size=%u stride=%u\n",
+            output_idx, row_count, channels, (td_u32)size, (td_u32)row_stride);
+
+        for (level_idx = 0; level_idx < SAMPLE_SVP_SCRFD_LEVEL_NUM; level_idx++) {
+            td_u32 feature_w = g_face_det_expect_w / level_strides[level_idx];
+            td_u32 feature_h = g_face_det_expect_h / level_strides[level_idx];
+            td_u32 expected_count = feature_w * feature_h * SAMPLE_SVP_SCRFD_ANCHOR_NUM;
+
+            if (row_count != expected_count) {
+                continue;
+            }
+            levels[level_idx].count = row_count;
+            levels[level_idx].feature_w = feature_w;
+            levels[level_idx].feature_h = feature_h;
+            levels[level_idx].stride = level_strides[level_idx];
+            if (channels == 1) {
+                levels[level_idx].score = addr;
+                levels[level_idx].score_stride = (td_u32)row_stride;
+                matched = TD_TRUE;
+            } else if (channels == 4) {
+                levels[level_idx].bbox = addr;
+                levels[level_idx].bbox_stride = (td_u32)row_stride;
+                matched = TD_TRUE;
+            }
+            break;
+        }
+
+        sample_svp_check_exps_return(matched != TD_TRUE, TD_FAILURE,
+            SAMPLE_SVP_ERR_LEVEL_ERROR,
+            "unsupported SCRFD output[%u] shape: rows=%u channels=%u\n",
+            output_idx, row_count, channels);
+    }
+
+    for (output_idx = 0; output_idx < SAMPLE_SVP_SCRFD_LEVEL_NUM; output_idx++) {
+        sample_svp_check_exps_return(levels[output_idx].score == TD_NULL ||
+            levels[output_idx].bbox == TD_NULL,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+            "SCRFD stride %u output pair is incomplete\n", levels[output_idx].stride);
+    }
+    return TD_SUCCESS;
+}
+
+static td_s32 sample_svp_npu_decode_scrfd_output(const sample_svp_npu_task_info *task,
+    td_u32 frame_w, td_u32 frame_h, sample_svp_face_box_list *face_list)
+{
+    sample_svp_scrfd_level levels[SAMPLE_SVP_SCRFD_LEVEL_NUM];
+    sample_svp_face_box *candidates = TD_NULL;
+    td_u32 candidate_capacity = 0;
+    td_u32 candidate_num = 0;
+    td_u32 level_idx;
+    td_u32 i;
+    td_s32 ret;
+
+    sample_svp_check_exps_return(task == TD_NULL || face_list == TD_NULL ||
+        frame_w == 0 || frame_h == 0 || g_face_det_scale <= 0.0f,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid SCRFD decode args\n");
+
+    ret = sample_svp_scrfd_bind_outputs(task, levels);
+    sample_svp_check_exps_return(ret != TD_SUCCESS, ret,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "bind SCRFD outputs failed\n");
+
+    for (level_idx = 0; level_idx < SAMPLE_SVP_SCRFD_LEVEL_NUM; level_idx++) {
+        candidate_capacity += levels[level_idx].count;
+    }
+    candidates = (sample_svp_face_box *)calloc(candidate_capacity, sizeof(sample_svp_face_box));
+    sample_svp_check_exps_return(candidates == TD_NULL, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "allocate SCRFD candidates failed\n");
+
+    for (level_idx = 0; level_idx < SAMPLE_SVP_SCRFD_LEVEL_NUM; level_idx++) {
+        const sample_svp_scrfd_level *level = &levels[level_idx];
+
+        for (i = 0; i < level->count; i++) {
+            const td_float *score_row =
+                (const td_float *)(level->score + (size_t)i * level->score_stride);
+            const td_float *bbox_row =
+                (const td_float *)(level->bbox + (size_t)i * level->bbox_stride);
+            td_float score = score_row[0];
+            td_u32 cell_idx;
+            td_u32 cell_x;
+            td_u32 cell_y;
+            td_float center_x;
+            td_float center_y;
+            td_float x1;
+            td_float y1;
+            td_float x2;
+            td_float y2;
+
+            if (!isfinite(score) || score < SAMPLE_SVP_FACE_DET_SCORE_TH ||
+                !isfinite(bbox_row[0]) || !isfinite(bbox_row[1]) ||
+                !isfinite(bbox_row[2]) || !isfinite(bbox_row[3])) {
+                continue;
+            }
+
+            cell_idx = i / SAMPLE_SVP_SCRFD_ANCHOR_NUM;
+            cell_x = cell_idx % level->feature_w;
+            cell_y = cell_idx / level->feature_w;
+            center_x = (td_float)(cell_x * level->stride);
+            center_y = (td_float)(cell_y * level->stride);
+            x1 = center_x - bbox_row[0] * level->stride;
+            y1 = center_y - bbox_row[1] * level->stride;
+            x2 = center_x + bbox_row[2] * level->stride;
+            y2 = center_y + bbox_row[3] * level->stride;
+
+            x1 = (x1 - (td_float)g_face_det_pad_x) / g_face_det_scale;
+            y1 = (y1 - (td_float)g_face_det_pad_y) / g_face_det_scale;
+            x2 = (x2 - (td_float)g_face_det_pad_x) / g_face_det_scale;
+            y2 = (y2 - (td_float)g_face_det_pad_y) / g_face_det_scale;
+            x1 = fmaxf(0.0f, fminf(x1, (td_float)(frame_w - 1)));
+            y1 = fmaxf(0.0f, fminf(y1, (td_float)(frame_h - 1)));
+            x2 = fmaxf(0.0f, fminf(x2, (td_float)(frame_w - 1)));
+            y2 = fmaxf(0.0f, fminf(y2, (td_float)(frame_h - 1)));
+            if (x2 <= x1 || y2 <= y1) {
+                continue;
+            }
+
+            candidates[candidate_num].x1 = x1;
+            candidates[candidate_num].y1 = y1;
+            candidates[candidate_num].x2 = x2;
+            candidates[candidate_num].y2 = y2;
+            candidates[candidate_num].score = score;
+            candidate_num++;
+        }
+    }
+
+    qsort(candidates, candidate_num, sizeof(sample_svp_face_box), sample_svp_face_box_score_desc);
+    for (i = 0; i < candidate_num && face_list->num < SAMPLE_SVP_NPU_MAX_FACE_NUM; i++) {
+        td_u32 kept_idx;
+        td_bool keep = TD_TRUE;
+
+        for (kept_idx = 0; kept_idx < face_list->num; kept_idx++) {
+            if (sample_svp_face_box_iou(&candidates[i], &face_list->boxes[kept_idx]) >
+                SAMPLE_SVP_FACE_DET_NMS_TH) {
+                keep = TD_FALSE;
+                break;
+            }
+        }
+        if (keep == TD_TRUE) {
+            face_list->boxes[face_list->num++] = candidates[i];
+        }
+    }
+
+    if (g_face_det_debug_frame_idx < SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX) {
+        sample_svp_trace_info("SCRFD candidates=%u after_nms=%u scale=%.5f pad=(%u,%u)\n",
+            candidate_num, face_list->num, g_face_det_scale, g_face_det_pad_x, g_face_det_pad_y);
+    }
+    free(candidates);
+    return TD_SUCCESS;
+}
+
 /* ----------------------------- 工具函数（提前定义） ----------------------------- */
+#if 0
 static td_s32 sample_svp_npu_decode_face_det_output(const sample_svp_npu_task_info *task,
     td_u32 frame_w, td_u32 frame_h, sample_svp_face_box_list *face_list)
 {
@@ -400,6 +658,106 @@ static td_s32 sample_svp_resize_nv21_to_target(const td_u8 *src, td_u32 src_w, t
 
     return TD_SUCCESS;
 }
+#endif
+
+static td_void sample_svp_nv21_get_rgb(const td_u8 *src_y, const td_u8 *src_vu,
+    td_u32 stride_y, td_u32 stride_uv, td_u32 x, td_u32 y,
+    td_float *r, td_float *g, td_float *b)
+{
+    td_s32 yv = src_y[(size_t)y * stride_y + x];
+    td_u32 vu_idx = (y / 2) * stride_uv + (x & ~1U);
+    td_s32 v = src_vu[vu_idx];
+    td_s32 u = src_vu[vu_idx + 1];
+    td_s32 c = yv - 16;
+    td_s32 d = u - 128;
+    td_s32 e = v - 128;
+    td_s32 ri;
+    td_s32 gi;
+    td_s32 bi;
+
+    if (c < 0) {
+        c = 0;
+    }
+    ri = (298 * c + 409 * e + 128) >> 8;
+    gi = (298 * c - 100 * d - 208 * e + 128) >> 8;
+    bi = (298 * c + 516 * d + 128) >> 8;
+    *r = (td_float)((ri < 0) ? 0 : (ri > 255 ? 255 : ri));
+    *g = (td_float)((gi < 0) ? 0 : (gi > 255 ? 255 : gi));
+    *b = (td_float)((bi < 0) ? 0 : (bi > 255 ? 255 : bi));
+}
+
+static td_s32 sample_svp_prepare_scrfd_input(const td_u8 *src, td_u32 src_w, td_u32 src_h,
+    td_u32 src_stride_y, td_u32 src_stride_uv)
+{
+    const td_u8 *src_y = src;
+    const td_u8 *src_vu = src + (size_t)src_stride_y * src_h;
+    td_float *dst = (td_float *)g_face_det_model_input_virt;
+    td_u32 dst_stride_f;
+    td_u32 resized_w;
+    td_u32 resized_h;
+    td_u32 x;
+    td_u32 y;
+    td_u32 channel;
+    const td_float pad_value = (0.0f - 127.5f) / 128.0f;
+
+    sample_svp_check_exps_return(src == TD_NULL || dst == TD_NULL ||
+        src_w == 0 || src_h == 0 || src_stride_y == 0 || src_stride_uv == 0,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid SCRFD input args\n");
+    sample_svp_check_exps_return(g_face_det_expect_stride % sizeof(td_float) != 0,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "SCRFD input stride is not float aligned\n");
+
+    dst_stride_f = g_face_det_expect_stride / sizeof(td_float);
+    sample_svp_check_exps_return(dst_stride_f < g_face_det_expect_w ||
+        g_face_det_expect_size < 3 * g_face_det_expect_h * g_face_det_expect_stride,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "SCRFD input buffer layout invalid\n");
+
+    g_face_det_scale = fminf((td_float)g_face_det_expect_w / src_w,
+        (td_float)g_face_det_expect_h / src_h);
+    resized_w = (td_u32)floorf(src_w * g_face_det_scale + 0.5f);
+    resized_h = (td_u32)floorf(src_h * g_face_det_scale + 0.5f);
+    g_face_det_pad_x = (g_face_det_expect_w - resized_w) / 2;
+    g_face_det_pad_y = (g_face_det_expect_h - resized_h) / 2;
+
+    for (channel = 0; channel < 3; channel++) {
+        td_float *channel_dst = dst + (size_t)channel * g_face_det_expect_h * dst_stride_f;
+        for (y = 0; y < g_face_det_expect_h; y++) {
+            for (x = 0; x < dst_stride_f; x++) {
+                channel_dst[(size_t)y * dst_stride_f + x] = pad_value;
+            }
+        }
+    }
+
+    for (y = 0; y < resized_h; y++) {
+        td_float src_yf = ((td_float)y + 0.5f) / g_face_det_scale - 0.5f;
+        td_u32 sy;
+        if (src_yf < 0.0f) {
+            src_yf = 0.0f;
+        }
+        sy = (td_u32)fminf(floorf(src_yf + 0.5f), (td_float)(src_h - 1));
+        for (x = 0; x < resized_w; x++) {
+            td_float src_xf = ((td_float)x + 0.5f) / g_face_det_scale - 0.5f;
+            td_u32 sx;
+            td_float r;
+            td_float g;
+            td_float b;
+            size_t dst_idx;
+
+            if (src_xf < 0.0f) {
+                src_xf = 0.0f;
+            }
+            sx = (td_u32)fminf(floorf(src_xf + 0.5f), (td_float)(src_w - 1));
+            sample_svp_nv21_get_rgb(src_y, src_vu, src_stride_y, src_stride_uv,
+                sx, sy, &r, &g, &b);
+            dst_idx = (size_t)(y + g_face_det_pad_y) * dst_stride_f + x + g_face_det_pad_x;
+            dst[dst_idx] = (r - 127.5f) / 128.0f;
+            dst[(size_t)g_face_det_expect_h * dst_stride_f + dst_idx] =
+                (g - 127.5f) / 128.0f;
+            dst[(size_t)2 * g_face_det_expect_h * dst_stride_f + dst_idx] =
+                (b - 127.5f) / 128.0f;
+        }
+    }
+    return TD_SUCCESS;
+}
 
 td_s32 sample_svp_npu_set_face_det_frame(const ot_video_frame_info *frame, const td_u8 *frame_virt)
 {
@@ -435,10 +793,6 @@ static td_s32 sample_svp_npu_run_face_det_with_video_frame(sample_svp_face_box_l
     td_s32 ret;
     td_u32 y_size;
     td_u32 frame_size;
-    td_u8 *model_input_ptr = TD_NULL;
-    td_u32 model_input_size;
-    td_u32 model_input_stride;
-    td_bool need_resize;
     svp_acl_error acl_ret;
 
     sample_svp_check_exps_return(face_list == TD_NULL, TD_FAILURE,
@@ -452,93 +806,33 @@ static td_s32 sample_svp_npu_run_face_det_with_video_frame(sample_svp_face_box_l
     frame_size = y_size + (g_svp_npu_face_det_frame.video_frame.stride[1] *
         g_svp_npu_face_det_frame.video_frame.height / 2);
 
-    model_input_ptr = (td_u8 *)g_svp_npu_face_det_frame_virt;
-    model_input_size = frame_size;
-    model_input_stride = g_svp_npu_face_det_frame.video_frame.stride[0];
-
-    need_resize = (g_face_det_expect_w > 0 && g_face_det_expect_h > 0) &&
-        (g_svp_npu_face_det_frame.video_frame.width != g_face_det_expect_w ||
-        g_svp_npu_face_det_frame.video_frame.height != g_face_det_expect_h ||
-        model_input_size != g_face_det_expect_size ||
-        model_input_stride != g_face_det_expect_stride);
-
-    if (need_resize == TD_TRUE) {
-        sample_svp_check_exps_return(g_face_det_resized_buf == TD_NULL, TD_FAILURE,
-            SAMPLE_SVP_ERR_LEVEL_ERROR, "face det resize buffer is null\n");
-        sample_svp_check_exps_return(g_face_det_model_input_virt == TD_NULL, TD_FAILURE,
-            SAMPLE_SVP_ERR_LEVEL_ERROR, "face det model input virt is null\n");
-
-        ret = sample_svp_resize_nv21_to_target((const td_u8 *)g_svp_npu_face_det_frame_virt,
-            g_svp_npu_face_det_frame.video_frame.width,
-            g_svp_npu_face_det_frame.video_frame.height,
-            g_svp_npu_face_det_frame.video_frame.stride[0],
-            g_svp_npu_face_det_frame.video_frame.stride[1],
-            g_face_det_resized_buf,
-            g_face_det_expect_w,
-            g_face_det_expect_h,
-            g_face_det_expect_stride);
-        sample_svp_check_exps_return(ret != TD_SUCCESS, ret, SAMPLE_SVP_ERR_LEVEL_ERROR,
-            "resize nv21 to model input failed\n");
-
-        ret = memcpy_s(g_face_det_model_input_virt, g_face_det_expect_size,
-            g_face_det_resized_buf, g_face_det_expect_size);
-        sample_svp_check_exps_return(ret != EOK, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-            "copy resized face det input failed\n");
-
-        acl_ret = svp_acl_rt_mem_flush(g_face_det_model_input_virt, g_face_det_expect_size);
-        sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-            "flush face det model input failed, ret=%d\n", acl_ret);
-
-        model_input_ptr = g_face_det_model_input_virt;
-        model_input_size = g_face_det_expect_size;
-        model_input_stride = g_face_det_expect_stride;
-
-        if (g_face_det_debug_frame_idx < SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX) {
-            sample_svp_trace_info("face det resize applied: src=%ux%u stride=(%u,%u) -> dst=%ux%u stride=%u size=%u\n",
-                g_svp_npu_face_det_frame.video_frame.width,
-                g_svp_npu_face_det_frame.video_frame.height,
-                g_svp_npu_face_det_frame.video_frame.stride[0],
-                g_svp_npu_face_det_frame.video_frame.stride[1],
-                g_face_det_expect_w,
-                g_face_det_expect_h,
-                model_input_stride,
-                model_input_size);
-        }
-    } else {
-        sample_svp_check_exps_return(g_face_det_model_input_virt == TD_NULL,
-            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-            "face det model input virt is null\n");
-        sample_svp_check_exps_return(model_input_size > g_face_det_expect_size,
-            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-            "face det frame is larger than model input\n");
-
-        ret = memcpy_s(g_face_det_model_input_virt, g_face_det_expect_size,
-            g_svp_npu_face_det_frame_virt, model_input_size);
-        sample_svp_check_exps_return(ret != EOK, TD_FAILURE,
-            SAMPLE_SVP_ERR_LEVEL_ERROR, "copy face det input failed\n");
-
-        acl_ret = svp_acl_rt_mem_flush(g_face_det_model_input_virt,
-            g_face_det_expect_size);
-        sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE,
-            SAMPLE_SVP_ERR_LEVEL_ERROR,
-            "flush face det model input failed, ret=%d\n", acl_ret);
-        model_input_ptr = g_face_det_model_input_virt;
-        model_input_size = g_face_det_expect_size;
-        model_input_stride = g_face_det_expect_stride;
-    }
-
     sample_svp_check_exps_return(frame_size == 0, TD_FAILURE,
         SAMPLE_SVP_ERR_LEVEL_ERROR, "face det frame size is zero\n");
 
+    ret = sample_svp_prepare_scrfd_input(
+        (const td_u8 *)g_svp_npu_face_det_frame_virt,
+        g_svp_npu_face_det_frame.video_frame.width,
+        g_svp_npu_face_det_frame.video_frame.height,
+        g_svp_npu_face_det_frame.video_frame.stride[0],
+        g_svp_npu_face_det_frame.video_frame.stride[1]);
+    sample_svp_check_exps_return(ret != TD_SUCCESS, ret,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare SCRFD input failed\n");
+
+    acl_ret = svp_acl_rt_mem_flush(g_face_det_model_input_virt, g_face_det_expect_size);
+    sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "flush SCRFD input failed, ret=%d\n", acl_ret);
+
     if (g_face_det_debug_frame_idx < SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX) {
-        sample_svp_trace_info("face det frame[%u] input_size=%u y_size=%u stride0=%u stride1=%u\n",
-            g_face_det_debug_frame_idx, model_input_size, y_size,
-            g_svp_npu_face_det_frame.video_frame.stride[0],
-            g_svp_npu_face_det_frame.video_frame.stride[1]);
+        sample_svp_trace_info("SCRFD input frame[%u]: src=%ux%u model=%ux%u size=%u stride=%u\n",
+            g_face_det_debug_frame_idx,
+            g_svp_npu_face_det_frame.video_frame.width,
+            g_svp_npu_face_det_frame.video_frame.height,
+            g_face_det_expect_w, g_face_det_expect_h,
+            g_face_det_expect_size, g_face_det_expect_stride);
     }
 
-    ret = sample_common_svp_npu_update_input_data_buffer_info(model_input_ptr,
-        model_input_size, model_input_stride, 0, &g_svp_npu_task[0]);
+    ret = sample_common_svp_npu_update_input_data_buffer_info(g_face_det_model_input_virt,
+        g_face_det_expect_size, g_face_det_expect_stride, 0, &g_svp_npu_task[0]);
     sample_svp_check_exps_return(ret != TD_SUCCESS, ret, SAMPLE_SVP_ERR_LEVEL_ERROR,
         "update face det data buffer failed\n");
 
@@ -546,7 +840,7 @@ static td_s32 sample_svp_npu_run_face_det_with_video_frame(sample_svp_face_box_l
     sample_svp_check_exps_return(ret != TD_SUCCESS, ret, SAMPLE_SVP_ERR_LEVEL_ERROR,
         "face det model execute failed\n");
 
-    ret = sample_svp_npu_decode_face_det_output(&g_svp_npu_task[0],
+    ret = sample_svp_npu_decode_scrfd_output(&g_svp_npu_task[0],
         g_svp_npu_face_det_frame.video_frame.width,
         g_svp_npu_face_det_frame.video_frame.height,
         face_list);
@@ -555,7 +849,7 @@ static td_s32 sample_svp_npu_run_face_det_with_video_frame(sample_svp_face_box_l
 
     if (g_face_det_debug_frame_idx < SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX ||
         (g_face_det_debug_frame_idx % 30 == 0)) {
-        sample_svp_trace_info("face_detection.om detected %u faces\n", face_list->num);
+        sample_svp_trace_info("SCRFD detected %u faces\n", face_list->num);
     }
     g_face_det_debug_frame_idx++;
     return TD_SUCCESS;
