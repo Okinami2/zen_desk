@@ -60,7 +60,7 @@
 #define SAMPLE_SVP_LANDMARK_NUM       106
 
 #define SAMPLE_SVP_GAZE_CROP_SCALE    1.25f
-#define SAMPLE_SVP_LANDMARK_CROP_SCALE 1.00f
+#define SAMPLE_SVP_LANDMARK_CROP_SCALE 1.50f
 
 typedef struct {
     td_u32 num;
@@ -910,9 +910,74 @@ static td_void sample_svp_expand_square_bbox(sample_svp_face_box *box, td_u32 wi
     box->y2 = sample_svp_min_f32((td_float)height, box->y2);
 }
 
+static td_void sample_svp_make_square_bbox_unclipped(sample_svp_face_box *box, td_float scale)
+{
+    td_float cx;
+    td_float cy;
+    td_float side;
+
+    if (box == TD_NULL) {
+        return;
+    }
+
+    cx = (box->x1 + box->x2) * 0.5f;
+    cy = (box->y1 + box->y2) * 0.5f;
+    side = sample_svp_max_f32(box->x2 - box->x1, box->y2 - box->y1) * scale;
+    side = sample_svp_max_f32(side, 2.0f);
+    box->x1 = cx - side * 0.5f;
+    box->y1 = cy - side * 0.5f;
+    box->x2 = cx + side * 0.5f;
+    box->y2 = cy + side * 0.5f;
+}
+
+static td_void sample_svp_nv21_get_rgb_or_black(const td_u8 *src_y, const td_u8 *src_vu,
+    td_u32 src_w, td_u32 src_h, td_u32 stride_y, td_u32 stride_uv,
+    td_s32 x, td_s32 y, td_float *r, td_float *g, td_float *b)
+{
+    if (x < 0 || y < 0 || (td_u32)x >= src_w || (td_u32)y >= src_h) {
+        *r = 0.0f;
+        *g = 0.0f;
+        *b = 0.0f;
+        return;
+    }
+    sample_svp_nv21_get_rgb(src_y, src_vu, stride_y, stride_uv,
+        (td_u32)x, (td_u32)y, r, g, b);
+}
+
+static td_void sample_svp_nv21_sample_rgb_bilinear(const td_u8 *src_y, const td_u8 *src_vu,
+    td_u32 src_w, td_u32 src_h, td_u32 stride_y, td_u32 stride_uv,
+    td_float src_x, td_float src_y_pos, td_float *r, td_float *g, td_float *b)
+{
+    td_s32 x0 = (td_s32)floorf(src_x);
+    td_s32 y0 = (td_s32)floorf(src_y_pos);
+    td_float wx = src_x - (td_float)x0;
+    td_float wy = src_y_pos - (td_float)y0;
+    td_float r00, g00, b00;
+    td_float r01, g01, b01;
+    td_float r10, g10, b10;
+    td_float r11, g11, b11;
+    td_float w00 = (1.0f - wx) * (1.0f - wy);
+    td_float w01 = wx * (1.0f - wy);
+    td_float w10 = (1.0f - wx) * wy;
+    td_float w11 = wx * wy;
+
+    sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h, stride_y, stride_uv,
+        x0, y0, &r00, &g00, &b00);
+    sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h, stride_y, stride_uv,
+        x0 + 1, y0, &r01, &g01, &b01);
+    sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h, stride_y, stride_uv,
+        x0, y0 + 1, &r10, &g10, &b10);
+    sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h, stride_y, stride_uv,
+        x0 + 1, y0 + 1, &r11, &g11, &b11);
+
+    *r = r00 * w00 + r01 * w01 + r10 * w10 + r11 * w11;
+    *g = g00 * w00 + g01 * w01 + g10 * w10 + g11 * w11;
+    *b = b00 * w00 + b01 * w01 + b10 * w10 + b11 * w11;
+}
+
 static td_s32 sample_svp_crop_resize_rgb888_to_fp32_nchw(const td_u8 *rgb, td_u32 width, td_u32 height,
     const sample_svp_face_box *crop_box, td_u32 target_w, td_u32 target_h,
-    td_u8 *dst_input_virt, td_u32 dst_input_size)
+    td_u8 *dst_input_virt, td_u32 dst_input_size, td_float pixel_scale, td_bool bilinear)
 {
     const td_u8 *src_nv21 = g_svp_npu_face_det_frame_virt;
     const td_u8 *src_y = TD_NULL;
@@ -923,7 +988,8 @@ static td_s32 sample_svp_crop_resize_rgb888_to_fp32_nchw(const td_u8 *rgb, td_u3
     td_u32 src_stride_uv;
     td_float *dst = TD_NULL;
     td_u32 y, x;
-    td_u32 x1, y1, crop_w, crop_h;
+    td_float crop_w;
+    td_float crop_h;
 
     sample_svp_check_exps_return(src_nv21 == TD_NULL || crop_box == TD_NULL || dst_input_virt == TD_NULL,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid crop args\n");
@@ -941,77 +1007,29 @@ static td_s32 sample_svp_crop_resize_rgb888_to_fp32_nchw(const td_u8 *rgb, td_u3
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "input buffer too small for crop\n");
     dst = (td_float *)dst_input_virt;
 
-    x1 = (td_u32)sample_svp_max_f32(0.0f, floorf(crop_box->x1));
-    y1 = (td_u32)sample_svp_max_f32(0.0f, floorf(crop_box->y1));
-    crop_w = (td_u32)sample_svp_max_f32(1.0f, ceilf(crop_box->x2) - (td_float)x1);
-    crop_h = (td_u32)sample_svp_max_f32(1.0f, ceilf(crop_box->y2) - (td_float)y1);
-
-    if (x1 >= src_w) {
-        x1 = src_w > 0 ? src_w - 1 : 0;
-        crop_w = 1;
-    } else if (x1 + crop_w > src_w) {
-        crop_w = src_w - x1;
-    }
-
-    if (y1 >= src_h) {
-        y1 = src_h > 0 ? src_h - 1 : 0;
-        crop_h = 1;
-    } else if (y1 + crop_h > src_h) {
-        crop_h = src_h - y1;
-    }
-
-    if (crop_w == 0) {
-        crop_w = 1;
-    }
-    if (crop_h == 0) {
-        crop_h = 1;
-    }
+    crop_w = sample_svp_max_f32(1.0f, crop_box->x2 - crop_box->x1);
+    crop_h = sample_svp_max_f32(1.0f, crop_box->y2 - crop_box->y1);
 
     for (y = 0; y < target_h; y++) {
-        td_u32 sy = y1 + (td_u32)((td_u64)y * crop_h / target_h);
-        if (sy >= src_h) {
-            sy = src_h - 1;
-        }
+        td_float sy = crop_box->y1 + (td_float)y * crop_h / (td_float)target_h;
         for (x = 0; x < target_w; x++) {
-            td_u32 sx = x1 + (td_u32)((td_u64)x * crop_w / target_w);
-            td_s32 yv;
-            td_s32 u;
-            td_s32 v;
-            td_s32 c;
-            td_s32 d;
-            td_s32 e;
-            td_s32 r;
-            td_s32 g;
-            td_s32 b;
-            td_u32 vu_idx;
+            td_float sx = crop_box->x1 + (td_float)x * crop_w / (td_float)target_w;
+            td_float r;
+            td_float g;
+            td_float b;
 
-            if (sx >= src_w) {
-                sx = src_w - 1;
+            if (bilinear == TD_TRUE) {
+                sample_svp_nv21_sample_rgb_bilinear(src_y, src_vu, src_w, src_h,
+                    src_stride_y, src_stride_uv, sx, sy, &r, &g, &b);
+            } else {
+                sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h,
+                    src_stride_y, src_stride_uv, (td_s32)floorf(sx), (td_s32)floorf(sy),
+                    &r, &g, &b);
             }
 
-            yv = src_y[sy * src_stride_y + sx];
-            vu_idx = (sy / 2) * src_stride_uv + (sx & ~1U);
-            v = src_vu[vu_idx];
-            u = src_vu[vu_idx + 1];
-
-            c = yv - 16;
-            d = u - 128;
-            e = v - 128;
-            if (c < 0) {
-                c = 0;
-            }
-
-            r = (298 * c + 409 * e + 128) >> 8;
-            g = (298 * c - 100 * d - 208 * e + 128) >> 8;
-            b = (298 * c + 516 * d + 128) >> 8;
-
-            r = (r < 0) ? 0 : (r > 255 ? 255 : r);
-            g = (g < 0) ? 0 : (g > 255 ? 255 : g);
-            b = (b < 0) ? 0 : (b > 255 ? 255 : b);
-
-            dst[0 * target_h * target_w + y * target_w + x] = (td_float)r / 255.0f;
-            dst[1 * target_h * target_w + y * target_w + x] = (td_float)g / 255.0f;
-            dst[2 * target_h * target_w + y * target_w + x] = (td_float)b / 255.0f;
+            dst[0 * target_h * target_w + y * target_w + x] = (td_float)r * pixel_scale;
+            dst[1 * target_h * target_w + y * target_w + x] = (td_float)g * pixel_scale;
+            dst[2 * target_h * target_w + y * target_w + x] = (td_float)b * pixel_scale;
         }
     }
 
@@ -1420,7 +1438,6 @@ static td_s32 sample_svp_npu_parse_landmark_output(const sample_svp_npu_task_inf
     svp_acl_data_buffer *buf = TD_NULL;
     td_void *addr = TD_NULL;
     size_t buf_size;
-    td_bool normalized = TD_TRUE;
 
     sample_svp_check_exps_return(task == TD_NULL || landmark == TD_NULL, TD_FAILURE,
         SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid param\n");
@@ -1446,22 +1463,13 @@ static td_s32 sample_svp_npu_parse_landmark_output(const sample_svp_npu_task_inf
     data = (td_float *)addr;
     landmark->point_num = SAMPLE_SVP_LANDMARK_NUM;
 
-    for (i = 0; i < 212; i++) {
-        if (data[i] < -0.01f || data[i] > 1.01f) {
-            normalized = TD_FALSE;
-            break;
-        }
-    }
-
     for (i = 0; i < SAMPLE_SVP_LANDMARK_NUM; i++) {
         td_float x = data[i * 2];
         td_float y = data[i * 2 + 1];
-        if (normalized) {
-            x *= (td_float)SAMPLE_SVP_LANDMARK_IN_W;
-            y *= (td_float)SAMPLE_SVP_LANDMARK_IN_H;
-        }
-        landmark->points[i][0] = x;
-        landmark->points[i][1] = y;
+        sample_svp_check_exps_return(!isfinite(x) || !isfinite(y), TD_FAILURE,
+            SAMPLE_SVP_ERR_LEVEL_ERROR, "landmark output contains non-finite value at point %u\n", i);
+        landmark->points[i][0] = (x + 1.0f) * ((td_float)SAMPLE_SVP_LANDMARK_IN_W * 0.5f);
+        landmark->points[i][1] = (y + 1.0f) * ((td_float)SAMPLE_SVP_LANDMARK_IN_H * 0.5f);
     }
 
     return TD_SUCCESS;
@@ -1777,16 +1785,14 @@ static td_s32 sample_svp_prepare_landmark_input_rgb888(const td_u8 *rgb, td_u32 
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "landmark input buffer is invalid\n");
 
     crop_box = *face;
-    sample_svp_expand_square_bbox(&crop_box,
-        g_svp_npu_face_det_frame.video_frame.width,
-        g_svp_npu_face_det_frame.video_frame.height,
-        SAMPLE_SVP_LANDMARK_CROP_SCALE);
+    sample_svp_make_square_bbox_unclipped(&crop_box, SAMPLE_SVP_LANDMARK_CROP_SCALE);
     if (used_crop != TD_NULL) {
         *used_crop = crop_box;
     }
 
     sample_svp_check_exps_return(sample_svp_crop_resize_rgb888_to_fp32_nchw(TD_NULL, 0, 0, &crop_box,
-        g_landmark_expect_w, g_landmark_expect_h, g_landmark_model_input_virt, g_landmark_expect_size) != TD_SUCCESS,
+        g_landmark_expect_w, g_landmark_expect_h, g_landmark_model_input_virt,
+        g_landmark_expect_size, 1.0f, TD_TRUE) != TD_SUCCESS,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare landmark input from nv21 failed\n");
 
     acl_ret = svp_acl_rt_mem_flush(g_landmark_model_input_virt, g_landmark_expect_size);
@@ -1816,7 +1822,8 @@ static td_s32 sample_svp_prepare_gaze_input_rgb888(const td_u8 *rgb, td_u32 widt
         g_svp_npu_face_det_frame.video_frame.height,
         SAMPLE_SVP_GAZE_CROP_SCALE);
     sample_svp_check_exps_return(sample_svp_crop_resize_rgb888_to_fp32_nchw(TD_NULL, 0, 0, &crop_box,
-        g_gaze_expect_w, g_gaze_expect_h, g_gaze_model_input_virt, g_gaze_expect_size) != TD_SUCCESS,
+        g_gaze_expect_w, g_gaze_expect_h, g_gaze_model_input_virt,
+        g_gaze_expect_size, 1.0f / 255.0f, TD_FALSE) != TD_SUCCESS,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare gaze input from nv21 failed\n");
 
     acl_ret = svp_acl_rt_mem_flush(g_gaze_model_input_virt, g_gaze_expect_size);

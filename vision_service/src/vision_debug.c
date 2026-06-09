@@ -19,7 +19,8 @@
 #define VISION_JSON_BUFFER_SIZE 1024
 #define VISION_COLOR_RED_R      255
 #define VISION_COLOR_GREEN_G    255
-#define VISION_DRAW_RADIUS      2
+#define VISION_COLOR_BLUE_B     255
+#define VISION_DRAW_RADIUS      3
 
 static td_s32 vision_debug_make_dirs(const td_char *path)
 {
@@ -223,9 +224,20 @@ static td_void vision_debug_draw_landmarks(td_u8 *rgb, td_u32 width, td_u32 heig
         td_s32 y = (td_s32)landmark->points[i][1];
         for (dy = -VISION_DRAW_RADIUS; dy <= VISION_DRAW_RADIUS; dy++) {
             for (dx = -VISION_DRAW_RADIUS; dx <= VISION_DRAW_RADIUS; dx++) {
+                if (dx != 0 && dy != 0 && abs(dx) + abs(dy) > VISION_DRAW_RADIUS) {
+                    continue;
+                }
                 vision_debug_set_rgb(rgb, width, height, x + dx, y + dy,
-                    0, VISION_COLOR_GREEN_G, 0);
+                    0, 0, 0);
             }
+        }
+        for (dy = -(VISION_DRAW_RADIUS - 1); dy <= VISION_DRAW_RADIUS - 1; dy++) {
+            vision_debug_set_rgb(rgb, width, height, x, y + dy,
+                0, VISION_COLOR_GREEN_G, VISION_COLOR_BLUE_B);
+        }
+        for (dx = -(VISION_DRAW_RADIUS - 1); dx <= VISION_DRAW_RADIUS - 1; dx++) {
+            vision_debug_set_rgb(rgb, width, height, x + dx, y,
+                0, VISION_COLOR_GREEN_G, VISION_COLOR_BLUE_B);
         }
     }
 }
@@ -345,15 +357,17 @@ static td_void vision_debug_save_snapshot(vision_debug_context *ctx,
         return;
     }
 
-    (void)snprintf(path, sizeof(path), "%s.nv21", base);
+    (void)snprintf(path, sizeof(path), "%s.raw.nv21", base);
     status |= vision_debug_write_nv21(path, frame, frame_virt);
-    (void)snprintf(path, sizeof(path), "%s.ppm", base);
+    (void)snprintf(path, sizeof(path), "%s.annotated.ppm", base);
     status |= vision_debug_write_ppm(path, frame, frame_virt, result);
     (void)snprintf(path, sizeof(path), "%s.json", base);
     status |= vision_debug_write_json(path, summary, result);
 
     if (status == TD_SUCCESS) {
         ctx->saved_frames++;
+        fprintf(stdout, "vision: saved annotated snapshot %s.annotated.ppm (%u landmarks)\n",
+            base, result->landmark.point_num);
     } else {
         fprintf(stderr, "vision: failed to save snapshot %s\n", base);
     }
