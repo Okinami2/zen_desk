@@ -124,10 +124,12 @@ typedef struct {
 td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
     td_u32 width, td_u32 height);
 
+#define UVC_LITE_MAX_BUFFERS 8
+
 typedef struct {
     void *start;
     td_u32 length;
-} uvc_lite_buffer_pub;
+} uvc_lite_buffer;
 
 typedef struct {
     td_s32 fd;
@@ -136,11 +138,11 @@ typedef struct {
     td_u32 stride;
     td_u32 pixelformat;
     td_u32 buffer_count;
-    uvc_lite_buffer_pub buffers[8];
-} uvc_lite_ctx_pub;
+    uvc_lite_buffer buffers[UVC_LITE_MAX_BUFFERS];
+} uvc_lite_ctx;
 
 typedef struct {
-    uvc_lite_ctx_pub uvc;
+    uvc_lite_ctx uvc;
     td_char type_name[16];
     td_bool opened;
 } sample_uvc_capture_ctx;

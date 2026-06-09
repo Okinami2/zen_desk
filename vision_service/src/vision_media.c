@@ -630,8 +630,8 @@ static td_void uvc_media_yuyv_to_nv12(td_char *image_in, td_u32 width, td_u32 he
             *(y + index) = *(start + j);
             index++;
         }
-        start = image_in + pixel_num * 2 * i;
-        y = y + pixel_num * 3 / 2;
+        start += pixel_num * 2;
+        y += pixel_num * 3 / 2;
     }
 
     start = image_in;
@@ -644,8 +644,8 @@ static td_void uvc_media_yuyv_to_nv12(td_char *image_in, td_u32 width, td_u32 he
                 uv_index += 2;
             }
         }
-        start = image_in + pixel_num * 2 * i;
-        uv = uv + pixel_num * 3 / 2;
+        start += pixel_num * 2;
+        uv += pixel_num * 3 / 2;
     }
 }
 
@@ -737,6 +737,7 @@ static td_s32 uvc_media_send_frame_to_vpss(td_void *data, td_u32 size, td_u32 st
 
     ret = uvc_media_prepare_frame_info(vb_blk, &buf_attr, &calc_cfg, &frame_info);
     if (ret != TD_SUCCESS) {
+        (td_void)ss_mpi_vb_release_blk(vb_blk);
         return ret;
     }
 

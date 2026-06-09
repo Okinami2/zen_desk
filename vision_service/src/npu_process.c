@@ -504,6 +504,27 @@ static td_s32 sample_svp_npu_run_face_det_with_video_frame(sample_svp_face_box_l
                 model_input_stride,
                 model_input_size);
         }
+    } else {
+        sample_svp_check_exps_return(g_face_det_model_input_virt == TD_NULL,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+            "face det model input virt is null\n");
+        sample_svp_check_exps_return(model_input_size > g_face_det_expect_size,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+            "face det frame is larger than model input\n");
+
+        ret = memcpy_s(g_face_det_model_input_virt, g_face_det_expect_size,
+            g_svp_npu_face_det_frame_virt, model_input_size);
+        sample_svp_check_exps_return(ret != EOK, TD_FAILURE,
+            SAMPLE_SVP_ERR_LEVEL_ERROR, "copy face det input failed\n");
+
+        acl_ret = svp_acl_rt_mem_flush(g_face_det_model_input_virt,
+            g_face_det_expect_size);
+        sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE,
+            SAMPLE_SVP_ERR_LEVEL_ERROR,
+            "flush face det model input failed, ret=%d\n", acl_ret);
+        model_input_ptr = g_face_det_model_input_virt;
+        model_input_size = g_face_det_expect_size;
+        model_input_stride = g_face_det_expect_stride;
     }
 
     sample_svp_check_exps_return(frame_size == 0, TD_FAILURE,
@@ -540,26 +561,6 @@ static td_s32 sample_svp_npu_run_face_det_with_video_frame(sample_svp_face_box_l
     return TD_SUCCESS;
 }
 
-
-static td_s32 sample_svp_write_bin_file(const td_char *path, const td_u8 *data, td_u32 size)
-{
-    FILE *fp = TD_NULL;
-    size_t wr;
-
-    sample_svp_check_exps_return(path == TD_NULL || data == TD_NULL || size == 0,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid write bin args\n");
-
-    fp = fopen(path, "wb");
-    sample_svp_check_exps_return(fp == TD_NULL, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "open file failed: %s\n", path);
-
-    wr = fwrite(data, 1, size, fp);
-    fclose(fp);
-
-    sample_svp_check_exps_return(wr != size, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "write file failed: %s\n", path);
-    return TD_SUCCESS;
-}
 
 static td_float sample_svp_max_f32(td_float a, td_float b)
 {
@@ -651,11 +652,25 @@ static td_s32 sample_svp_crop_resize_rgb888_to_fp32_nchw(const td_u8 *rgb, td_u3
     crop_w = (td_u32)sample_svp_max_f32(1.0f, ceilf(crop_box->x2) - (td_float)x1);
     crop_h = (td_u32)sample_svp_max_f32(1.0f, ceilf(crop_box->y2) - (td_float)y1);
 
-    if (x1 + crop_w > src_w) {
+    if (x1 >= src_w) {
+        x1 = src_w > 0 ? src_w - 1 : 0;
+        crop_w = 1;
+    } else if (x1 + crop_w > src_w) {
         crop_w = src_w - x1;
     }
-    if (y1 + crop_h > src_h) {
+
+    if (y1 >= src_h) {
+        y1 = src_h > 0 ? src_h - 1 : 0;
+        crop_h = 1;
+    } else if (y1 + crop_h > src_h) {
         crop_h = src_h - y1;
+    }
+
+    if (crop_w == 0) {
+        crop_w = 1;
+    }
+    if (crop_h == 0) {
+        crop_h = 1;
     }
 
     for (y = 0; y < target_h; y++) {
@@ -848,7 +863,7 @@ static td_s32 sample_svp_npu_acl_init_task(td_u32 task_num)
     for (task_idx = 0; task_idx < task_num; task_idx++) {
         ret = sample_svp_npu_acl_init_one_task(task_idx);
         if (ret != TD_SUCCESS) {
-            sample_svp_npu_acl_deinit_task(task_num);
+            sample_svp_npu_acl_deinit_task(task_idx);
             return ret;
         }
     }
@@ -952,13 +967,17 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     }
 
     ret = sample_common_svp_npu_get_input_resolution(SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX, 0, &det_input_size);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "get face det input resolution failed\n");
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get face det input resolution failed\n");
+        goto init_fail;
+    }
 
     ret = sample_common_svp_npu_get_input_data_buffer_info(&g_svp_npu_task[0], 0,
         &det_input_virt, &det_input_size_bytes, &det_input_stride);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "get face det input data buffer info failed\n");
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get face det input data buffer info failed\n");
+        goto init_fail;
+    }
 
     g_face_det_expect_w = det_input_size.width;
     g_face_det_expect_h = det_input_size.height;
@@ -967,13 +986,17 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     g_face_det_model_input_virt = det_input_virt;
 
     ret = sample_common_svp_npu_get_input_resolution(SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX, 0, &landmark_input_size);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "get landmark input resolution failed\n");
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get landmark input resolution failed\n");
+        goto init_fail;
+    }
 
     ret = sample_common_svp_npu_get_input_data_buffer_info(&g_svp_npu_task[1], 0,
         &landmark_input_virt, &landmark_input_size_bytes, &landmark_input_stride);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "get landmark input data buffer info failed\n");
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get landmark input data buffer info failed\n");
+        goto init_fail;
+    }
 
     g_landmark_expect_w = landmark_input_size.width;
     g_landmark_expect_h = landmark_input_size.height;
@@ -982,13 +1005,17 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     g_landmark_model_input_virt = landmark_input_virt;
 
     ret = sample_common_svp_npu_get_input_resolution(SAMPLE_SVP_NPU_GAZE_MODEL_IDX, 0, &gaze_input_size);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "get gaze input resolution failed\n");
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get gaze input resolution failed\n");
+        goto init_fail;
+    }
 
     ret = sample_common_svp_npu_get_input_data_buffer_info(&g_svp_npu_task[2], 0,
         &gaze_input_virt, &gaze_input_size_bytes, &gaze_input_stride);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "get gaze input data buffer info failed\n");
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get gaze input data buffer info failed\n");
+        goto init_fail;
+    }
 
     g_gaze_expect_w = gaze_input_size.width;
     g_gaze_expect_h = gaze_input_size.height;
@@ -1001,9 +1028,11 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
         g_face_det_resized_buf = TD_NULL;
     }
     g_face_det_resized_buf = (td_u8 *)malloc(g_face_det_expect_size);
-    sample_svp_check_exps_return(g_face_det_resized_buf == TD_NULL, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "malloc face det resize buffer failed, size=%u\n",
-        g_face_det_expect_size);
+    if (g_face_det_resized_buf == TD_NULL) {
+        sample_svp_trace_err("malloc face det resize buffer failed, size=%u\n",
+            g_face_det_expect_size);
+        goto init_fail;
+    }
 
     sample_svp_trace_info("face det model input resolution: %ux%u\n",
         det_input_size.width, det_input_size.height);
@@ -1013,6 +1042,23 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
         SAMPLE_SVP_FACE_DET_SCORE_TH);
 
     return TD_SUCCESS;
+
+init_fail:
+    if (g_face_det_resized_buf != TD_NULL) {
+        free(g_face_det_resized_buf);
+        g_face_det_resized_buf = TD_NULL;
+    }
+    g_face_det_model_input_virt = TD_NULL;
+    g_landmark_model_input_virt = TD_NULL;
+    g_gaze_model_input_virt = TD_NULL;
+    g_face_det_expect_w = 0;
+    g_face_det_expect_h = 0;
+    g_face_det_expect_size = 0;
+    g_face_det_expect_stride = 0;
+    sample_svp_npu_acl_deinit_task(SAMPLE_SVP_NPU_OFFLINE_TASK_NUM);
+    sample_svp_npu_pipeline_unload_models();
+    sample_svp_npu_acl_deinit();
+    return TD_FAILURE;
 }
 
 static td_void sample_svp_npu_pipeline_deinit(td_void)
@@ -1027,13 +1073,26 @@ static td_void sample_svp_npu_pipeline_deinit(td_void)
         g_face_det_resized_buf = TD_NULL;
     }
 
+    g_face_det_model_input_virt = TD_NULL;
     g_landmark_model_input_virt = TD_NULL;
     g_gaze_model_input_virt = TD_NULL;
+    g_face_det_expect_w = 0;
+    g_face_det_expect_h = 0;
+    g_face_det_expect_size = 0;
+    g_face_det_expect_stride = 0;
+    g_landmark_expect_w = 0;
+    g_landmark_expect_h = 0;
+    g_landmark_expect_size = 0;
+    g_landmark_expect_stride = 0;
+    g_gaze_expect_w = 0;
+    g_gaze_expect_h = 0;
+    g_gaze_expect_size = 0;
+    g_gaze_expect_stride = 0;
 }
 
 /* ----------------------------- 单模型执行辅助 ----------------------------- */
 
-static td_s32 sample_svp_npu_run_model_with_input_file(td_u32 task_idx, const td_char *src_file)
+static td_s32 __attribute__((unused)) sample_svp_npu_run_model_with_input_file(td_u32 task_idx, const td_char *src_file)
 {
     td_s32 ret;
     const td_char *src[SAMPLE_SVP_NPU_INPUT_FILE_NUM_ONE] = {TD_NULL};
@@ -1290,7 +1349,8 @@ static td_void sample_svp_clamp_bbox(sample_svp_face_box *box, td_u32 w, td_u32 
     box->y2 = (box->y2 > (td_float)h) ? (td_float)h : box->y2;
 }
 
-static td_bool sample_svp_select_largest_face(const sample_svp_face_box_list *faces, sample_svp_face_box *best_face)
+static td_bool sample_svp_select_largest_face(const sample_svp_face_box_list *faces,
+    td_u32 frame_w, td_u32 frame_h, sample_svp_face_box *best_face)
 {
     td_u32 i;
     td_float best_value = -1.0f;
@@ -1318,9 +1378,9 @@ static td_bool sample_svp_select_largest_face(const sample_svp_face_box_list *fa
             continue;
         }
 
-        area_ratio = (w * h) / (1920.0f * 1080.0f);
-        dx = fabsf(cx - 960.0f) / 960.0f;
-        dy = fabsf(cy - 540.0f) / 540.0f;
+        area_ratio = (w * h) / ((td_float)frame_w * frame_h);
+        dx = fabsf(cx - frame_w * 0.5f) / (frame_w * 0.5f);
+        dy = fabsf(cy - frame_h * 0.5f) / (frame_h * 0.5f);
         center_score = fmaxf(0.0f, 1.0f - sqrtf(dx * dx + dy * dy));
 
         size_score = 1.0f - fabsf(area_ratio - 0.10f) / 0.10f;
@@ -1476,31 +1536,7 @@ const sample_svp_face_state *sample_svp_npu_get_face_state(td_void)
     return &g_face_state;
 }
 
-static td_s32 sample_svp_npu_reload_runtime(td_void)
-{
-    td_s32 ret;
-
-    sample_svp_trace_err("npu runtime recover: start reload models/runtime\n");
-
-    if (g_pipeline_inited == TD_TRUE) {
-        sample_svp_npu_pipeline_deinit();
-        g_pipeline_inited = TD_FALSE;
-    }
-
-    ret = sample_svp_npu_pipeline_init();
-    if (ret != TD_SUCCESS) {
-        sample_svp_trace_err("npu runtime recover: reload failed\n");
-        return TD_FAILURE;
-    }
-
-    g_pipeline_inited = TD_TRUE;
-    sample_svp_trace_info("npu runtime recover: reload success\n");
-    return TD_SUCCESS;
-}
-
-
-static td_s32 sample_svp_npu_run_frame_pipeline_rgb888_once(const td_u8 *rgb, td_u32 width, td_u32 height,
-    sample_svp_frame_result *result)
+static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *result)
 {
     td_s32 ret;
     sample_svp_face_box_list faces = {0};
@@ -1516,8 +1552,11 @@ static td_s32 sample_svp_npu_run_frame_pipeline_rgb888_once(const td_u8 *rgb, td
     td_double t7;
     td_double t8;
 
+    td_u32 width = g_svp_npu_face_det_frame.video_frame.width;
+    td_u32 height = g_svp_npu_face_det_frame.video_frame.height;
+
     sample_svp_check_exps_return(result == TD_NULL || width == 0 || height == 0,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid args\n");
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid frame pipeline args\n");
 
     (td_void)memset_s(result, sizeof(*result), 0, sizeof(*result));
 
@@ -1531,7 +1570,7 @@ static td_s32 sample_svp_npu_run_frame_pipeline_rgb888_once(const td_u8 *rgb, td
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "run face_detection.om failed\n");
     t1 = sample_svp_now_seconds();
 
-    if (!sample_svp_select_largest_face(&faces, &best_face)) {
+    if (!sample_svp_select_largest_face(&faces, width, height, &best_face)) {
         result->has_face = TD_FALSE;
         sample_svp_npu_clear_face_det_frame();
         sample_svp_pipeline_profile_commit(t1 - t0, t1 - t0,
@@ -1546,7 +1585,7 @@ static td_s32 sample_svp_npu_run_frame_pipeline_rgb888_once(const td_u8 *rgb, td
     result->face = best_face;
 
     /* 2. landmark */
-    ret = sample_svp_prepare_landmark_input_rgb888(rgb, width, height, &best_face, &landmark_crop);
+    ret = sample_svp_prepare_landmark_input_rgb888(TD_NULL, width, height, &best_face, &landmark_crop);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare landmark failed\n");
     t2 = sample_svp_now_seconds();
 
@@ -1566,7 +1605,7 @@ static td_s32 sample_svp_npu_run_frame_pipeline_rgb888_once(const td_u8 *rgb, td
     t4 = sample_svp_now_seconds();
 
     /* 3. gaze */
-    ret = sample_svp_prepare_gaze_input_rgb888(rgb, width, height, &best_face);
+    ret = sample_svp_prepare_gaze_input_rgb888(TD_NULL, width, height, &best_face);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare gaze failed\n");
     t5 = sample_svp_now_seconds();
 
@@ -1596,31 +1635,37 @@ static td_s32 sample_svp_npu_run_frame_pipeline_rgb888_once(const td_u8 *rgb, td
 
 /* ----------------------------- 主入口 ----------------------------- */
 
-td_s32 sample_svp_npu_run_frame_pipeline_rgb888(const td_u8 *rgb, td_u32 width, td_u32 height,
-    sample_svp_frame_result *result)
+td_s32 sample_svp_npu_process_frame(const ot_video_frame_info *frame,
+    const td_u8 *frame_virt, sample_svp_frame_result *result)
 {
     td_s32 ret;
 
-    ret = sample_svp_npu_run_frame_pipeline_rgb888_once(rgb, width, height, result);
+    sample_svp_check_exps_return(frame == TD_NULL || frame_virt == TD_NULL ||
+        result == TD_NULL, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+        "invalid process frame args\n");
+    sample_svp_check_exps_return(g_pipeline_inited != TD_TRUE, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "npu runtime not initialized\n");
+    sample_svp_check_exps_return(
+        frame->video_frame.pixel_format != OT_PIXEL_FORMAT_YVU_SEMIPLANAR_420,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+        "unsupported pixel format %d, expected NV21\n",
+        frame->video_frame.pixel_format);
+
+    ret = sample_svp_npu_set_face_det_frame(frame, frame_virt);
     if (ret == TD_SUCCESS) {
-        return TD_SUCCESS;
+        ret = sample_svp_npu_run_frame_pipeline_once(result);
     }
-
-    sample_svp_trace_err("frame pipeline failed, try reload once, ret=%d\n", ret);
     sample_svp_npu_clear_face_det_frame();
+    return ret;
+}
 
-    ret = sample_svp_npu_reload_runtime();
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "reload runtime failed\n");
-
-    ret = sample_svp_npu_run_frame_pipeline_rgb888_once(rgb, width, height, result);
-    if (ret != TD_SUCCESS) {
-        sample_svp_npu_clear_face_det_frame();
-        sample_svp_trace_err("frame pipeline failed after reload, ret=%d\n", ret);
-        return TD_FAILURE;
-    }
-
-    return TD_SUCCESS;
+td_s32 sample_svp_npu_run_frame_pipeline_rgb888(const td_u8 *rgb, td_u32 width, td_u32 height,
+    sample_svp_frame_result *result)
+{
+    (void)rgb;
+    (void)width;
+    (void)height;
+    return sample_svp_npu_run_frame_pipeline_once(result);
 }
 
 /* 其他废弃函数保持原样 */

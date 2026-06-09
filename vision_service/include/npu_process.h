@@ -18,6 +18,7 @@
 #define NPU_PROCESS_H
 
 #include "ot_type.h"
+#include "ot_common_video.h"
 
 #ifdef __cplusplus
 #if __cplusplus
@@ -88,6 +89,8 @@ td_s32 sample_svp_npu_run_frame_pipeline_rgb888(
 const sample_svp_face_state *sample_svp_npu_get_face_state(td_void);
 td_s32 sample_svp_npu_init_runtime(td_void);
 td_void sample_svp_npu_deinit_runtime(td_void);
+td_s32 sample_svp_npu_process_frame(const ot_video_frame_info *frame,
+    const td_u8 *frame_virt, sample_svp_frame_result *result);
 
 #ifdef __cplusplus
 #if __cplusplus
