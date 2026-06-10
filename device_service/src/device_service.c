@@ -87,6 +87,9 @@ static int pwm_enable(int channel, int enable) {
     return 0;
 }
 
+static int g_last_cold_duty = -1;
+static int g_last_warm_duty = -1;
+
 static int lamp_apply_pwm(int brightness, float color_ratio) {
     int cold_value;
     int warm_value;
@@ -111,11 +114,18 @@ static int lamp_apply_pwm(int brightness, float color_ratio) {
     cold_duty = PWM_PERIOD - cold_value;
     warm_duty = PWM_PERIOD - warm_value;
 
-    if (pwm_write(PWM_COLD_CHANNEL, "duty_cycle", cold_duty) != 0) {
-        return -1;
+    if (cold_duty != g_last_cold_duty) {
+        if (pwm_write(PWM_COLD_CHANNEL, "duty_cycle", cold_duty) != 0) {
+            return -1;
+        }
+        g_last_cold_duty = cold_duty;
     }
-    if (pwm_write(PWM_WARM_CHANNEL, "duty_cycle", warm_duty) != 0) {
-        return -1;
+    
+    if (warm_duty != g_last_warm_duty) {
+        if (pwm_write(PWM_WARM_CHANNEL, "duty_cycle", warm_duty) != 0) {
+            return -1;
+        }
+        g_last_warm_duty = warm_duty;
     }
 
     return 0;
@@ -395,4 +405,25 @@ int device_control_lamp(uint8_t action, uint8_t brightness, uint16_t color_temp)
 
     LOG_WARN("Unknown lamp action: %d", action);
     return -1;
+}
+
+int device_adjust_lamp_brightness(int delta_percent) {
+    pthread_mutex_lock(&g_lamp_mutex);
+    
+    // 当前目标亮度百分比
+    int current_percent = (g_target_scene.brightness * 100) / PWM_PERIOD;
+    int new_percent = current_percent + delta_percent;
+    
+    if (new_percent < 0) new_percent = 0;
+    if (new_percent > 100) new_percent = 100;
+    
+    g_target_scene.brightness = (new_percent * PWM_PERIOD) / 100;
+    // 调整亮度时保持当前色温并切换为静态模式，快速过渡
+    g_target_scene.mode = LAMP_MODE_STATIC;
+    g_target_scene.transition_ms = 800; 
+    
+    LOG_INFO("Lamp brightness adjusted to %d%%", new_percent);
+    
+    pthread_mutex_unlock(&g_lamp_mutex);
+    return 0;
 }

@@ -6,7 +6,7 @@ STOPPED=0
 
 echo "===== 慧学引擎 - 停止所有服务 ====="
 
-for svc in radar_service asr_service fusion_service; do
+for svc in radar_service asr_service device_service fusion_service; do
     pidfile="$PID_DIR/$svc.pid"
     if [ -f "$pidfile" ]; then
         pid=$(cat "$pidfile")

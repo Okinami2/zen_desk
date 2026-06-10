@@ -3,12 +3,9 @@
 
 #include <stdint.h>
 
-// 串口配置宏定义
-// 预留给未来实际硬件开发板上的串口节点 (如 /dev/ttyAMA1 等，请根据实际情况取消注释)
-// #define SERIAL_PORT_NAME "/dev/ttyAMA1"
+#include "board_pins.h"
 
-// 当前测试环境: PC虚拟机外接 QinHeng Electronics USB Serial 设备
-#define SERIAL_PORT_NAME "/dev/ttyUSB0"
+#define SERIAL_PORT_NAME BOARD_VOICE_UART_DEVICE
 #define SERIAL_BAUD_RATE 9600
 
 /**

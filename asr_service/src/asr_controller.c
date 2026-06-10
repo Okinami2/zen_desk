@@ -140,13 +140,13 @@ static void action_wake_up(void) {
     LOG_INFO("[动作] 唤醒系统"); 
     send_asr_command_to_fusion(ASR_CMD_WAKEUP);
 }
-static void action_lamp_on(void) { LOG_INFO("[动作] 打开台灯"); }
-static void action_lamp_off(void) { LOG_INFO("[动作] 关闭台灯"); }
-static void action_lamp_brightness_up(void) { LOG_INFO("[动作] 提高亮度"); }
-static void action_lamp_brightness_down(void) { LOG_INFO("[动作] 降低亮度"); }
-static void action_lamp_toggle_color_temp(void) { LOG_INFO("[动作] 切换色温"); }
-static void action_screen_show_data(void) { LOG_INFO("[动作] 查看学习数据"); }
-static void action_screen_show_home(void) { LOG_INFO("[动作] 回到主页"); }
+static void action_lamp_on(void) { LOG_INFO("[动作] 打开台灯"); send_asr_command_to_fusion(ASR_CMD_LAMP_ON); }
+static void action_lamp_off(void) { LOG_INFO("[动作] 关闭台灯"); send_asr_command_to_fusion(ASR_CMD_LAMP_OFF); }
+static void action_lamp_brightness_up(void) { LOG_INFO("[动作] 提高亮度"); send_asr_command_to_fusion(ASR_CMD_LAMP_BRIGHT_UP); }
+static void action_lamp_brightness_down(void) { LOG_INFO("[动作] 降低亮度"); send_asr_command_to_fusion(ASR_CMD_LAMP_BRIGHT_DOWN); }
+static void action_lamp_toggle_color_temp(void) { LOG_INFO("[动作] 切换色温"); /* 预留 */ }
+static void action_screen_show_data(void) { LOG_INFO("[动作] 查看学习数据"); send_asr_command_to_fusion(ASR_CMD_SCREEN_DATA); }
+static void action_screen_show_home(void) { LOG_INFO("[动作] 回到主页"); send_asr_command_to_fusion(ASR_CMD_SCREEN_HOME); }
 
 // ============================================================================
 // 串口数据分发路由

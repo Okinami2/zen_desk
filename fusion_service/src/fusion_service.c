@@ -166,6 +166,30 @@ static void* tcp_server_thread(void *arg)
                         fs.duration_minutes = 0;
                         LOG_INFO("ASR overridden state to IDLE/PAUSE");
                         break;
+                    case ASR_CMD_LAMP_ON:
+                        LOG_INFO("ASR requested Lamp ON");
+                        device_control_lamp(1, 80, 4000); // 默认80%亮度，4000K
+                        break;
+                    case ASR_CMD_LAMP_OFF:
+                        LOG_INFO("ASR requested Lamp OFF");
+                        device_control_lamp(0, 0, 0);
+                        break;
+                    case ASR_CMD_LAMP_BRIGHT_UP:
+                        LOG_INFO("ASR requested Lamp Brightness UP");
+                        device_adjust_lamp_brightness(20);
+                        break;
+                    case ASR_CMD_LAMP_BRIGHT_DOWN:
+                        LOG_INFO("ASR requested Lamp Brightness DOWN");
+                        device_adjust_lamp_brightness(-20);
+                        break;
+                    case ASR_CMD_SCREEN_DATA:
+                        LOG_INFO("ASR requested UI SHOW DATA");
+                        fusion_send_ui_event(UI_EVENT_SHOW_DATA);
+                        break;
+                    case ASR_CMD_SCREEN_HOME:
+                        LOG_INFO("ASR requested UI SHOW HOME");
+                        fusion_send_ui_event(UI_EVENT_SHOW_HOME);
+                        break;
                 }
                 fs.current_state = g_fusion_service.current_state;
                 pthread_mutex_unlock(&g_fusion_service.mutex);

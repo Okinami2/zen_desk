@@ -45,12 +45,20 @@ sleep 1
 echo "       radar_service started (pid=$(cat $PID_DIR/radar_service.pid))"
 
 # ---- 3. asr_service (连接 fusion) ----
-echo "[3/3] Starting asr_service..."
+echo "[3/4] Starting asr_service..."
 "$BIN_DIR/asr_service" \
     >"$LOG_DIR/asr_service.log" 2>&1 &
 echo $! > "$PID_DIR/asr_service.pid"
 sleep 1
 echo "       asr_service started (pid=$(cat $PID_DIR/asr_service.pid))"
+
+# ---- 4. device_service (EC11旋钮等) ----
+echo "[4/4] Starting device_service..."
+"$BIN_DIR/device_service" \
+    >"$LOG_DIR/device_service.log" 2>&1 &
+echo $! > "$PID_DIR/device_service.pid"
+sleep 1
+echo "       device_service started (pid=$(cat $PID_DIR/device_service.pid))"
 
 echo ""
 echo "===== All services started ====="

@@ -508,6 +508,14 @@ void MainWindow::onUdpReadyRead() {
                 } else if ((msg.state.current_state == STATE_SEATED_IDLE || msg.state.current_state == STATE_ABSENT) && inStudyMode) {
                     stopStudy();
                 }
+            } else if (msg.event_type == UI_EVENT_SHOW_DATA) {
+                if (!inStudyMode) {
+                    showStats();
+                }
+            } else if (msg.event_type == UI_EVENT_SHOW_HOME) {
+                if (!inStudyMode) {
+                    showHome();
+                }
             }
         }
     }

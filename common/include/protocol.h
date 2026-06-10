@@ -63,14 +63,20 @@ typedef struct {
 
 // ASR 语音控制指令
 typedef enum {
-    ASR_CMD_WAKEUP = 0x00,         // 唤醒
-    ASR_CMD_STUDY_START = 0x21,    // 开始专注 (默认)
-    ASR_CMD_STUDY_STOP = 0x22,     // 结束专注
-    ASR_CMD_STUDY_PAUSE = 0x23,    // 离开一下 (暂停)
-    ASR_CMD_STUDY_RESUME = 0x24,   // 我回来了 (继续)
-    ASR_CMD_STUDY_START_25 = 0x25, // 专注25分钟
-    ASR_CMD_STUDY_START_45 = 0x26, // 专注45分钟
-    ASR_CMD_STUDY_START_60 = 0x27  // 专注60分钟
+    ASR_CMD_WAKEUP             = 0x00,
+    ASR_CMD_LAMP_ON            = 0x11,
+    ASR_CMD_LAMP_OFF           = 0x12,
+    ASR_CMD_LAMP_BRIGHT_UP     = 0x13,
+    ASR_CMD_LAMP_BRIGHT_DOWN   = 0x14,
+    ASR_CMD_STUDY_START        = 0x21,
+    ASR_CMD_STUDY_STOP         = 0x22,
+    ASR_CMD_STUDY_PAUSE        = 0x23,
+    ASR_CMD_STUDY_RESUME       = 0x24,
+    ASR_CMD_STUDY_START_25     = 0x25,
+    ASR_CMD_STUDY_START_45     = 0x26,
+    ASR_CMD_STUDY_START_60     = 0x27,
+    ASR_CMD_SCREEN_DATA        = 0x31,
+    ASR_CMD_SCREEN_HOME        = 0x32
 } AsrCommandType;
 
 typedef struct {
@@ -89,7 +95,9 @@ typedef struct {
 typedef enum {
     UI_EVENT_WAKEUP_ASR = 0x01,      // 显示麦克风图标
     UI_EVENT_ASR_DONE = 0x02,        // 隐藏麦克风图标
-    UI_EVENT_STATE_UPDATE = 0x03     // 状态更新(携带FusionState)
+    UI_EVENT_STATE_UPDATE = 0x03,    // 状态更新(携带FusionState)
+    UI_EVENT_SHOW_DATA = 0x04,       // 显示数据页
+    UI_EVENT_SHOW_HOME = 0x05        // 显示主页
 } UiEventType;
 
 typedef struct {
