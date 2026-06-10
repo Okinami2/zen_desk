@@ -44,3 +44,30 @@
 ## 5. 环境妥协与编译配置 (`Makefile` & `sample_comm_isp.c`)
 - **虚拟机缺库屏蔽**：由于当前 Ubuntu 虚拟机的海思 SDK 库文件缺失（缺少 `libsns_os08a20.a` 等驱动），为了能在本地完成 `make` 全局编译验证，注释了 `sample_comm_isp.c` 中相关的报错摄像头调用逻辑。
 - *(注：上板时若物理硬件确实使用了 OS08A20 摄像头，需要将其取消注释，并确保板子的 SDK 环境完整。)*
+
+## 6. 涉及变更的文件清单汇总
+
+为了方便追踪，以下是我们在此次开发过程中**新建**和**修改**的所有核心代码文件：
+
+### 🟢 新增/提取的文件
+这些文件主要是为了把原有的零散串口测试代码打包成稳健的模块化服务：
+- `asr_service/Makefile` (负责编译该模块为海鸥派/本地可执行文件)
+- `asr_service/include/asr_controller.h` (指令解析的头文件)
+- `asr_service/include/serial_setup.h` (串口配置及 `/dev/ttyUSB0` 宏定义)
+- `asr_service/src/asr_controller.c` (处理 0x25, 0x00 等解析及网络 TCP 转发逻辑)
+- `asr_service/src/main.c` (主入口，带防宕机保护与断线重连守护循环)
+- `asr_service/src/serial_setup.c` (打开串口、设置波特率与无阻塞读写)
+- `asr_service/README.md` (本文档自身)
+
+### 🟡 修改的已有文件
+- **顶层构建**：
+  - `Makefile`（在构建链中添加了 `asr_service`）
+  - `Makefile.param`（注释了本地不存在的传感器驱动以防报错）
+- **核心协议与中枢**：
+  - `common/include/protocol.h`（添加了新协议号、`UiEventMessage`结构体及倒计时长字段）
+  - `fusion_service/src/fusion_service.c`（处理指令逻辑、修复雷达覆盖Bug、开启 UDP `8889` 端口并发送广播）
+  - `vo_init/sample_comm_isp.c`（注释本地无用的 ISP 摄像头报错调用以通过编译）
+- **前端客户端界面**：
+  - `qt_client/qt_client.pro`（引入了 `network` 模块支持网络接收）
+  - `qt_client/src/MainWindow.h`（增加了 `QUdpSocket`，麦克风图标控件，以及相应槽函数的声明）
+  - `qt_client/src/MainWindow.cpp`（实现了 UDP 收发解析、呼出/自动关闭弹窗、页面全自动切换及麦克风图标的限时展示逻辑）

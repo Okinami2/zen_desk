@@ -25,6 +25,7 @@ int serial_init(void) {
     }
 
     // 设置波特率
+    // 既然用户提到设置成了 9600 波特率，这里修改为 B9600
     cfsetispeed(&options, B9600);
     cfsetospeed(&options, B9600);
 
