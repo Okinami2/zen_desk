@@ -195,7 +195,7 @@ static void* tcp_server_thread(void *arg)
                 pthread_mutex_unlock(&g_fusion_service.mutex);
                 
                 // 只有状态改变时才向外广播状态，触发后续联动（UI/灯光）
-                if (cmd->command_id != ASR_CMD_WAKEUP) {
+                if (cmd->command_id >= ASR_CMD_STUDY_START && cmd->command_id <= ASR_CMD_STUDY_START_60) {
                     fusion_send_state(&fs);
                     device_handle_fusion_state(&fs);
                 }
