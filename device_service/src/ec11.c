@@ -11,6 +11,7 @@
 #include <linux/input.h>
 #include <linux/uinput.h>
 
+#include "board_pins.h"
 #include "ec11.h"
 #include "logger.h"
 
@@ -19,7 +20,17 @@
 // =========================================================
 #define GPIO_EC11_A    "71"  // [修改此值] 旋钮 A 相对应的 GPIO 编号
 #define GPIO_EC11_B    "72"  // [修改此值] 旋钮 B 相对应的 GPIO 编号
+#undef GPIO_EC11_A
+#undef GPIO_EC11_B
+#undef GPIO_EC11_SW
+
+#define GPIO_EC11_A BOARD_GPIO_EC11_A
+#define GPIO_EC11_B BOARD_GPIO_EC11_B
+
 #define GPIO_EC11_SW   "70"  // [修改此值] 旋钮 按键(SW) 对应的 GPIO 编号
+
+#undef GPIO_EC11_SW
+#define GPIO_EC11_SW BOARD_GPIO_EC11_SW
 
 #define LONG_PRESS_MS  600    // 长按判定阈值 (毫秒)
 #define POLL_INTERVAL_US 1000 // 轮询间隔 (1毫秒, 用于纯软件消抖)

@@ -1,8 +1,11 @@
+#include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <sys/ioctl.h>
 #include <linux/fb.h>
 
@@ -16,6 +19,7 @@
 #include "gfbg.h"
 
 #define HDMI_FB_DEV "/dev/fb0"
+#define DISPLAY_LOCK_PATH "/tmp/pegasus-mpp.lock"
 #define FB_WIDTH    1280
 #define FB_HEIGHT   720
 #define FB_BPP      16
@@ -53,6 +57,46 @@ static app_fb_ctx g_fb = {
     .canvas_virt_addr = NULL,
     .canvas_size = 0,
 };
+
+static volatile sig_atomic_t g_stop_requested = 0;
+
+static void stop_signal_handler(int signo)
+{
+    (void)signo;
+    g_stop_requested = 1;
+}
+
+static int install_signal_handlers(void)
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = stop_signal_handler;
+    sigemptyset(&action.sa_mask);
+    if (sigaction(SIGINT, &action, NULL) != 0 ||
+        sigaction(SIGTERM, &action, NULL) != 0) {
+        perror("sigaction");
+        return -1;
+    }
+    return 0;
+}
+
+static int acquire_display_lock(void)
+{
+    int fd = open(DISPLAY_LOCK_PATH, O_CREAT | O_RDWR, 0666);
+
+    if (fd < 0) {
+        perror("open display lock");
+        return -1;
+    }
+    if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        fprintf(stderr,
+            "MPP resources are already owned by vision_service or another UI stack\n");
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
 
 static td_u32 get_vo_vb_blk_size(td_u32 width, td_u32 height)
 {
@@ -367,12 +411,31 @@ static int show_test_pattern(app_fb_ctx *ctx)
     return 0;
 }
 
+static const char *parse_ready_file(int argc, char *argv[])
+{
+    if (argc == 1) {
+        return NULL;
+    }
+    if (argc == 3 && strcmp(argv[1], "--ready-file") == 0) {
+        return argv[2];
+    }
+    fprintf(stderr, "Usage: %s [--ready-file PATH]\n", argv[0]);
+    return (const char *)-1;
+}
+
 int main(int argc, char *argv[])
 {
     int ret = 0;
+    int display_lock_fd;
+    const char *ready_file = parse_ready_file(argc, argv);
 
-    (void)argc;
-    (void)argv;
+    if (ready_file == (const char *)-1 || install_signal_handlers() != 0) {
+        return 2;
+    }
+    display_lock_fd = acquire_display_lock();
+    if (display_lock_fd < 0) {
+        return 1;
+    }
 
 #ifdef CONFIG_USER_SPACE
     SDK_init();
@@ -398,13 +461,30 @@ int main(int argc, char *argv[])
         goto close_fb;
     }
 
-    printf("\nVO + GFBG init done.\n");
+    if (ready_file != NULL) {
+        FILE *file = fopen(ready_file, "w");
+        if (file == NULL) {
+            perror("create ready file");
+            ret = -1;
+            goto close_fb;
+        }
+        fprintf(file, "%ld\n", (long)getpid());
+        fclose(file);
+    }
+
+    printf("\nVO + GFBG init done and display ownership locked.\n");
     printf("Qt can now run with:\n");
     printf("  export QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0\n");
-    printf("\nPress Enter to exit...\n");
-    getchar();
+    printf("\nWaiting for SIGINT/SIGTERM...\n");
+    fflush(stdout);
+    while (!g_stop_requested) {
+        pause();
+    }
 
 close_fb:
+    if (ready_file != NULL) {
+        unlink(ready_file);
+    }
     close_fb0(&g_fb);
 
 stop_vo:
@@ -417,5 +497,8 @@ exit_sdk:
 #ifdef CONFIG_USER_SPACE
     SDK_exit();
 #endif
+    (void)flock(display_lock_fd, LOCK_UN);
+    close(display_lock_fd);
+
     return ret;
 }

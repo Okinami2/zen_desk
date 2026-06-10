@@ -276,33 +276,6 @@ td_s32 sample_common_svp_npu_load_model(const td_char *model_path, td_u32 model_
     g_svp_npu_model[model_index].is_load_flag = TD_TRUE;
     sample_svp_trace_info("load model %s success!\n", model_path);
 
-    size_t input_size;
-    size_t stride;
-    svp_acl_mdl_io_dims dims;
-    svp_acl_data_type type;
-        
-    svp_acl_mdl_get_input_dims(
-        g_svp_npu_model[model_index].model_desc, 0, &dims);
-    
-    type = svp_acl_mdl_get_input_data_type(
-        g_svp_npu_model[model_index].model_desc, 0);
-
-    input_size = svp_acl_mdl_get_input_size_by_index(
-        g_svp_npu_model[model_index].model_desc, 0);
-    
-    stride = svp_acl_mdl_get_input_default_stride(
-        g_svp_npu_model[model_index].model_desc, 0);
-    
-    printf("dims: ");
-    for (int i = 0; i < dims.dim_count; i++) {
-        printf("%ld ", dims.dims[i]);
-    }
-    printf("\n");
-    
-    printf("data_type=%d\n", type);
-    printf("input_size=%lu\n", input_size);
-    printf("stride=%lu\n", stride);
-
     return TD_SUCCESS;
 end_1:
     (td_void)svp_acl_mdl_destroy_desc(g_svp_npu_model[model_index].model_desc);

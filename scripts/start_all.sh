@@ -21,6 +21,13 @@ fi
 
 echo "===== 慧学引擎 - 启动所有服务 ====="
 
+echo "[0/2] Applying board pin mapping..."
+if ! "$BIN_DIR/pinmux_init" --apply >"$LOG_DIR/pinmux_init.log" 2>&1; then
+    echo "       pinmux_init failed; see $LOG_DIR/pinmux_init.log" >&2
+    cat "$LOG_DIR/pinmux_init.log" >&2
+    exit 1
+fi
+
 # ---- 1. fusion_service (必须先启动, 监听 TCP 8888) ----
 echo "[1/2] Starting fusion_service..."
 "$BIN_DIR/fusion_service" \

@@ -1,10 +1,9 @@
 THIS_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 TOP_DIR  := $(abspath $(THIS_DIR)/..)
 
-PARAM_FILE ?= $(TOP_DIR)/Makefile.param
+PARAM_FILE ?= ../../Makefile.param
 include $(PARAM_FILE)
-
-include $(TOP_DIR)/smp_linux.mak
+include $(TOP_DIR)/Makefile.param
 
 TARGET := vision_service
 
@@ -23,6 +22,7 @@ OBJS := $(SMP_SRCS:%.c=%.o)
 
 CFLAGS += -I$(REL_INC)/svp_npu
 CFLAGS += -fstack-protector-strong
+CFLAGS += -O2
 CFLAGS += -I$(THIS_DIR)/include
 CFLAGS += -I$(THIS_DIR)/common
 CFLAGS += -I$(TOP_DIR)/common/include

@@ -9,24 +9,6 @@
 #include "vision_media.h"
 #include "sdk_module_init.h"
 
-#define UVC_LITE_MAX_BUFFERS 8
-
-typedef struct {
-    void *start;
-    td_u32 length;
-} uvc_lite_buffer;
-
-typedef struct {
-    td_s32 fd;
-    td_u32 width;
-    td_u32 height;
-    td_u32 stride;
-    td_u32 pixelformat;
-    td_u32 buffer_count;
-    uvc_lite_buffer buffers[UVC_LITE_MAX_BUFFERS];
-} uvc_lite_ctx;
-
-
 static volatile td_bool g_uvc_exit = TD_FALSE;
 
 static td_void uvc_lite_exit_signal_handler(td_s32 signal __attribute__((__unused__)))
@@ -244,6 +226,7 @@ static td_s32 uvc_lite_loop(uvc_lite_ctx *ctx, const td_char *type_name)
         tv.tv_usec = 0;
 
         if (select(ctx->fd + 1, &fds, TD_NULL, TD_NULL, &tv) <= 0) {
+            usleep(10000);
             continue;
         }
 
@@ -256,6 +239,7 @@ static td_s32 uvc_lite_loop(uvc_lite_ctx *ctx, const td_char *type_name)
         buf.memory = V4L2_MEMORY_MMAP;
 
         if (uvc_lite_xioctl(ctx->fd, VIDIOC_DQBUF, &buf) < 0) {
+            usleep(10000);
             continue;
         }
 
@@ -336,9 +320,10 @@ td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
 }
 
 td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
-    const td_char *dev_name, const td_char *type_name, td_u32 width, td_u32 height)
+    const td_char *dev_name, const td_char *type_name, td_u32 width, td_u32 height,
+    td_bool preview_enable)
 {
-    sample_uvc_media_set_preview_enable(TD_FALSE);
+    sample_uvc_media_set_preview_enable(preview_enable);
     td_s32 ret;
     errno_t sret;
 

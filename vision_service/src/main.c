@@ -1,288 +1,180 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <errno.h>
+#include <getopt.h>
 #include <stdint.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <errno.h>
-#include <math.h>
 
-#include "vision_uvc.h"
-#include "vision_media.h"
-#include "ot_common_sys.h"
-#include "npu_process.h"
-#include "sdk_module_init.h"
+#include "vision_service.h"
 
-/* npu_process.h may not yet declare this new helper */
-extern td_s32 sample_svp_npu_set_face_det_frame(const ot_video_frame_info *frame, const td_u8 *frame_virt);
+#define VISION_UVC_DEV_PATH       "/dev/video0"
+#define VISION_UVC_PIX_FMT        "MJPEG"
+#define VISION_UVC_WIDTH          1280
+#define VISION_UVC_HEIGHT         720
+#define VISION_UVC_TIMEOUT_MS     2000
+#define VISION_TELEMETRY_PORT     9100
+#define VISION_SNAPSHOT_EVERY     30
+#define VISION_SNAPSHOT_LIMIT     100
 
-#define UVC_DEV_PATH            "/dev/video0"
-#define UVC_PIX_FMT             "MJPEG"
-#define UVC_WIDTH               1280
-#define UVC_HEIGHT              720
-#define UVC_TIMEOUT_MS          2000
-#define DATA_DIR                "./data"
-#define DATA_INPUT_DIR          "./data/input"
-
-static volatile int g_exit = 0;
-
-static void sig_handler(int sig)
+static void vision_signal_handler(int signo)
 {
-    (void)sig;
-    g_exit = 1;
-    sample_svp_npu_acl_handle_sig();
+    (void)signo;
+    vision_service_request_stop();
 }
 
-static int ensure_dir(const char *dir_path)
+static td_s32 vision_install_signal_handlers(td_void)
 {
-    struct stat st;
+    struct sigaction action;
 
-    if (dir_path == NULL || dir_path[0] == '\0') {
-        return -1;
+    (void)memset(&action, 0, sizeof(action));
+    action.sa_handler = vision_signal_handler;
+    (void)sigemptyset(&action.sa_mask);
+
+    if (sigaction(SIGINT, &action, TD_NULL) != 0 ||
+        sigaction(SIGTERM, &action, TD_NULL) != 0) {
+        perror("sigaction");
+        return TD_FAILURE;
     }
-
-    if (stat(dir_path, &st) == 0) {
-        if (S_ISDIR(st.st_mode)) {
-            return 0;
-        }
-        fprintf(stderr, "path exists but is not a directory: %s\n", dir_path);
-        return -1;
-    }
-
-    if (mkdir(dir_path, 0755) != 0) {
-        perror("mkdir failed");
-        return -1;
-    }
-
-    return 0;
+    return TD_SUCCESS;
 }
 
-static double now_monotonic_seconds(void)
+static td_bool vision_parse_u32(const td_char *text, td_u32 *value)
 {
-    struct timespec ts;
-    (void)clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+    char *end = TD_NULL;
+    unsigned long parsed;
+
+    errno = 0;
+    parsed = strtoul(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || parsed > UINT32_MAX) {
+        return TD_FALSE;
+    }
+    *value = (td_u32)parsed;
+    return TD_TRUE;
 }
 
-int main(void)
+static td_bool vision_parse_endpoint(td_char *endpoint, td_char **host, td_u16 *port)
 {
-    sample_uvc_capture_ctx cap;
-    ot_video_frame_info frame;
-    td_s32 ret;
-    td_u64 fps_frames = 0;
-    td_u64 fps_ok_frames = 0;
-    td_u64 fps_face_frames = 0;
-    double fps_window_start = 0.0;
-    double t_sum_read = 0.0;
-    double t_sum_mmap = 0.0;
-    double t_sum_convert = 0.0;
-    double t_sum_set_frame = 0.0;
-    double t_sum_pipeline = 0.0;
-    double t_sum_release = 0.0;
-    double t_sum_loop = 0.0;
-    double t_max_read = 0.0;
-    double t_max_convert = 0.0;
-    double t_max_pipeline = 0.0;
-    double t_max_loop = 0.0;
+    td_char *separator = strrchr(endpoint, ':');
+    td_u32 parsed_port;
 
-    signal(SIGINT, sig_handler);
-    signal(SIGTERM, sig_handler);
-
-    if (ensure_dir(DATA_DIR) != 0) {
-        return -1;
+    if (separator == TD_NULL || separator == endpoint || separator[1] == '\0') {
+        return TD_FALSE;
     }
-    if (ensure_dir(DATA_INPUT_DIR) != 0) {
-        return -1;
+    *separator = '\0';
+    if (vision_parse_u32(separator + 1, &parsed_port) != TD_TRUE ||
+        parsed_port == 0 || parsed_port > UINT16_MAX) {
+        return TD_FALSE;
     }
+    *host = endpoint;
+    *port = (td_u16)parsed_port;
+    return TD_TRUE;
+}
 
-    SDK_init();
+static void vision_print_usage(const td_char *program)
+{
+    printf("Usage: %s [options]\n"
+        "  --device PATH             UVC device (default: %s)\n"
+        "  --format NAME             MJPEG/H264/H265/YUYV (default: %s)\n"
+        "  --width N                 capture width (default: %u)\n"
+        "  --height N                capture height (default: %u)\n"
+        "  --hdmi-preview            exclusive VPSS-to-HDMI preview\n"
+        "  --telemetry IP:PORT       send per-frame JSON over UDP\n"
+        "  --snapshot-dir PATH       save NV21, annotated PPM and JSON\n"
+        "  --snapshot-every N        save every Nth frame (default: %u)\n"
+        "  --snapshot-limit N        maximum saved frames, 0=unlimited (default: %u)\n",
+        program, VISION_UVC_DEV_PATH, VISION_UVC_PIX_FMT,
+        VISION_UVC_WIDTH, VISION_UVC_HEIGHT,
+        VISION_SNAPSHOT_EVERY, VISION_SNAPSHOT_LIMIT);
+}
 
-    ret = sample_uvc_capture_open(&cap, UVC_DEV_PATH, UVC_PIX_FMT, UVC_WIDTH, UVC_HEIGHT);
-    if (ret != TD_SUCCESS) {
-        printf("sample_uvc_capture_open failed\n");
-        SDK_exit();
-        return -1;
-    }
+int main(int argc, char *argv[])
+{
+    vision_service_config config = {
+        .device_path = VISION_UVC_DEV_PATH,
+        .pixel_format = VISION_UVC_PIX_FMT,
+        .width = VISION_UVC_WIDTH,
+        .height = VISION_UVC_HEIGHT,
+        .capture_timeout_ms = VISION_UVC_TIMEOUT_MS,
+        .hdmi_preview = TD_FALSE,
+        .telemetry_host = TD_NULL,
+        .telemetry_port = VISION_TELEMETRY_PORT,
+        .snapshot_dir = TD_NULL,
+        .snapshot_every = VISION_SNAPSHOT_EVERY,
+        .snapshot_limit = VISION_SNAPSHOT_LIMIT,
+    };
+    static const struct option options[] = {
+        {"device", required_argument, TD_NULL, 'd'},
+        {"format", required_argument, TD_NULL, 'f'},
+        {"width", required_argument, TD_NULL, 'w'},
+        {"height", required_argument, TD_NULL, 'h'},
+        {"hdmi-preview", no_argument, TD_NULL, 'p'},
+        {"telemetry", required_argument, TD_NULL, 't'},
+        {"snapshot-dir", required_argument, TD_NULL, 's'},
+        {"snapshot-every", required_argument, TD_NULL, 'e'},
+        {"snapshot-limit", required_argument, TD_NULL, 'l'},
+        {"help", no_argument, TD_NULL, '?'},
+        {TD_NULL, 0, TD_NULL, 0}
+    };
+    td_char *telemetry_endpoint = TD_NULL;
+    td_s32 option;
 
-    ret = sample_svp_npu_init_runtime();
-    if (ret != TD_SUCCESS) {
-        printf("sample_svp_npu_init_runtime failed\n");
-        sample_uvc_capture_close(&cap);
-        SDK_exit();
-        return -1;
-    }
-
-    fps_window_start = now_monotonic_seconds();
-
-    while (!g_exit) {
-        int width;
-        int height;
-        int stride0;
-        int stride1;
-        size_t y_size;
-        size_t frame_size;
-        uint8_t *base = NULL;
-        sample_svp_frame_result infer_result;
-        double t0;
-        double t1;
-        double t2;
-        double t3;
-        double t4;
-        double t5;
-        double t6;
-        double v;
-
-        t0 = now_monotonic_seconds();
-
-        ret = sample_uvc_capture_read_frame(&cap, &frame, UVC_TIMEOUT_MS);
-        t1 = now_monotonic_seconds();
-        if (ret != TD_SUCCESS) {
-            printf("sample_uvc_capture_read_frame failed\n");
-            continue;
-        }
-
-        width = (int)frame.video_frame.width;
-        height = (int)frame.video_frame.height;
-        stride0 = (int)frame.video_frame.stride[0];
-        stride1 = (int)frame.video_frame.stride[1];
-        y_size = (size_t)stride0 * (size_t)height;
-        frame_size = y_size + ((size_t)stride1 * (size_t)height / 2);
-
-        if (width <= 0 || height <= 0 || stride0 <= 0 || stride1 <= 0 ||
-            frame.video_frame.phys_addr[0] == 0) {
-            printf("invalid frame meta, skip frame\n");
-            (td_void)sample_uvc_capture_release_frame(&frame);
-            continue;
-        }
-
-        base = (uint8_t *)ss_mpi_sys_mmap(frame.video_frame.phys_addr[0], frame_size);
-        t2 = now_monotonic_seconds();
-        if (base == NULL) {
-            printf("ss_mpi_sys_mmap failed\n");
-            (td_void)sample_uvc_capture_release_frame(&frame);
-            continue;
-        }
-
-        t3 = now_monotonic_seconds();
-
-        ret = sample_svp_npu_set_face_det_frame(&frame, base);
-        t4 = now_monotonic_seconds();
-        if (ret != TD_SUCCESS) {
-            printf("sample_svp_npu_set_face_det_frame failed\n");
-            ss_mpi_sys_munmap(base, frame_size);
-            (td_void)sample_uvc_capture_release_frame(&frame);
-            (void)memset(&frame, 0, sizeof(frame));
-            continue;
-        }
-
-        (void)memset(&infer_result, 0, sizeof(infer_result));
-        ret = sample_svp_npu_run_frame_pipeline_rgb888(TD_NULL, (td_u32)width, (td_u32)height, &infer_result);
-        t5 = now_monotonic_seconds();
-        fps_frames++;
-        if (ret != TD_SUCCESS) {
-            printf("sample_svp_npu_run_frame_pipeline_rgb888 failed\n");
-        } else {
-            fps_ok_frames++;
-            if (infer_result.has_face) {
-                fps_face_frames++;
-            }
-        }
-
-        {
-            double now = now_monotonic_seconds();
-            double dt = now - fps_window_start;
-            if (dt >= 1.0) {
-                double fps_total = (double)fps_frames / dt;
-                double fps_ok = (double)fps_ok_frames / dt;
-                double face_ratio = (fps_ok_frames == 0) ? 0.0 : ((double)fps_face_frames * 100.0 / (double)fps_ok_frames);
-                printf("[PERF] fps_total=%.2f fps_ok=%.2f face_ratio=%.1f%% window=%.2fs\n",
-                    fps_total, fps_ok, face_ratio, dt);
-                fps_window_start = now;
-                fps_frames = 0;
-                fps_ok_frames = 0;
-                fps_face_frames = 0;
-            }
-        }
-
-        ss_mpi_sys_munmap(base, frame_size);
-
-        ret = sample_uvc_capture_release_frame(&frame);
-        t6 = now_monotonic_seconds();
-        if (ret != TD_SUCCESS) {
-            printf("sample_uvc_capture_release_frame failed\n");
-            break;
-        }
-
-        v = t1 - t0;
-        t_sum_read += v;
-        if (v > t_max_read) {
-            t_max_read = v;
-        }
-
-        t_sum_mmap += (t2 - t1);
-
-        v = t3 - t2;
-        t_sum_convert += v;
-        if (v > t_max_convert) {
-            t_max_convert = v;
-        }
-
-        t_sum_set_frame += (t4 - t3);
-
-        v = t5 - t4;
-        t_sum_pipeline += v;
-        if (v > t_max_pipeline) {
-            t_max_pipeline = v;
-        }
-
-        t_sum_release += (t6 - t5);
-
-        v = t6 - t0;
-        t_sum_loop += v;
-        if (v > t_max_loop) {
-            t_max_loop = v;
-        }
-
-        (void)memset(&frame, 0, sizeof(frame));
-
-        {
-            double now = now_monotonic_seconds();
-            double dt = now - fps_window_start;
-            if (dt >= 1.0 && fps_frames > 0) {
-                double inv_n = 1.0 / (double)fps_frames;
-                printf("[PERF-DETAIL] avg_ms read=%.2f mmap=%.2f convert=%.2f set=%.2f pipeline=%.2f release=%.2f loop=%.2f | max_ms read=%.2f convert=%.2f pipeline=%.2f loop=%.2f\n",
-                    t_sum_read * 1000.0 * inv_n,
-                    t_sum_mmap * 1000.0 * inv_n,
-                    t_sum_convert * 1000.0 * inv_n,
-                    t_sum_set_frame * 1000.0 * inv_n,
-                    t_sum_pipeline * 1000.0 * inv_n,
-                    t_sum_release * 1000.0 * inv_n,
-                    t_sum_loop * 1000.0 * inv_n,
-                    t_max_read * 1000.0,
-                    t_max_convert * 1000.0,
-                    t_max_pipeline * 1000.0,
-                    t_max_loop * 1000.0);
-
-                t_sum_read = 0.0;
-                t_sum_mmap = 0.0;
-                t_sum_convert = 0.0;
-                t_sum_set_frame = 0.0;
-                t_sum_pipeline = 0.0;
-                t_sum_release = 0.0;
-                t_sum_loop = 0.0;
-                t_max_read = 0.0;
-                t_max_convert = 0.0;
-                t_max_pipeline = 0.0;
-                t_max_loop = 0.0;
-            }
+    while ((option = getopt_long(argc, argv, "d:f:w:h:pt:s:e:l:?", options, TD_NULL)) != -1) {
+        switch (option) {
+            case 'd':
+                config.device_path = optarg;
+                break;
+            case 'f':
+                config.pixel_format = optarg;
+                break;
+            case 'w':
+                if (vision_parse_u32(optarg, &config.width) != TD_TRUE || config.width == 0) {
+                    fprintf(stderr, "invalid width: %s\n", optarg);
+                    return 2;
+                }
+                break;
+            case 'h':
+                if (vision_parse_u32(optarg, &config.height) != TD_TRUE || config.height == 0) {
+                    fprintf(stderr, "invalid height: %s\n", optarg);
+                    return 2;
+                }
+                break;
+            case 'p':
+                config.hdmi_preview = TD_TRUE;
+                break;
+            case 't':
+                telemetry_endpoint = optarg;
+                if (vision_parse_endpoint(telemetry_endpoint,
+                    (td_char **)&config.telemetry_host, &config.telemetry_port) != TD_TRUE) {
+                    fprintf(stderr, "invalid telemetry endpoint: %s\n", optarg);
+                    return 2;
+                }
+                break;
+            case 's':
+                config.snapshot_dir = optarg;
+                break;
+            case 'e':
+                if (vision_parse_u32(optarg, &config.snapshot_every) != TD_TRUE ||
+                    config.snapshot_every == 0) {
+                    fprintf(stderr, "invalid snapshot interval: %s\n", optarg);
+                    return 2;
+                }
+                break;
+            case 'l':
+                if (vision_parse_u32(optarg, &config.snapshot_limit) != TD_TRUE) {
+                    fprintf(stderr, "invalid snapshot limit: %s\n", optarg);
+                    return 2;
+                }
+                break;
+            default:
+                vision_print_usage(argv[0]);
+                return (option == '?') ? 0 : 2;
         }
     }
 
-    sample_svp_npu_deinit_runtime();
-    sample_uvc_capture_close(&cap);
-    SDK_exit();
-    printf("exit main\n");
-    return 0;
+    if (vision_install_signal_handlers() != TD_SUCCESS) {
+        return 1;
+    }
+
+    return (vision_service_run(&config) == TD_SUCCESS) ? 0 : 1;
 }
