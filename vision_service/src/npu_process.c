@@ -67,6 +67,12 @@ typedef struct {
     sample_svp_face_box boxes[SAMPLE_SVP_NPU_MAX_FACE_NUM];
 } sample_svp_face_box_list;
 
+typedef struct {
+    td_float scale;
+    td_float translate_x;
+    td_float translate_y;
+} sample_svp_landmark_affine;
+
 #define SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX   30
 #define SAMPLE_SVP_FACE_DET_SCORE_TH          0.50f
 #define SAMPLE_SVP_FACE_DET_NMS_TH            0.40f
@@ -910,26 +916,6 @@ static td_void sample_svp_expand_square_bbox(sample_svp_face_box *box, td_u32 wi
     box->y2 = sample_svp_min_f32((td_float)height, box->y2);
 }
 
-static td_void sample_svp_make_square_bbox_unclipped(sample_svp_face_box *box, td_float scale)
-{
-    td_float cx;
-    td_float cy;
-    td_float side;
-
-    if (box == TD_NULL) {
-        return;
-    }
-
-    cx = (box->x1 + box->x2) * 0.5f;
-    cy = (box->y1 + box->y2) * 0.5f;
-    side = sample_svp_max_f32(box->x2 - box->x1, box->y2 - box->y1) * scale;
-    side = sample_svp_max_f32(side, 2.0f);
-    box->x1 = cx - side * 0.5f;
-    box->y1 = cy - side * 0.5f;
-    box->x2 = cx + side * 0.5f;
-    box->y2 = cy + side * 0.5f;
-}
-
 static td_void sample_svp_nv21_get_rgb_or_black(const td_u8 *src_y, const td_u8 *src_vu,
     td_u32 src_w, td_u32 src_h, td_u32 stride_y, td_u32 stride_uv,
     td_s32 x, td_s32 y, td_float *r, td_float *g, td_float *b)
@@ -1476,20 +1462,21 @@ static td_s32 sample_svp_npu_parse_landmark_output(const sample_svp_npu_task_inf
 }
 
 static td_void sample_svp_landmark_map_to_full_image(sample_svp_landmark106_result *lm,
-    const sample_svp_face_box *face)
+    const sample_svp_landmark_affine *transform)
 {
     td_u32 i;
-    td_float face_w, face_h;
 
-    if (lm == TD_NULL || face == TD_NULL || lm->point_num != SAMPLE_SVP_LANDMARK_NUM) return;
-
-    face_w = face->x2 - face->x1;
-    face_h = face->y2 - face->y1;
-    if (face_w <= 1e-6f || face_h <= 1e-6f) return;
+    if (lm == TD_NULL || transform == TD_NULL ||
+        lm->point_num != SAMPLE_SVP_LANDMARK_NUM ||
+        transform->scale <= 1e-6f) {
+        return;
+    }
 
     for (i = 0; i < lm->point_num; i++) {
-        lm->points[i][0] = face->x1 + (lm->points[i][0] / (td_float)SAMPLE_SVP_LANDMARK_IN_W) * face_w;
-        lm->points[i][1] = face->y1 + (lm->points[i][1] / (td_float)SAMPLE_SVP_LANDMARK_IN_H) * face_h;
+        lm->points[i][0] =
+            (lm->points[i][0] - transform->translate_x) / transform->scale;
+        lm->points[i][1] =
+            (lm->points[i][1] - transform->translate_y) / transform->scale;
     }
 }
 
@@ -1770,30 +1757,102 @@ static td_void sample_svp_update_face_state(const sample_svp_landmark106_result 
 }
 
 static td_s32 sample_svp_prepare_landmark_input_rgb888(const td_u8 *rgb, td_u32 width, td_u32 height,
-    const sample_svp_face_box *face, sample_svp_face_box *used_crop)
+    const sample_svp_face_box *face, sample_svp_landmark_affine *transform)
 {
-    sample_svp_face_box crop_box;
+    const td_u8 *src_nv21 = g_svp_npu_face_det_frame_virt;
+    const td_u8 *src_y;
+    const td_u8 *src_vu;
+    td_float *dst;
+    td_float face_w;
+    td_float face_h;
+    td_float center_x;
+    td_float center_y;
+    td_float crop_side;
+    td_u32 src_w;
+    td_u32 src_h;
+    td_u32 src_stride_y;
+    td_u32 src_stride_uv;
+    td_u32 dst_stride_f;
+    td_u32 x;
+    td_u32 y;
+    td_u32 channel;
     svp_acl_error acl_ret;
 
     (void)rgb;
     (void)width;
     (void)height;
 
-    sample_svp_check_exps_return(face == TD_NULL, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "landmark face is null\n");
-    sample_svp_check_exps_return(g_landmark_model_input_virt == TD_NULL || g_landmark_expect_w == 0 || g_landmark_expect_h == 0,
+    sample_svp_check_exps_return(face == TD_NULL || transform == TD_NULL ||
+        src_nv21 == TD_NULL, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "landmark input args are invalid\n");
+    sample_svp_check_exps_return(g_landmark_model_input_virt == TD_NULL ||
+        g_landmark_expect_w == 0 || g_landmark_expect_h == 0 ||
+        g_landmark_expect_stride % sizeof(td_float) != 0,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "landmark input buffer is invalid\n");
 
-    crop_box = *face;
-    sample_svp_make_square_bbox_unclipped(&crop_box, SAMPLE_SVP_LANDMARK_CROP_SCALE);
-    if (used_crop != TD_NULL) {
-        *used_crop = crop_box;
+    src_w = g_svp_npu_face_det_frame.video_frame.width;
+    src_h = g_svp_npu_face_det_frame.video_frame.height;
+    src_stride_y = g_svp_npu_face_det_frame.video_frame.stride[0];
+    src_stride_uv = g_svp_npu_face_det_frame.video_frame.stride[1];
+    sample_svp_check_exps_return(src_w == 0 || src_h == 0 ||
+        src_stride_y == 0 || src_stride_uv == 0,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "landmark source frame is invalid\n");
+
+    dst_stride_f = g_landmark_expect_stride / sizeof(td_float);
+    sample_svp_check_exps_return(dst_stride_f < g_landmark_expect_w ||
+        g_landmark_expect_size <
+        3 * g_landmark_expect_h * g_landmark_expect_stride,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+        "landmark input layout is invalid\n");
+
+    face_w = face->x2 - face->x1;
+    face_h = face->y2 - face->y1;
+    sample_svp_check_exps_return(face_w <= 1.0f || face_h <= 1.0f,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "landmark face bbox is invalid\n");
+
+    center_x = (face->x1 + face->x2) * 0.5f;
+    center_y = (face->y1 + face->y2) * 0.5f;
+    crop_side = sample_svp_max_f32(face_w, face_h) *
+        SAMPLE_SVP_LANDMARK_CROP_SCALE;
+    transform->scale = (td_float)g_landmark_expect_w / crop_side;
+    transform->translate_x =
+        (td_float)g_landmark_expect_w * 0.5f - center_x * transform->scale;
+    transform->translate_y =
+        (td_float)g_landmark_expect_h * 0.5f - center_y * transform->scale;
+
+    src_y = src_nv21;
+    src_vu = src_nv21 + (size_t)src_stride_y * src_h;
+    dst = (td_float *)g_landmark_model_input_virt;
+
+    for (channel = 0; channel < 3; channel++) {
+        td_float *channel_dst =
+            dst + (size_t)channel * g_landmark_expect_h * dst_stride_f;
+        for (y = 0; y < g_landmark_expect_h; y++) {
+            for (x = 0; x < dst_stride_f; x++) {
+                channel_dst[(size_t)y * dst_stride_f + x] = 0.0f;
+            }
+        }
     }
 
-    sample_svp_check_exps_return(sample_svp_crop_resize_rgb888_to_fp32_nchw(TD_NULL, 0, 0, &crop_box,
-        g_landmark_expect_w, g_landmark_expect_h, g_landmark_model_input_virt,
-        g_landmark_expect_size, 1.0f, TD_TRUE) != TD_SUCCESS,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare landmark input from nv21 failed\n");
+    for (y = 0; y < g_landmark_expect_h; y++) {
+        td_float src_y_pos =
+            ((td_float)y - transform->translate_y) / transform->scale;
+        for (x = 0; x < g_landmark_expect_w; x++) {
+            td_float src_x =
+                ((td_float)x - transform->translate_x) / transform->scale;
+            td_float r;
+            td_float g;
+            td_float b;
+            size_t dst_idx = (size_t)y * dst_stride_f + x;
+
+            sample_svp_nv21_sample_rgb_bilinear(src_y, src_vu,
+                src_w, src_h, src_stride_y, src_stride_uv,
+                src_x, src_y_pos, &r, &g, &b);
+            dst[dst_idx] = r;
+            dst[(size_t)g_landmark_expect_h * dst_stride_f + dst_idx] = g;
+            dst[(size_t)2 * g_landmark_expect_h * dst_stride_f + dst_idx] = b;
+        }
+    }
 
     acl_ret = svp_acl_rt_mem_flush(g_landmark_model_input_virt, g_landmark_expect_size);
     sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
@@ -1842,7 +1901,7 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
     td_s32 ret;
     sample_svp_face_box_list faces = {0};
     sample_svp_face_box best_face = {0};
-    sample_svp_face_box landmark_crop = {0};
+    sample_svp_landmark_affine landmark_transform = {0};
     td_double t0;
     td_double t1;
     td_double t2;
@@ -1886,14 +1945,16 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
     result->face = best_face;
 
     /* 2. landmark */
-    ret = sample_svp_prepare_landmark_input_rgb888(TD_NULL, width, height, &best_face, &landmark_crop);
+    ret = sample_svp_prepare_landmark_input_rgb888(
+        TD_NULL, width, height, &best_face, &landmark_transform);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare landmark failed\n");
     t2 = sample_svp_now_seconds();
 
     if (g_face_det_debug_frame_idx < SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX) {
-        sample_svp_trace_info("roi handoff: det=(%.1f,%.1f,%.1f,%.1f) -> landmark_crop=(%.1f,%.1f,%.1f,%.1f)\n",
+        sample_svp_trace_info("roi handoff: det=(%.1f,%.1f,%.1f,%.1f) -> landmark_affine=(scale=%.6f tx=%.3f ty=%.3f)\n",
             best_face.x1, best_face.y1, best_face.x2, best_face.y2,
-            landmark_crop.x1, landmark_crop.y1, landmark_crop.x2, landmark_crop.y2);
+            landmark_transform.scale, landmark_transform.translate_x,
+            landmark_transform.translate_y);
     }
 
     ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[1]);
@@ -1902,7 +1963,8 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
 
     ret = sample_svp_npu_parse_landmark_output(&g_svp_npu_task[1], &result->landmark);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "parse landmark failed\n");
-    sample_svp_landmark_map_to_full_image(&result->landmark, &landmark_crop);
+    sample_svp_landmark_map_to_full_image(
+        &result->landmark, &landmark_transform);
     t4 = sample_svp_now_seconds();
 
     /* 3. gaze */
