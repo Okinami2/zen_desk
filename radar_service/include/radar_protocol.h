@@ -5,6 +5,7 @@
 typedef struct {
     int has_target;        /* 0:无人 1:有人运动 2:有人静止 */
     int distance_cm;       /* 目标距离 (cm) */
+    double energy_db[16];
     double motion_energy_db[16]; /* 16个距离门的运动能量 (dB) */
     double static_energy_db[16]; /* 16个距离门的静止能量 (dB) */
 } RadarData;

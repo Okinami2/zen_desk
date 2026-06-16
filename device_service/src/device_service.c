@@ -40,6 +40,14 @@ static int g_current_brightness = 0;
 static float g_current_color_ratio = 0.5f;
 static unsigned int g_breath_phase_ms = 0;
 
+/* 语音干预保护机制: 记录上次语音设置的状态 */
+static int g_voice_override = 0;
+static LampScene g_saved_voice_scene;
+
+/* 离座保护机制: 记录离座前的状态 */
+static int g_has_saved_radar_scene = 0;
+static LampScene g_saved_radar_scene;
+
 static int pwm_write(int channel, const char *node, int value) {
     char path[128];
     int fd;
@@ -341,12 +349,32 @@ void device_service_cleanup() {
 }
 
 void device_handle_fusion_state(const FusionState *state) {
+    if (g_device_service.current_state == state->current_state) {
+        return; /* 状态未改变，直接返回，避免被高频重复调用覆盖用户设置 */
+    }
+
     LOG_INFO("Received fusion state: %d", state->current_state);
 
     switch (state->current_state) {
         case STATE_SEATED_IDLE:
-            LOG_INFO("User is seated but idle, switching to reading light");
-            set_lamp_scene(70, 0.45f, LAMP_MODE_STATIC, 1800, 0);
+            if (g_has_saved_radar_scene) {
+                LOG_INFO("User is seated, restoring previous scene");
+                pthread_mutex_lock(&g_lamp_mutex);
+                g_target_scene = g_saved_radar_scene;
+                g_target_scene.transition_ms = 1800;
+                pthread_mutex_unlock(&g_lamp_mutex);
+                g_has_saved_radar_scene = 0;
+            } else if (g_voice_override) {
+                LOG_INFO("User is seated, restoring voice-configured lamp scene");
+                pthread_mutex_lock(&g_lamp_mutex);
+                g_target_scene = g_saved_voice_scene;
+                /* 入座点亮时加入平滑渐变效果 */
+                g_target_scene.transition_ms = 1800;
+                pthread_mutex_unlock(&g_lamp_mutex);
+            } else {
+                LOG_INFO("User is seated but idle, switching to reading light");
+                set_lamp_scene(70, 0.45f, LAMP_MODE_STATIC, 1800, 0);
+            }
             break;
 
         case STATE_FOCUSED:
@@ -365,8 +393,12 @@ void device_handle_fusion_state(const FusionState *state) {
             break;
 
         case STATE_ABSENT:
-            LOG_INFO("User is absent, fading lamp off");
-            set_lamp_scene(0, 0.45f, LAMP_MODE_STATIC, 10000, 0);
+            LOG_INFO("User is absent, turning lamp off in 2 seconds");
+            pthread_mutex_lock(&g_lamp_mutex);
+            g_saved_radar_scene = g_target_scene;
+            g_has_saved_radar_scene = 1;
+            pthread_mutex_unlock(&g_lamp_mutex);
+            set_lamp_scene(0, 0.45f, LAMP_MODE_STATIC, 2000, 0);
             break;
 
         default:
@@ -382,6 +414,10 @@ int device_control_lamp(uint8_t action, uint8_t brightness, uint16_t color_temp)
 
     if (action == 0) {
         set_lamp_scene(0, 0.45f, LAMP_MODE_STATIC, 2500, 0);
+        pthread_mutex_lock(&g_lamp_mutex);
+        g_voice_override = 1;
+        g_saved_voice_scene = g_target_scene;
+        pthread_mutex_unlock(&g_lamp_mutex);
         return 0;
     }
 
@@ -395,11 +431,19 @@ int device_control_lamp(uint8_t action, uint8_t brightness, uint16_t color_temp)
 
     if (action == 2) {
         set_lamp_scene(brightness, color_ratio, LAMP_MODE_BREATH, 1200, 8);
+        pthread_mutex_lock(&g_lamp_mutex);
+        g_voice_override = 1;
+        g_saved_voice_scene = g_target_scene;
+        pthread_mutex_unlock(&g_lamp_mutex);
         return 0;
     }
 
     if (action == 1) {
         set_lamp_scene(brightness, color_ratio, LAMP_MODE_STATIC, 1500, 0);
+        pthread_mutex_lock(&g_lamp_mutex);
+        g_voice_override = 1;
+        g_saved_voice_scene = g_target_scene;
+        pthread_mutex_unlock(&g_lamp_mutex);
         return 0;
     }
 
@@ -421,6 +465,9 @@ int device_adjust_lamp_brightness(int delta_percent) {
     // 调整亮度时保持当前色温并切换为静态模式，快速过渡
     g_target_scene.mode = LAMP_MODE_STATIC;
     g_target_scene.transition_ms = 800; 
+    
+    g_voice_override = 1;
+    g_saved_voice_scene = g_target_scene;
     
     LOG_INFO("Lamp brightness adjusted to %d%%", new_percent);
     

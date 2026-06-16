@@ -54,7 +54,7 @@ static int g_count_out = 0;
 
 /* FSM 状态 */
 static PersonState g_current_state = STATE_AWAY;
-static PersonState g_last_state    = STATE_AWAY;
+static PersonState g_last_state    = -1;
 
 /* TCP 连接 */
 static int g_sock_fd = -1;
@@ -85,6 +85,7 @@ static int connect_to_fusion(const Config *config)
     }
 
     LOG_INFO("TCP connected to fusion %s:%d", config->fusion_host, config->fusion_port);
+    g_last_state = -1;
     return 0;
 }
 
@@ -179,7 +180,7 @@ static void* radar_process_thread(void *arg)
     LOG_INFO("Radar process thread started");
 
     /* -- 步骤 1: 下发配置, 让雷达从文本模式切换到能量上报二进制模式 -- */
-    // radar_configure_all(g_radar_service.serial_fd, MAX_DISTANCE_DM);
+    radar_reboot(g_radar_service.serial_fd); // radar_configure_all(g_radar_service.serial_fd, MAX_DISTANCE_DM);
     tcflush(g_radar_service.serial_fd, TCIOFLUSH); /* 清空启动瞬间的脏数据 */
 
     LOG_INFO("Radar configured: max_dist_dm=%d, monitor_gate=%d", MAX_DISTANCE_DM, MONITOR_GATE);
@@ -211,19 +212,24 @@ static void* radar_process_thread(void *arg)
             offset = g_overlap_len;
         }
 
-        int ret = hi_serial_recv(g_radar_service.serial_fd, (char *)(buf + offset), 512);
+        int ret = hi_serial_recv(g_radar_service.serial_fd, (char *)(buf + offset), 256);
         if (ret <= 0) {
             continue;
         }
         total = offset + ret;
-        LOG_INFO("Read %d bytes, total %d bytes. First byte: %02X", ret, total, buf[0]);
-        LOG_INFO("Read %d bytes, total %d bytes. First bytes: %02X %02X %02X %02X", ret, total, buf[0], buf[1], buf[2], buf[3]);
 
         /* -- 步骤 2: 从字节流中解析一帧雷达数据, 成功返回消耗的字节数, 失败返回 0 */
         int consumed = parse_radar_frame(buf, total, &radar_data);
         if (consumed <= 0) {
+            /* 尝试重连并强制重发状态 */
+            if (g_sock_fd < 0) {
+                if (connect_to_fusion(&g_radar_service.config) == 0) {
+                    g_last_state = -1; /* 连上后强制同步一次状态 */
+                }
+            }
+
             /* 没找到完整帧, 更新重叠逻辑 */
-            if (total > 140) {
+            if (total >= 140) {
                 memcpy(g_overlap, buf + total - 140, 140);
                 g_overlap_len = 140;
             } else {

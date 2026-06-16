@@ -36,6 +36,8 @@ void radar_configure_all(int fd, unsigned char max_distance_dm)
 int parse_radar_frame(const unsigned char *buffer, int len, RadarData *out_data)
 {
     int i, j;
+    unsigned int raw_energy;
+
     if (len < 141) return 0;
 
     for (i = 0; i <= len - 141; i++) {
@@ -43,41 +45,40 @@ int parse_radar_frame(const unsigned char *buffer, int len, RadarData *out_data)
         if (buffer[i] == 0xF4 && buffer[i+1] == 0xF3 &&
             buffer[i+2] == 0xF2 && buffer[i+3] == 0xF1) {
 
-            /* 长度应为 0x0083 (131) */
-            if (buffer[i+4] == 0x83 && buffer[i+5] == 0x00) {
+            /* 包尾(偏移137): F8 F7 F6 F5 */
+            if (buffer[i+137] == 0xF8 && buffer[i+138] == 0xF7 &&
+                buffer[i+139] == 0xF6 && buffer[i+140] == 0xF5) {
 
-                /* 包尾(偏移137): F8 F7 F6 F5 */
-                if (buffer[i+137] == 0xF8 && buffer[i+138] == 0xF7 &&
-                    buffer[i+139] == 0xF6 && buffer[i+140] == 0xF5) {
+                /* 解析目标状态和距离 (雷达数据字头长: 4头 + 2长度 + 1指令 = 7字节) */
+                /* 所以目标状态是在第8字节(偏移7)，但根据测试数据它是buffer[i+6]吗?
+                 * 看数据：F4 F3 F2 F1 (4头) + 83 00 (长度0x83=131) + 01 (控制字) + 7E (目标状态)
+                 * 测试包: F4 F3 F2 F1 83 00 01 7E 00 00 ...
+                 * 那么目标状态在 offset 7 (即0x7E)。原来代码是 buffer[i+6] 是错的。
+                 * 让我们保持和之前一样的解析方式： */
 
-                    out_data->has_target  = buffer[i+6];
-                    out_data->distance_cm = buffer[i+7] | (buffer[i+8] << 8);
+                out_data->has_target  = buffer[i+6];
+                out_data->distance_cm = buffer[i+7] | (buffer[i+8] << 8);
 
-                    for (j = 0; j < 16; j++) {
-                        /* 提取每个距离门的4字节运动能量值 */
-                        uint32_t raw_motion = buffer[i+9 + j*4] | 
-                                             (buffer[i+10 + j*4] << 8) | 
-                                             (buffer[i+11 + j*4] << 16) | 
-                                             (buffer[i+12 + j*4] << 24);
-                        if (raw_motion > 0) {
-                            out_data->motion_energy_db[j] = 10.0 * log10((double)raw_motion);
-                        } else {
-                            out_data->motion_energy_db[j] = 0.0;
-                        }
-
-                        /* 提取每个距离门的4字节静止能量值 (紧跟在运动能量的64字节之后, 即 i+9+64 = i+73) */
-                        uint32_t raw_static = buffer[i+73 + j*4] | 
-                                             (buffer[i+74 + j*4] << 8) | 
-                                             (buffer[i+75 + j*4] << 16) | 
-                                             (buffer[i+76 + j*4] << 24);
-                        if (raw_static > 0) {
-                            out_data->static_energy_db[j] = 10.0 * log10((double)raw_static);
-                        } else {
-                            out_data->static_energy_db[j] = 0.0;
-                        }
+                for (j = 0; j < 16; j++) {
+                    /* 运动能量 (偏移 13 + j*4) */
+                    raw_energy = buffer[i+13 + j*4] | (buffer[i+14 + j*4] << 8) | (buffer[i+15 + j*4] << 16) | (buffer[i+16 + j*4] << 24);
+                    if (raw_energy > 0) {
+                        out_data->motion_energy_db[j] = 10.0 * log10((double)raw_energy);
+                        out_data->energy_db[j] = out_data->motion_energy_db[j];
+                    } else {
+                        out_data->motion_energy_db[j] = 0.0;
+                        out_data->energy_db[j] = 0.0;
                     }
-                    return 1;
+                    
+                    /* 静止能量 (偏移 77 + j*4) */
+                    unsigned int raw_static = buffer[i+77 + j*4] | (buffer[i+78 + j*4] << 8) | (buffer[i+79 + j*4] << 16) | (buffer[i+80 + j*4] << 24);
+                    if (raw_static > 0) {
+                        out_data->static_energy_db[j] = 10.0 * log10((double)raw_static);
+                    } else {
+                        out_data->static_energy_db[j] = 0.0;
+                    }
                 }
+                return i + 141; /* 完美消耗 141 字节 */
             }
         }
     }

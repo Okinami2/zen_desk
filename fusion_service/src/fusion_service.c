@@ -47,6 +47,120 @@ static int recv_all(int fd, void *buf, size_t len)
     return 0;
 }
 
+static void* tcp_client_handler(void *arg)
+{
+    int client_fd = *(int*)arg;
+    free(arg);
+
+    LOG_INFO("TCP client thread started (fd=%d)", client_fd);
+
+    /* 读取消息循环: [type:4B BE][length:4B BE][payload:N B] */
+    while (g_server_running) {
+        uint32_t type_be, len_be;
+        uint8_t payload[256];
+
+        if (recv_all(client_fd, &type_be, 4) != 0) break;
+        if (recv_all(client_fd, &len_be, 4) != 0) break;
+
+        uint32_t msg_type = ntohl(type_be);
+        uint32_t msg_len  = ntohl(len_be);
+
+        if (msg_len > sizeof(payload)) break;
+
+        if (recv_all(client_fd, payload, msg_len) != 0) break;
+
+        if (msg_type == MSG_RADAR_STATE && msg_len == sizeof(RadarState)) {
+            RadarState *rs = (RadarState *)payload;
+            fusion_update_radar(rs);
+            LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m",
+                     rs->presence, rs->motion_level, rs->distance);
+            radar_to_fusion_and_dispatch(rs);
+        } else if (msg_type == MSG_ASR_COMMAND && msg_len == sizeof(AsrCommand)) {
+            AsrCommand *cmd = (AsrCommand *)payload;
+            LOG_INFO("Recv ASR Command: 0x%02X", cmd->command_id);
+            
+            FusionState fs;
+            fs.state_score = 1.0;
+            fs.intervention_level = 0;
+            fs.duration_minutes = 0;
+            fs.timestamp = time(NULL);
+            
+            pthread_mutex_lock(&g_fusion_service.mutex);
+            switch(cmd->command_id) {
+                case ASR_CMD_WAKEUP:
+                    LOG_INFO("ASR Wakeup received, broadcasting to UI");
+                    fusion_send_ui_event(UI_EVENT_WAKEUP_ASR);
+                    break;
+                case ASR_CMD_STUDY_START:
+                case ASR_CMD_STUDY_RESUME:
+                    g_fusion_service.current_state = STATE_FOCUSED;
+                    fs.duration_minutes = 0; // 默认或正计时
+                    LOG_INFO("ASR overridden state to FOCUSED");
+                    break;
+                case ASR_CMD_STUDY_START_25:
+                    g_fusion_service.current_state = STATE_FOCUSED;
+                    fs.duration_minutes = 25;
+                    LOG_INFO("ASR overridden state to FOCUSED (25 min)");
+                    break;
+                case ASR_CMD_STUDY_START_45:
+                    g_fusion_service.current_state = STATE_FOCUSED;
+                    fs.duration_minutes = 45;
+                    LOG_INFO("ASR overridden state to FOCUSED (45 min)");
+                    break;
+                case ASR_CMD_STUDY_START_60:
+                    g_fusion_service.current_state = STATE_FOCUSED;
+                    fs.duration_minutes = 60;
+                    LOG_INFO("ASR overridden state to FOCUSED (60 min)");
+                    break;
+                case ASR_CMD_STUDY_PAUSE:
+                case ASR_CMD_STUDY_STOP:
+                    g_fusion_service.current_state = STATE_SEATED_IDLE;
+                    fs.duration_minutes = 0;
+                    LOG_INFO("ASR overridden state to IDLE/PAUSE");
+                    break;
+                case ASR_CMD_LAMP_ON:
+                    LOG_INFO("ASR requested Lamp ON");
+                    device_control_lamp(1, 80, 4000); // 默认80%亮度，4000K
+                    break;
+                case ASR_CMD_LAMP_OFF:
+                    LOG_INFO("ASR requested Lamp OFF");
+                    device_control_lamp(0, 0, 0);
+                    break;
+                case ASR_CMD_LAMP_BRIGHT_UP:
+                    LOG_INFO("ASR requested Lamp Brightness UP");
+                    device_adjust_lamp_brightness(20);
+                    break;
+                case ASR_CMD_LAMP_BRIGHT_DOWN:
+                    LOG_INFO("ASR requested Lamp Brightness DOWN");
+                    device_adjust_lamp_brightness(-20);
+                    break;
+                case ASR_CMD_SCREEN_DATA:
+                    LOG_INFO("ASR requested UI SHOW DATA");
+                    fusion_send_ui_event(UI_EVENT_SHOW_DATA);
+                    break;
+                case ASR_CMD_SCREEN_HOME:
+                    LOG_INFO("ASR requested UI SHOW HOME");
+                    fusion_send_ui_event(UI_EVENT_SHOW_HOME);
+                    break;
+            }
+            fs.current_state = g_fusion_service.current_state;
+            pthread_mutex_unlock(&g_fusion_service.mutex);
+            
+            // 只有状态改变时才向外广播状态，触发后续联动（UI/灯光）
+            if (cmd->command_id >= ASR_CMD_STUDY_START && cmd->command_id <= ASR_CMD_STUDY_START_60) {
+                fusion_send_state(&fs);
+                device_handle_fusion_state(&fs);
+            }
+        } else {
+            LOG_DEBUG("Recv unknown msg: type=0x%02X len=%u", msg_type, msg_len);
+        }
+    }
+
+    close(client_fd);
+    LOG_INFO("TCP client thread disconnected (fd=%d)", client_fd);
+    return NULL;
+}
+
 static void* tcp_server_thread(void *arg)
 {
     struct sockaddr_in addr;
@@ -100,112 +214,21 @@ static void* tcp_server_thread(void *arg)
             continue;
         }
 
-        LOG_INFO("TCP client connected (fd=%d)", client_fd);
-
-        /* 读取消息循环: [type:4B BE][length:4B BE][payload:N B] */
-        while (g_server_running) {
-            uint32_t type_be, len_be;
-            uint8_t payload[256];
-
-            if (recv_all(client_fd, &type_be, 4) != 0) break;
-            if (recv_all(client_fd, &len_be, 4) != 0) break;
-
-            uint32_t msg_type = ntohl(type_be);
-            uint32_t msg_len  = ntohl(len_be);
-
-            if (msg_len > sizeof(payload)) break;
-
-            if (recv_all(client_fd, payload, msg_len) != 0) break;
-
-            if (msg_type == MSG_RADAR_STATE && msg_len == sizeof(RadarState)) {
-                RadarState *rs = (RadarState *)payload;
-                fusion_update_radar(rs);
-                LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m",
-                         rs->presence, rs->motion_level, rs->distance);
-                radar_to_fusion_and_dispatch(rs);
-            } else if (msg_type == MSG_ASR_COMMAND && msg_len == sizeof(AsrCommand)) {
-                AsrCommand *cmd = (AsrCommand *)payload;
-                LOG_INFO("Recv ASR Command: 0x%02X", cmd->command_id);
-                
-                FusionState fs;
-                fs.state_score = 1.0;
-                fs.intervention_level = 0;
-                fs.duration_minutes = 0;
-                fs.timestamp = time(NULL);
-                
-                pthread_mutex_lock(&g_fusion_service.mutex);
-                switch(cmd->command_id) {
-                    case ASR_CMD_WAKEUP:
-                        LOG_INFO("ASR Wakeup received, broadcasting to UI");
-                        fusion_send_ui_event(UI_EVENT_WAKEUP_ASR);
-                        break;
-                    case ASR_CMD_STUDY_START:
-                    case ASR_CMD_STUDY_RESUME:
-                        g_fusion_service.current_state = STATE_FOCUSED;
-                        fs.duration_minutes = 0; // 默认或正计时
-                        LOG_INFO("ASR overridden state to FOCUSED");
-                        break;
-                    case ASR_CMD_STUDY_START_25:
-                        g_fusion_service.current_state = STATE_FOCUSED;
-                        fs.duration_minutes = 25;
-                        LOG_INFO("ASR overridden state to FOCUSED (25 min)");
-                        break;
-                    case ASR_CMD_STUDY_START_45:
-                        g_fusion_service.current_state = STATE_FOCUSED;
-                        fs.duration_minutes = 45;
-                        LOG_INFO("ASR overridden state to FOCUSED (45 min)");
-                        break;
-                    case ASR_CMD_STUDY_START_60:
-                        g_fusion_service.current_state = STATE_FOCUSED;
-                        fs.duration_minutes = 60;
-                        LOG_INFO("ASR overridden state to FOCUSED (60 min)");
-                        break;
-                    case ASR_CMD_STUDY_PAUSE:
-                    case ASR_CMD_STUDY_STOP:
-                        g_fusion_service.current_state = STATE_SEATED_IDLE;
-                        fs.duration_minutes = 0;
-                        LOG_INFO("ASR overridden state to IDLE/PAUSE");
-                        break;
-                    case ASR_CMD_LAMP_ON:
-                        LOG_INFO("ASR requested Lamp ON");
-                        device_control_lamp(1, 80, 4000); // 默认80%亮度，4000K
-                        break;
-                    case ASR_CMD_LAMP_OFF:
-                        LOG_INFO("ASR requested Lamp OFF");
-                        device_control_lamp(0, 0, 0);
-                        break;
-                    case ASR_CMD_LAMP_BRIGHT_UP:
-                        LOG_INFO("ASR requested Lamp Brightness UP");
-                        device_adjust_lamp_brightness(20);
-                        break;
-                    case ASR_CMD_LAMP_BRIGHT_DOWN:
-                        LOG_INFO("ASR requested Lamp Brightness DOWN");
-                        device_adjust_lamp_brightness(-20);
-                        break;
-                    case ASR_CMD_SCREEN_DATA:
-                        LOG_INFO("ASR requested UI SHOW DATA");
-                        fusion_send_ui_event(UI_EVENT_SHOW_DATA);
-                        break;
-                    case ASR_CMD_SCREEN_HOME:
-                        LOG_INFO("ASR requested UI SHOW HOME");
-                        fusion_send_ui_event(UI_EVENT_SHOW_HOME);
-                        break;
-                }
-                fs.current_state = g_fusion_service.current_state;
-                pthread_mutex_unlock(&g_fusion_service.mutex);
-                
-                // 只有状态改变时才向外广播状态，触发后续联动（UI/灯光）
-                if (cmd->command_id >= ASR_CMD_STUDY_START && cmd->command_id <= ASR_CMD_STUDY_START_60) {
-                    fusion_send_state(&fs);
-                    device_handle_fusion_state(&fs);
-                }
+        int *client_fd_ptr = malloc(sizeof(int));
+        if (client_fd_ptr) {
+            *client_fd_ptr = client_fd;
+            pthread_t client_tid;
+            if (pthread_create(&client_tid, NULL, tcp_client_handler, client_fd_ptr) != 0) {
+                LOG_ERROR("Failed to create TCP client thread: %s", strerror(errno));
+                close(client_fd);
+                free(client_fd_ptr);
             } else {
-                LOG_DEBUG("Recv unknown msg: type=0x%02X len=%u", msg_type, msg_len);
+                pthread_detach(client_tid);
             }
+        } else {
+            close(client_fd);
         }
 
-        close(client_fd);
-        LOG_INFO("TCP client disconnected (fd=%d)", client_fd);
     }
 
     close(listen_fd);
