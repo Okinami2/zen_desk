@@ -14,12 +14,16 @@
 #include <errno.h>
 
 /* ==================== 算法参数宏 ==================== */
-#define MAX_DISTANCE_GATE  3     /* 雷达最大距离门 (0-3门, 约2.25m) */
+#define MAX_DISTANCE_DM    20    /* 雷达最大探测距离 (7~100dm, 20=2.0m) */
 #define MONITOR_GATE       0     /* 监视的距离门 (0=桌面极近场) */
 #define WINDOW_SIZE        10    /* 滑动窗口: 10帧 = 1秒 @10Hz */
-#define TIME_IN_FRAMES     100   /* 严进入座积分: 10秒 */
-#define TIME_OUT_FRAMES    300   /* 宽出防抖积分: 30秒 */
-#define VAR_TH_FIDGET      40.0  /* 乱动全局方差阈值 */
+#define TIME_IN_FRAMES     50    /* 入座判定缓冲: 5秒 (50帧) */
+#define TIME_OUT_FRAMES    50    /* 离座判定缓冲: 5秒 (50帧) */
+
+/* ---- 判定阈值 ---- */
+#define ENERGY_TH_IN       38.0  /* 判断入座的能量均值下限 (m > 38.0) */
+#define ENERGY_TH_OUT      37.0  /* 判断离座的能量均值上限 (m < 37.0) */
+#define VAR_TH_FIDGET      40.0  /* 乱动全局方差阈值 (v > 40.0判定为乱动) */
 
 /* ==================== 三态有限状态机 ==================== */
 typedef enum {
@@ -33,12 +37,14 @@ static RadarService g_radar_service;
 static pthread_t     g_process_thread;
 static int           g_running = 0;
 
-/* 帧重叠缓冲: 保留上次读取末尾 44 字节, 防止帧跨越 recv 边界丢失 */
-static unsigned char g_overlap[44];
-static int           g_has_overlap = 0;
+/* 帧重叠缓冲: 防止 141 字节帧跨越 recv 边界丢失 */
+static unsigned char g_overlap[140];
+static int           g_overlap_len = 0;
 
 /* 滑动窗口: 存储最近 10 帧的能量值 */
 static double g_window[WINDOW_SIZE];
+static double g_window_g0[WINDOW_SIZE];
+static double g_window_g1[WINDOW_SIZE];
 static int    g_win_idx   = 0;
 static int    g_win_count = 0;
 
@@ -173,58 +179,80 @@ static void* radar_process_thread(void *arg)
     LOG_INFO("Radar process thread started");
 
     /* -- 步骤 1: 下发配置, 让雷达从文本模式切换到能量上报二进制模式 -- */
-    radar_configure_all(g_radar_service.serial_fd, MAX_DISTANCE_GATE);
+    // radar_configure_all(g_radar_service.serial_fd, MAX_DISTANCE_DM);
     tcflush(g_radar_service.serial_fd, TCIOFLUSH); /* 清空启动瞬间的脏数据 */
 
-    LOG_INFO("Radar configured: max_gate=%d, monitor_gate=%d", MAX_DISTANCE_GATE, MONITOR_GATE);
+    LOG_INFO("Radar configured: max_dist_dm=%d, monitor_gate=%d", MAX_DISTANCE_DM, MONITOR_GATE);
 
     /* 积分/窗口复位 */
     g_win_idx = 0;
     g_win_count = 0;
+    memset(g_window_g0, 0, sizeof(g_window_g0));
+    memset(g_window_g1, 0, sizeof(g_window_g1));
     g_count_in = 0;
     g_count_out = 0;
     g_current_state = STATE_AWAY;
     g_last_state = STATE_AWAY;
-    g_has_overlap = 0;
+    g_overlap_len = 0;
 
     while (g_running) {
-        unsigned char buf[256 + 44]; /* 44 字节留给前次重叠 */
+        unsigned char buf[512 + 140]; /* 140 字节留给前次重叠 */
         int offset = 0;
         int total, i;
         RadarData radar_data;
-        double sum, mean, var_sum, variance;
+        double sum_g0, mean_g0, var_sum_g0, variance_g0;
+        double sum_g1, mean_g1, var_sum_g1, variance_g1;
+        double sum, mean, var_sum, variance; /* 兼容原有逻辑 */
         int condition_in, condition_out;
 
-        /* 把上一次读取的尾部 44 字节拷贝到 buffer 开头 */
-        if (g_has_overlap) {
-            memcpy(buf, g_overlap, 44);
-            offset = 44;
+        /* 把上一次读取的遗留字节拷贝到 buffer 开头 */
+        if (g_overlap_len > 0) {
+            memcpy(buf, g_overlap, g_overlap_len);
+            offset = g_overlap_len;
         }
 
-        int ret = hi_serial_recv(g_radar_service.serial_fd, (char *)(buf + offset), 256);
+        int ret = hi_serial_recv(g_radar_service.serial_fd, (char *)(buf + offset), 512);
         if (ret <= 0) {
             continue;
         }
         total = offset + ret;
+        LOG_INFO("Read %d bytes, total %d bytes. First byte: %02X", ret, total, buf[0]);
+        LOG_INFO("Read %d bytes, total %d bytes. First bytes: %02X %02X %02X %02X", ret, total, buf[0], buf[1], buf[2], buf[3]);
 
-        /* -- 步骤 2: 从缓冲区中解析一帧雷达数据 -- */
-        if (!parse_radar_frame(buf, total, &radar_data)) {
-            /* 没找到完整帧, 保留尾部 44 字节留给下一次拼接 */
-            if (total >= 44) {
-                memcpy(g_overlap, buf + total - 44, 44);
-                g_has_overlap = 1;
+        /* -- 步骤 2: 从字节流中解析一帧雷达数据, 成功返回消耗的字节数, 失败返回 0 */
+        int consumed = parse_radar_frame(buf, total, &radar_data);
+        if (consumed <= 0) {
+            /* 没找到完整帧, 更新重叠逻辑 */
+            if (total > 140) {
+                memcpy(g_overlap, buf + total - 140, 140);
+                g_overlap_len = 140;
+            } else {
+                memcpy(g_overlap, buf, total);
+                g_overlap_len = total;
             }
             continue;
         }
 
-        /* -- 步骤 3: 更新重叠缓冲区 (消耗已解析帧之后的数据) -- */
-        if (total >= 44) {
-            memcpy(g_overlap, buf + total - 44, 44);
-            g_has_overlap = 1;
+        /* -- 步骤 3: 处理剩余数据作为下一次的重叠 -- */
+        g_overlap_len = total - consumed;
+        if (g_overlap_len > 140) g_overlap_len = 140;
+        if (g_overlap_len > 0) {
+            memcpy(g_overlap, buf + consumed, g_overlap_len);
         }
 
-        /* -- 步骤 4: 滑动窗口 — 挤入当前监视门的能量值 -- */
-        g_window[g_win_idx] = radar_data.energy_db[MONITOR_GATE];
+        /* -- 步骤 4: 滑动窗口 — 提取并合并运动和静止能量 -- */
+        /* 雷达协议输出16个距离门，每个距离门有运动能量和静止能量 */
+        double m0 = radar_data.motion_energy_db[0];
+        double s0 = radar_data.static_energy_db[0];
+        double e0 = m0 > s0 ? m0 : s0; /* 取两者最大值作为该门的综合能量 */
+
+        double m1 = radar_data.motion_energy_db[1];
+        double s1 = radar_data.static_energy_db[1];
+        double e1 = m1 > s1 ? m1 : s1;
+
+        g_window[g_win_idx] = m0 > s0 ? m0 : s0; /* 兼容旧逻辑 */
+        g_window_g0[g_win_idx] = e0;
+        g_window_g1[g_win_idx] = e1;
         g_win_idx = (g_win_idx + 1) % WINDOW_SIZE;
         if (g_win_count < WINDOW_SIZE) g_win_count++;
 
@@ -234,28 +262,39 @@ static void* radar_process_thread(void *arg)
         }
 
         /* -- 步骤 5: 计算均值与方差 -- */
-        sum = 0.0;
-        for (i = 0; i < WINDOW_SIZE; i++) sum += g_window[i];
+        sum = 0.0; sum_g0 = 0.0; sum_g1 = 0.0;
+        for (i = 0; i < WINDOW_SIZE; i++) {
+            sum += g_window[i];
+            sum_g0 += g_window_g0[i];
+            sum_g1 += g_window_g1[i];
+        }
         mean = sum / WINDOW_SIZE;
+        mean_g0 = sum_g0 / WINDOW_SIZE;
+        mean_g1 = sum_g1 / WINDOW_SIZE;
 
-        var_sum = 0.0;
+        var_sum = 0.0; var_sum_g0 = 0.0; var_sum_g1 = 0.0;
         for (i = 0; i < WINDOW_SIZE; i++) {
             double d = g_window[i] - mean;
             var_sum += d * d;
+            
+            double d0 = g_window_g0[i] - mean_g0;
+            var_sum_g0 += d0 * d0;
+            
+            double d1 = g_window_g1[i] - mean_g1;
+            var_sum_g1 += d1 * d1;
         }
         variance = var_sum / WINDOW_SIZE;
+        variance_g0 = var_sum_g0 / WINDOW_SIZE;
+        variance_g1 = var_sum_g1 / WINDOW_SIZE;
 
-        /* -- 步骤 6: 空间分治判定引擎 -- */
-        if (MONITOR_GATE <= 1) {
-            /* 近场策略 (0-1门): 底噪极稳, 100%依赖方差捕捉生命体征 */
-            condition_in  = (variance > g_var_th_motion[MONITOR_GATE]);
-            condition_out = (variance < g_var_th_motion[MONITOR_GATE]);
-        } else {
-            /* 远场策略 (2+门): 存在多径幽灵, 需真实能量突破 + 方差双重确认 */
-            condition_in  = (mean > g_trigger_th[MONITOR_GATE]);
-            condition_out = (mean < g_maintain_th[MONITOR_GATE] &&
-                             variance < g_var_th_motion[MONITOR_GATE]);
-        }
+        /* -- 步骤 6: 纯能量判定法则 (彻底抛弃不可靠的距离, 解决测不准问题) -- */
+        /* 根据组长实测数据深度分析:
+           [在椅子上]:   G1_mean = 38.9 ~ 49.0
+           [站椅子后]:   G1_mean = 29.9 ~ 36.5
+           方差(v)在两种状态下都可能很高(由于人体晃动), 不能作为唯一依据!
+        */
+        condition_in  = (mean_g1 > ENERGY_TH_IN || mean_g0 > ENERGY_TH_IN);
+        condition_out = (mean_g1 < ENERGY_TH_OUT && mean_g0 < ENERGY_TH_OUT);
 
         /* -- 步骤 7: 漏桶容错有限状态机 -- */
         if (g_current_state == STATE_AWAY) {
@@ -271,19 +310,21 @@ static void* radar_process_thread(void *arg)
                 g_count_in = 0;
             }
         } else {
-            /* 已入座: 离座判定严苛, 不满足条件直接清零 (防止发呆/屏息被误判离座) */
+            /* 已入座: 离座判定严苛 */
             if (condition_out) {
                 g_count_out++;
             } else {
-                g_count_out = 0;
+                /* 改为缓慢递减而不是直接清零, 极大增强抗噪性 (防一帧干扰) */
+                if (g_count_out > 0) g_count_out -= 1;
             }
 
             if (g_count_out >= TIME_OUT_FRAMES) {
                 g_current_state = STATE_AWAY;
                 g_count_out = 0;
             } else {
-                /* 人在座位上, 用方差幅度进行动作级别分类 */
-                if (variance > VAR_TH_FIDGET)
+                /* 人在座位上, 用方差幅度进行动作级别分类 (结合0门和1门的最大方差) */
+                double max_var = variance_g0 > variance_g1 ? variance_g0 : variance_g1;
+                if (max_var > VAR_TH_FIDGET)
                     g_current_state = STATE_FIDGET;
                 else
                     g_current_state = STATE_NORMAL;
@@ -295,12 +336,11 @@ static void* radar_process_thread(void *arg)
             static int heartbeat = 0;
             if (++heartbeat >= 10) {
                 heartbeat = 0;
-                LOG_INFO("FSM: state=%s in=%d/%d out=%d/%d mean=%.1f var=%.1f "
-                         "cond_in=%d cond_out=%d",
-                         state_name(g_current_state),
-                         g_count_in, TIME_IN_FRAMES,
-                         g_count_out, TIME_OUT_FRAMES,
-                         mean, variance, condition_in, condition_out);
+                LOG_INFO("DIST:%d cm | TGT:%d | G0(m:%.1f s:%.1f v:%.1f) | G1(m:%.1f s:%.1f v:%.1f) | FSM:%s",
+                         radar_data.distance_cm, radar_data.has_target,
+                         radar_data.motion_energy_db[0], radar_data.static_energy_db[0], variance_g0,
+                         radar_data.motion_energy_db[1], radar_data.static_energy_db[1], variance_g1,
+                         state_name(g_current_state));
             }
         }
 
@@ -329,7 +369,7 @@ int radar_service_init(const Config *config, int uart_fd)
     g_radar_service.running = 0;
     g_radar_service.serial_fd = uart_fd;
 
-    g_has_overlap = 0;
+    g_overlap_len = 0;
     memset(g_overlap, 0, sizeof(g_overlap));
     memset(g_window, 0, sizeof(g_window));
 
