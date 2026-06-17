@@ -180,7 +180,8 @@ static void* radar_process_thread(void *arg)
     LOG_INFO("Radar process thread started");
 
     /* -- 步骤 1: 下发配置, 让雷达从文本模式切换到能量上报二进制模式 -- */
-    radar_reboot(g_radar_service.serial_fd); // radar_configure_all(g_radar_service.serial_fd, MAX_DISTANCE_DM);
+    radar_reboot(g_radar_service.serial_fd);
+    radar_configure_all(g_radar_service.serial_fd, MAX_DISTANCE_DM);
     tcflush(g_radar_service.serial_fd, TCIOFLUSH); /* 清空启动瞬间的脏数据 */
 
     LOG_INFO("Radar configured: max_dist_dm=%d, monitor_gate=%d", MAX_DISTANCE_DM, MONITOR_GATE);
