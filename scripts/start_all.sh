@@ -12,11 +12,17 @@ PID_DIR="$PROJ_DIR/out/pid"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
-# 检查是否已启动
+# 检查是否已启动，清理僵尸 PID 文件
 if [ -f "$PID_DIR/fusion_service.pid" ]; then
-    echo "[WARN] fusion_service already running? pid=$(cat $PID_DIR/fusion_service.pid)"
-    echo "       If you want to restart, run stop_all.sh first."
-    exit 1
+    old_pid=$(cat "$PID_DIR/fusion_service.pid")
+    if kill -0 "$old_pid" 2>/dev/null; then
+        echo "[WARN] fusion_service already running? pid=$old_pid"
+        echo "       If you want to restart, run stop_all.sh first."
+        exit 1
+    else
+        echo "[INFO] Found stale fusion_service.pid, cleaning up..."
+        rm -f "$PID_DIR/"*.pid
+    fi
 fi
 
 echo "===== 慧学引擎 - 启动所有服务 ====="

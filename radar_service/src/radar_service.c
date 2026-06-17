@@ -21,9 +21,9 @@
 #define TIME_OUT_FRAMES    50    /* 离座判定缓冲: 5秒 (50帧) */
 
 /* ---- 判定阈值 ---- */
-#define ENERGY_TH_IN       38.0  /* 判断入座的能量均值下限 (m > 38.0) */
-#define ENERGY_TH_OUT      37.0  /* 判断离座的能量均值上限 (m < 37.0) */
-#define VAR_TH_FIDGET      40.0  /* 乱动全局方差阈值 (v > 40.0判定为乱动) */
+#define ENERGY_TH_IN_G0    38.0  /* 入座的 G0(近距离门) 能量下限。必须大于 38 才能入座 */
+#define ENERGY_TH_OUT      35.0  /* 离座的能量上限 (G0 < 35 判定离开) */
+#define VAR_TH_FIDGET      15.0  /* 乱动全局方差阈值 (v > 15 判定为大幅乱动) */
 
 /* ==================== 三态有限状态机 ==================== */
 typedef enum {
@@ -295,13 +295,16 @@ static void* radar_process_thread(void *arg)
         variance_g1 = var_sum_g1 / WINDOW_SIZE;
 
         /* -- 步骤 6: 纯能量判定法则 (彻底抛弃不可靠的距离, 解决测不准问题) -- */
-        /* 根据组长实测数据深度分析:
-           [在椅子上]:   G1_mean = 38.9 ~ 49.0
-           [站椅子后]:   G1_mean = 29.9 ~ 36.5
-           方差(v)在两种状态下都可能很高(由于人体晃动), 不能作为唯一依据!
+        /* 深度分析:
+           [在椅子上]:   G0_mean = 40.6 ~ 54.0, G1_mean = 37.4 ~ 51.8
+           [站椅子后]:   G0_mean = 30.1 ~ 37.3, G1_mean = 32.8 ~ 40.9
+
+           结论: G0 是绝对的核心！只有真正在桌前，G0 才会飙升到 40+！
+                 入座条件改为: G0 必须 > 38.0 (彻底屏蔽站椅子后的37.3极限值)
+                 离座条件改为: G0 必须 < 35.0 (只要离开桌前，G0 必掉到 35 以下)
         */
-        condition_in  = (mean_g1 > ENERGY_TH_IN || mean_g0 > ENERGY_TH_IN);
-        condition_out = (mean_g1 < ENERGY_TH_OUT && mean_g0 < ENERGY_TH_OUT);
+        condition_in  = (mean_g0 > ENERGY_TH_IN_G0);
+        condition_out = (mean_g0 < ENERGY_TH_OUT);
 
         /* -- 步骤 7: 漏桶容错有限状态机 -- */
         if (g_current_state == STATE_AWAY) {

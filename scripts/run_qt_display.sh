@@ -62,6 +62,27 @@ done
 
 export QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-linuxfb:fb=/dev/fb0}
 
+# 动态寻找最新创建的 EC11 虚拟键盘事件节点 (解决多次重启后产生的僵尸键盘)
+EC11_EVENT=$(awk '
+    /Name="ZenDesk_EC11_Knob"/ { found=1; next }
+    found && /Handlers=/ {
+        match($0, /event[0-9]+/);
+        if (RSTART > 0) {
+            last_event = substr($0, RSTART, RLENGTH);
+        }
+        found=0;
+    }
+    END { print last_event }
+' /proc/bus/input/devices)
+
+if [ -n "$EC11_EVENT" ]; then
+    echo "Found active EC11 virtual keyboard: /dev/input/$EC11_EVENT"
+    export QT_QPA_GENERIC_PLUGINS=evdevkeyboard
+    export QT_QPA_EVDEV_KEYBOARD_PARAMETERS=/dev/input/$EC11_EVENT
+else
+    echo "[WARN] Could not find ZenDesk_EC11_Knob in /proc/bus/input/devices"
+fi
+
 echo "display stack ready: vo_init pid=$VO_PID"
 echo "starting Qt: $QT_BIN"
 "$QT_BIN" "$@"
