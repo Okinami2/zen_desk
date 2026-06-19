@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include "radar_model_inference.h"
 
 /* ==================== 算法参数宏 ==================== */
 #define MAX_DISTANCE_DM    20    /* 雷达最大探测距离 (7~100dm, 20=2.0m) */
@@ -19,6 +20,12 @@
 #define WINDOW_SIZE        10    /* 滑动窗口: 10帧 = 1秒 @10Hz */
 #define TIME_IN_FRAMES     50    /* 入座判定缓冲: 5秒 (50帧) */
 #define TIME_OUT_FRAMES    50    /* 离座判定缓冲: 5秒 (50帧) */
+
+/* 新增模型相关全局变量 */
+static double g_features_window[WINDOW_SIZE][32]; // 保存过去10帧的32个通道数据
+static int g_model_preds[WINDOW_SIZE];            // 保存过去10帧的模型预测结果
+static int g_pending_state = 0;                   // 当前多数表决产生的候选状态
+static int g_stable_counter = 0;                  // 连续保持候选状态的帧数(5秒=50帧)
 
 /* ---- 判定阈值 ---- */
 #define ENERGY_TH_IN_G0    38.0  /* 入座的 G0(近距离门) 能量下限。必须大于 38 才能入座 */
@@ -110,32 +117,6 @@ static int send_message(MessageType type, const void *payload, uint32_t payload_
     return 0;
 }
 
-/* ==================== 距离门阈值表 (从 Windows 侧标定结果直接移植) ==================== */
-
-/* 入座触发阈值: 远场依赖此值过滤多径幽灵; 0-1门设为 50.00 故意让均值条件永久失效 */
-static const double g_trigger_th[16] = {
-    50.00, 50.00, 22.00, 20.00,
-    28.50, 27.00, 21.00, 20.00,
-    17.50, 18.50, 17.50, 17.00,
-    19.00, 16.50, 17.00, 16.00
-};
-
-/* 离座保持阈值: 迟滞门限, 能量跌破此值才开始离座倒计时 */
-static const double g_maintain_th[16] = {
-    50.00, 50.00, 16.00, 15.00,
-    26.50, 24.50, 19.50, 18.00,
-    15.50, 16.50, 15.50, 15.00,
-    17.00, 14.50, 15.00, 14.00
-};
-
-/* 微动方差阈值: 每个门独立的抗干扰底线 */
-static const double g_var_th_motion[16] = {
-    1.5, 1.5, 3.0, 5.0,
-    5.0, 5.0, 5.0, 5.0,
-    5.0, 5.0, 5.0, 5.0,
-    5.0, 5.0, 5.0, 5.0
-};
-
 /* ==================== 辅助函数 ==================== */
 
 static const char* state_name(PersonState s)
@@ -189,10 +170,12 @@ static void* radar_process_thread(void *arg)
     /* 积分/窗口复位 */
     g_win_idx = 0;
     g_win_count = 0;
-    memset(g_window_g0, 0, sizeof(g_window_g0));
-    memset(g_window_g1, 0, sizeof(g_window_g1));
+    memset(g_features_window, 0, sizeof(g_features_window));
+    memset(g_model_preds, 0, sizeof(g_model_preds));
     g_count_in = 0;
     g_count_out = 0;
+    g_pending_state = STATE_AWAY;
+    g_stable_counter = 0;
     g_current_state = STATE_AWAY;
     g_last_state = STATE_AWAY;
     g_overlap_len = 0;
@@ -202,10 +185,6 @@ static void* radar_process_thread(void *arg)
         int offset = 0;
         int total, i;
         RadarData radar_data;
-        double sum_g0, mean_g0, var_sum_g0, variance_g0;
-        double sum_g1, mean_g1, var_sum_g1, variance_g1;
-        double sum, mean, var_sum, variance; /* 兼容原有逻辑 */
-        int condition_in, condition_out;
 
         /* 把上一次读取的遗留字节拷贝到 buffer 开头 */
         if (g_overlap_len > 0) {
@@ -240,105 +219,57 @@ static void* radar_process_thread(void *arg)
             continue;
         }
 
-        /* -- 步骤 3: 处理剩余数据作为下一次的重叠 -- */
+        /* -- 步骤 3: 处理剩余数据作为下一次的重叠 */
         g_overlap_len = total - consumed;
         if (g_overlap_len > 140) g_overlap_len = 140;
         if (g_overlap_len > 0) {
             memcpy(g_overlap, buf + consumed, g_overlap_len);
         }
 
-        /* -- 步骤 4: 滑动窗口 — 提取并合并运动和静止能量 -- */
-        /* 雷达协议输出16个距离门，每个距离门有运动能量和静止能量 */
-        double m0 = radar_data.motion_energy_db[0];
-        double s0 = radar_data.static_energy_db[0];
-        double e0 = m0 > s0 ? m0 : s0; /* 取两者最大值作为该门的综合能量 */
+        /* -- 步骤 4: 记录 32 个通道的数据到滑动窗口 -- */
+        for (i = 0; i < 16; i++) {
+            g_features_window[g_win_idx][i]      = radar_data.motion_energy_db[i];
+            g_features_window[g_win_idx][i + 16] = radar_data.static_energy_db[i];
+        }
 
-        double m1 = radar_data.motion_energy_db[1];
-        double s1 = radar_data.static_energy_db[1];
-        double e1 = m1 > s1 ? m1 : s1;
-
-        g_window[g_win_idx] = m0 > s0 ? m0 : s0; /* 兼容旧逻辑 */
-        g_window_g0[g_win_idx] = e0;
-        g_window_g1[g_win_idx] = e1;
+        /* -- 步骤 5: 执行模型推理 (获取当前帧的预测) -- */
+        int current_pred = radar_model_predict(g_features_window);
+        g_model_preds[g_win_idx] = current_pred;
+        
+        /* 移动滑动窗口指针 */
         g_win_idx = (g_win_idx + 1) % WINDOW_SIZE;
-        if (g_win_count < WINDOW_SIZE) g_win_count++;
 
-        /* 窗口未满 10 帧, 继续收集数据 */
-        if (g_win_count < WINDOW_SIZE) {
-            continue;
-        }
-
-        /* -- 步骤 5: 计算均值与方差 -- */
-        sum = 0.0; sum_g0 = 0.0; sum_g1 = 0.0;
+        /* -- 步骤 6: 一秒之内（10帧）的多数表决 -- */
+        int count[3] = {0, 0, 0};
         for (i = 0; i < WINDOW_SIZE; i++) {
-            sum += g_window[i];
-            sum_g0 += g_window_g0[i];
-            sum_g1 += g_window_g1[i];
-        }
-        mean = sum / WINDOW_SIZE;
-        mean_g0 = sum_g0 / WINDOW_SIZE;
-        mean_g1 = sum_g1 / WINDOW_SIZE;
-
-        var_sum = 0.0; var_sum_g0 = 0.0; var_sum_g1 = 0.0;
-        for (i = 0; i < WINDOW_SIZE; i++) {
-            double d = g_window[i] - mean;
-            var_sum += d * d;
-            
-            double d0 = g_window_g0[i] - mean_g0;
-            var_sum_g0 += d0 * d0;
-            
-            double d1 = g_window_g1[i] - mean_g1;
-            var_sum_g1 += d1 * d1;
-        }
-        variance = var_sum / WINDOW_SIZE;
-        variance_g0 = var_sum_g0 / WINDOW_SIZE;
-        variance_g1 = var_sum_g1 / WINDOW_SIZE;
-
-        /* -- 步骤 6: 纯能量判定法则 (彻底抛弃不可靠的距离, 解决测不准问题) -- */
-        /* 深度分析:
-           [在椅子上]:   G0_mean = 40.6 ~ 54.0, G1_mean = 37.4 ~ 51.8
-           [站椅子后]:   G0_mean = 30.1 ~ 37.3, G1_mean = 32.8 ~ 40.9
-
-           结论: G0 是绝对的核心！只有真正在桌前，G0 才会飙升到 40+！
-                 入座条件改为: G0 必须 > 38.0 (彻底屏蔽站椅子后的37.3极限值)
-                 离座条件改为: G0 必须 < 35.0 (只要离开桌前，G0 必掉到 35 以下)
-        */
-        condition_in  = (mean_g0 > ENERGY_TH_IN_G0);
-        condition_out = (mean_g0 < ENERGY_TH_OUT);
-
-        /* -- 步骤 7: 漏桶容错有限状态机 -- */
-        if (g_current_state == STATE_AWAY) {
-            /* 漏桶算法: 满足条件 +1, 不满足仅 -1 (轻度惩罚), 允许入座停顿 1-2 秒 */
-            if (condition_in) {
-                g_count_in++;
-            } else {
-                if (g_count_in > 0) g_count_in -= 1;
+            if (g_model_preds[i] >= 0 && g_model_preds[i] <= 2) {
+                count[g_model_preds[i]]++;
             }
+        }
+        
+        int majority_pred = 0;
+        if (count[1] > count[0] && count[1] >= count[2]) majority_pred = 1;
+        else if (count[2] > count[0] && count[2] > count[1]) majority_pred = 2;
+        else majority_pred = 0;
 
-            if (g_count_in >= TIME_IN_FRAMES) {
-                g_current_state = STATE_NORMAL;
-                g_count_in = 0;
-            }
+        /* -- 步骤 7: 连续 5 秒 (50 帧) 稳定判定逻辑 -- */
+        if (majority_pred == g_pending_state) {
+            g_stable_counter++;
         } else {
-            /* 已入座: 离座判定严苛 */
-            if (condition_out) {
-                g_count_out++;
-            } else {
-                /* 改为缓慢递减而不是直接清零, 极大增强抗噪性 (防一帧干扰) */
-                if (g_count_out > 0) g_count_out -= 1;
-            }
+            g_pending_state = majority_pred;
+            g_stable_counter = 1;
+        }
 
-            if (g_count_out >= TIME_OUT_FRAMES) {
-                g_current_state = STATE_AWAY;
-                g_count_out = 0;
-            } else {
-                /* 人在座位上, 用方差幅度进行动作级别分类 (结合0门和1门的最大方差) */
-                double max_var = variance_g0 > variance_g1 ? variance_g0 : variance_g1;
-                if (max_var > VAR_TH_FIDGET)
-                    g_current_state = STATE_FIDGET;
-                else
-                    g_current_state = STATE_NORMAL;
+        /* 如果连续 50 帧(5秒)都是这个判定结果，正式切换全局状态！ */
+        if (g_stable_counter >= 50) {
+            if (g_current_state != g_pending_state) {
+                LOG_INFO("<<< STATE CHANGED: %s -> %s >>> (5s stable)", 
+                         state_name(g_current_state), state_name(g_pending_state));
             }
+            g_current_state = g_pending_state;
+            
+            /* 防止计数器溢出，固定在一个安全值 */
+            g_stable_counter = 50; 
         }
 
         /* -- 步骤 8: 周期心跳日志 (每 ~1 秒), 便于观测内部状态 -- */
@@ -346,19 +277,18 @@ static void* radar_process_thread(void *arg)
             static int heartbeat = 0;
             if (++heartbeat >= 10) {
                 heartbeat = 0;
-                LOG_INFO("DIST:%d cm | TGT:%d | G0(m:%.1f s:%.1f v:%.1f) | G1(m:%.1f s:%.1f v:%.1f) | FSM:%s",
-                         radar_data.distance_cm, radar_data.has_target,
-                         radar_data.motion_energy_db[0], radar_data.static_energy_db[0], variance_g0,
-                         radar_data.motion_energy_db[1], radar_data.static_energy_db[1], variance_g1,
-                         state_name(g_current_state));
+                LOG_INFO("TGT:%d | 预测:[%d %d %d] | 多数决:%d | 稳定计数:%d/50 | 状态:%s",
+                         radar_data.has_target,
+                         count[0], count[1], count[2],
+                         majority_pred, g_stable_counter, state_name(g_current_state));
             }
         }
 
-        /* -- 步骤 9: 状态跃迁时输出日志并发送状态 -- */
+        /* -- 步骤 9: 状态发生改变时，推送给 Fusion 服务 -- */
         if (g_current_state != g_last_state) {
-            LOG_INFO("Radar FSM: %s -> %s (mean=%.1f dB, var=%.1f, dist=%d cm)",
+            LOG_INFO("Radar FSM: %s -> %s (dist=%d cm)",
                      state_name(g_last_state), state_name(g_current_state),
-                     mean, variance, radar_data.distance_cm);
+                     radar_data.distance_cm);
             send_radar_state(&radar_data);
             g_last_state = g_current_state;
         }
