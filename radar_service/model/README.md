@@ -72,12 +72,24 @@ make clean && make
 2. 进入编译输出目录 `out/bin`。
 3. 执行采集指令，语法为：`./radar_collect <标签> <持续帧数> <保存路径>`
    ```bash
-   # 录制标签为 0，持续 3000 帧（约 5 分钟），数据追加到 /tmp/radar_data.csv
-   ./radar_collect 0 3000 /tmp/radar_data.csv
+   # 录制标签为 0，持续 600 帧（约 2 分钟），数据追加保存到当前目录 (out/bin)
+   ./radar_collect 0 600 radar_data.csv
+   
+   # 录制标签为 1，持续 600 帧（约 2 分钟）
+   ./radar_collect 1 600 radar_data.csv
+   
+   # 录制标签为 2，持续 180 帧（约 30 秒）
+   ./radar_collect 2 180 radar_data.csv
    ```
-4. 站在座椅背后 5 分钟，让雷达收集特征。
-5. （可选）用同样的方法录制新的在座（标签 `1`）或乱动（标签 `2`）数据。
-6. 将板子上的 `/tmp/radar_data.csv` 拷贝回虚拟机，**把里面的数据行直接追加拷贝到** 您原本的 `model/radar_data.csv` 文件的末尾。
+4. 按照上述指令，分别在无人、在座、乱动时录制特征。
+5. （可选）录制多组不同姿态的数据，它会自动追加在同一个文件里。
+6. 将板子上的 `out/bin/radar_data.csv` 拷贝回虚拟机，**把里面的数据行直接追加拷贝到** 您原本的 `model/radar_data.csv` 文件的末尾。
 7. 回到上面的 **【极简工作流】** 重新训练一遍。
 
 **从此以后，您可以无限给模型“喂”数据，让它成为一个永远不会认错人的终极智能雷达！**
+
+收集数据用以下指令：
+
+./radar_collect 0 600 /tmp/radar_data.csv  无人
+./radar_collect 1 600 /tmp/radar_data.csv  有人
+./radar_collect 2 180 /tmp/radar_data.csv  乱动

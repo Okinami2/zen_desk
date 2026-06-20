@@ -24,8 +24,9 @@
 /* 新增模型相关全局变量 */
 static double g_features_window[WINDOW_SIZE][32]; // 保存过去10帧的32个通道数据
 static int g_model_preds[WINDOW_SIZE];            // 保存过去10帧的模型预测结果
-static int g_pending_state = 0;                   // 当前多数表决产生的候选状态
-static int g_stable_counter = 0;                  // 连续保持候选状态的帧数(5秒=50帧)
+static int g_current_state = -1;                  // 雷达当前锁定的全局状态
+static int g_last_state = -1;                     // 上一状态，用于检测跳变
+static int g_state_confidence[3] = {0, 0, 0};     // 漏桶积分置信度 (AWAY, NORMAL, FIDGET)
 
 /* ---- 判定阈值 ---- */
 #define ENERGY_TH_IN_G0    38.0  /* 入座的 G0(近距离门) 能量下限。必须大于 38 才能入座 */
@@ -58,10 +59,6 @@ static int    g_win_count = 0;
 /* 漏桶积分器 */
 static int g_count_in  = 0;
 static int g_count_out = 0;
-
-/* FSM 状态 */
-static PersonState g_current_state = STATE_AWAY;
-static PersonState g_last_state    = -1;
 
 /* TCP 连接 */
 static int g_sock_fd = -1;
@@ -171,12 +168,12 @@ static void* radar_process_thread(void *arg)
     g_win_idx = 0;
     g_win_count = 0;
     memset(g_features_window, 0, sizeof(g_features_window));
-    memset(g_model_preds, 0, sizeof(g_model_preds));
     g_count_in = 0;
-    g_count_out = 0;
-    g_pending_state = STATE_AWAY;
-    g_stable_counter = 0;
     g_current_state = STATE_AWAY;
+    g_last_state = STATE_AWAY;
+    g_state_confidence[0] = 0;
+    g_state_confidence[1] = 0;
+    g_state_confidence[2] = 0;
     g_last_state = STATE_AWAY;
     g_overlap_len = 0;
 
@@ -252,24 +249,58 @@ static void* radar_process_thread(void *arg)
         else if (count[2] > count[0] && count[2] > count[1]) majority_pred = 2;
         else majority_pred = 0;
 
-        /* -- 步骤 7: 连续 5 秒 (50 帧) 稳定判定逻辑 -- */
-        if (majority_pred == g_pending_state) {
-            g_stable_counter++;
-        } else {
-            g_pending_state = majority_pred;
-            g_stable_counter = 1;
+        /* -- 步骤 7: 积分漏桶与非对称状态机 (Asymmetric Leaky Bucket) -- */
+        int s;
+        for (s = 0; s < 3; s++) {
+            if (s == majority_pred) {
+                g_state_confidence[s] += 2; /* 预测对加2分 (漏桶注水) */
+            } else {
+                g_state_confidence[s] -= 1; /* 预测错缓慢扣1分 (漏桶漏水) */
+            }
+            /* 限制置信度在 0 ~ 200 之间 */
+            if (g_state_confidence[s] > 200) g_state_confidence[s] = 200;
+            if (g_state_confidence[s] < 0)   g_state_confidence[s] = 0;
         }
 
-        /* 如果连续 50 帧(5秒)都是这个判定结果，正式切换全局状态！ */
-        if (g_stable_counter >= 50) {
-            if (g_current_state != g_pending_state) {
-                LOG_INFO("<<< STATE CHANGED: %s -> %s >>> (5s stable)", 
-                         state_name(g_current_state), state_name(g_pending_state));
+        int next_state = g_current_state;
+
+        if (g_current_state == STATE_AWAY) {
+            /* 场景 1: 入座极快。只需要 15 帧 (1.5秒) * 2 = 30 分 */
+            if (g_state_confidence[STATE_NORMAL] >= 30) {
+                next_state = STATE_NORMAL;
             }
-            g_current_state = g_pending_state;
+        } 
+        else if (g_current_state == STATE_NORMAL) {
+            /* 场景 2: 离座极慢。需要 80 帧 (8.0秒) * 2 = 160 分 */
+            if (g_state_confidence[STATE_AWAY] >= 160) {
+                next_state = STATE_AWAY;
+            }
+            /* 场景 3: 乱动适中。需要 30 帧 (3.0秒) * 2 = 60 分 */
+            else if (g_state_confidence[STATE_FIDGET] >= 60) {
+                next_state = STATE_FIDGET;
+            }
+        }
+        else if (g_current_state == STATE_FIDGET) {
+            /* 场景 4: 恢复正常。需要 50 帧 (5.0秒) * 2 = 100 分 */
+            if (g_state_confidence[STATE_NORMAL] >= 100) {
+                next_state = STATE_NORMAL;
+            }
+            /* 场景 5: 乱动时直接离开 (极少数情况) */
+            else if (g_state_confidence[STATE_AWAY] >= 160) {
+                next_state = STATE_AWAY;
+            }
+        }
+
+        /* 执行状态切换 */
+        if (next_state != g_current_state) {
+            LOG_INFO("<<< STATE CHANGED: %s -> %s >>> (Leaky Bucket triggered)", 
+                     state_name(g_current_state), state_name(next_state));
             
-            /* 防止计数器溢出，固定在一个安全值 */
-            g_stable_counter = 50; 
+            /* 状态切换后，重置旧状态的置信度，并给新状态加上初始分数，防止反复横跳 */
+            g_state_confidence[g_current_state] = 0;
+            g_state_confidence[next_state] = 100; // 给新状态一个较高初始值，避免立刻跌落
+            
+            g_current_state = next_state;
         }
 
         /* -- 步骤 8: 周期心跳日志 (每 ~1 秒), 便于观测内部状态 -- */
@@ -277,10 +308,12 @@ static void* radar_process_thread(void *arg)
             static int heartbeat = 0;
             if (++heartbeat >= 10) {
                 heartbeat = 0;
-                LOG_INFO("TGT:%d | 预测:[%d %d %d] | 多数决:%d | 稳定计数:%d/50 | 状态:%s",
+                LOG_INFO("TGT:%d | 预测:[%d %d %d] | 多数决:%s | 置信度:[%d %d %d] | 状态:%s",
                          radar_data.has_target,
                          count[0], count[1], count[2],
-                         majority_pred, g_stable_counter, state_name(g_current_state));
+                         state_name(majority_pred), 
+                         g_state_confidence[0], g_state_confidence[1], g_state_confidence[2],
+                         state_name(g_current_state));
             }
         }
 
