@@ -92,31 +92,45 @@ static void* tcp_client_handler(void *arg)
                     fusion_send_ui_event(UI_EVENT_WAKEUP_ASR);
                     break;
                 case ASR_CMD_STUDY_START:
+                    g_fusion_service.current_state = STATE_FOCUSED;
+                    fs.duration_minutes = 0; // 默认正计时
+                    LOG_INFO("ASR overridden state to FOCUSED (Free)");
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_FREE);
+                    break;
                 case ASR_CMD_STUDY_RESUME:
                     g_fusion_service.current_state = STATE_FOCUSED;
-                    fs.duration_minutes = 0; // 默认或正计时
-                    LOG_INFO("ASR overridden state to FOCUSED");
+                    LOG_INFO("ASR overridden state to FOCUSED (Resume)");
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_RESUME);
                     break;
                 case ASR_CMD_STUDY_START_25:
                     g_fusion_service.current_state = STATE_FOCUSED;
                     fs.duration_minutes = 25;
                     LOG_INFO("ASR overridden state to FOCUSED (25 min)");
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_25);
                     break;
                 case ASR_CMD_STUDY_START_45:
                     g_fusion_service.current_state = STATE_FOCUSED;
                     fs.duration_minutes = 45;
                     LOG_INFO("ASR overridden state to FOCUSED (45 min)");
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_45);
                     break;
                 case ASR_CMD_STUDY_START_60:
                     g_fusion_service.current_state = STATE_FOCUSED;
                     fs.duration_minutes = 60;
                     LOG_INFO("ASR overridden state to FOCUSED (60 min)");
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_60);
                     break;
                 case ASR_CMD_STUDY_PAUSE:
+                    g_fusion_service.current_state = STATE_SEATED_IDLE;
+                    fs.duration_minutes = 0;
+                    LOG_INFO("ASR overridden state to IDLE (Pause)");
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_PAUSE);
+                    break;
                 case ASR_CMD_STUDY_STOP:
                     g_fusion_service.current_state = STATE_SEATED_IDLE;
                     fs.duration_minutes = 0;
-                    LOG_INFO("ASR overridden state to IDLE/PAUSE");
+                    LOG_INFO("ASR overridden state to IDLE (Stop)");
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_STOP);
                     break;
                 case ASR_CMD_LAMP_ON:
                     LOG_INFO("ASR requested Lamp ON");

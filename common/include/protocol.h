@@ -97,7 +97,15 @@ typedef enum {
     UI_EVENT_ASR_DONE = 0x02,        // 隐藏麦克风图标
     UI_EVENT_STATE_UPDATE = 0x03,    // 状态更新(携带FusionState)
     UI_EVENT_SHOW_DATA = 0x04,       // 显示数据页
-    UI_EVENT_SHOW_HOME = 0x05        // 显示主页
+    UI_EVENT_SHOW_HOME = 0x05,       // 显示主页
+    // 新增：精确动作类事件
+    UI_EVENT_ACTION_STUDY_START_25 = 0x11,
+    UI_EVENT_ACTION_STUDY_START_45 = 0x12,
+    UI_EVENT_ACTION_STUDY_START_60 = 0x13,
+    UI_EVENT_ACTION_STUDY_START_FREE = 0x14,
+    UI_EVENT_ACTION_STUDY_PAUSE = 0x15,
+    UI_EVENT_ACTION_STUDY_RESUME = 0x16,
+    UI_EVENT_ACTION_STUDY_STOP = 0x17
 } UiEventType;
 
 typedef struct {

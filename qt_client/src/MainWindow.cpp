@@ -170,6 +170,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     micIconLabel->move(width() - 80, height() - 80); // 右下角
     micIconLabel->hide();
 
+    // 左下角常驻 test 字样
+    QLabel *testLabel = new QLabel("test", this);
+    testLabel->setStyleSheet("color: rgba(255,255,255,100); font-size: 24px; font-weight: bold; background: transparent;");
+    testLabel->move(20, height() - 50); // 左下角
+    testLabel->show();
+
     micTimer = new QTimer(this);
     micTimer->setSingleShot(true);
     connect(micTimer, &QTimer::timeout, this, &MainWindow::hideMicIcon);
@@ -502,10 +508,9 @@ void MainWindow::onUdpReadyRead() {
                 micIconLabel->show();
                 micTimer->start(3000); // 3秒后自动隐藏
             } else if (msg.event_type == UI_EVENT_STATE_UPDATE) {
-                if (msg.state.current_state == STATE_FOCUSED && !inStudyMode) {
-                    closeActiveDialog(); // 若有弹窗先关闭
-                    startStudy(msg.state.duration_minutes > 0 ? msg.state.duration_minutes : -1);
-                } else if ((msg.state.current_state == STATE_SEATED_IDLE || msg.state.current_state == STATE_ABSENT) && inStudyMode) {
+                // 如果是被动状态更新（如雷达侦测离座），则进行相应处理
+                // 注意：由于引入了主动 ACTION，我们将专注于雷达被动退出，不再用 STATE_FOCUSED 触发开始，防止冲突
+                if ((msg.state.current_state == STATE_SEATED_IDLE || msg.state.current_state == STATE_ABSENT) && inStudyMode) {
                     stopStudy();
                 }
             } else if (msg.event_type == UI_EVENT_SHOW_DATA) {
@@ -515,6 +520,30 @@ void MainWindow::onUdpReadyRead() {
             } else if (msg.event_type == UI_EVENT_SHOW_HOME) {
                 if (!inStudyMode) {
                     showHome();
+                }
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_25) {
+                closeActiveDialog();
+                startStudy(25);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_45) {
+                closeActiveDialog();
+                startStudy(45);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_60) {
+                closeActiveDialog();
+                startStudy(60);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_FREE) {
+                closeActiveDialog();
+                startStudy(-1);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_PAUSE) {
+                if (inStudyMode) {
+                    studyPage->pauseTimer();
+                }
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_RESUME) {
+                if (inStudyMode) {
+                    studyPage->resumeTimer();
+                }
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_STOP) {
+                if (inStudyMode) {
+                    stopStudy();
                 }
             }
         }
