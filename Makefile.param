@@ -41,11 +41,11 @@ MPI_LIBS += $(REL_LIB)/libss_ir_auto.a
 MPI_LIBS += $(REL_LIB)/libss_acs.a
 MPI_LIBS += $(REL_LIB)/libss_acs.a
 MPI_LIBS += $(REL_LIB)/libsns_hy_s0603.a
-MPI_LIBS += $(REL_LIB)/libsns_os08a20.a
-MPI_LIBS += $(REL_LIB)/libsns_imx347_slave.a
-MPI_LIBS += $(REL_LIB)/libsns_os04a10.a
-MPI_LIBS += $(REL_LIB)/libsns_sc450ai.a
-MPI_LIBS += $(REL_LIB)/libsns_sc450ai_2l.a
+# MPI_LIBS += $(REL_LIB)/libsns_os08a20.a
+# MPI_LIBS += $(REL_LIB)/libsns_imx347_slave.a
+# MPI_LIBS += $(REL_LIB)/libsns_os04a10.a
+# MPI_LIBS += $(REL_LIB)/libsns_sc450ai.a
+# MPI_LIBS += $(REL_LIB)/libsns_sc450ai_2l.a
 
 endif
 

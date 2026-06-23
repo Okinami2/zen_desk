@@ -135,7 +135,9 @@ static void* ec11_poll_thread(void* arg) {
 
     // --- 旋钮状态机变量 ---
     int last_a = 1, last_b = 1;
-    int rotation_step = 0; // 0:静止(11), 1:A先拉低(逆时针), 2:B先拉低(顺时针)
+    // 0:静止(11), 1:A先拉低, 2:B先拉低, 3:A先拉低的谷底, 4:B先拉低的谷底
+    int rotation_step = 0; 
+    int b_went_low_during_press = 0; // 记录按键期间 B 相是否拉低过
 
     // --- 按键状态机变量 ---
     int last_sw = 1; // 假设默认上拉，未按为1，按下为0
@@ -149,50 +151,74 @@ static void* ec11_poll_thread(void* arg) {
         int b = read_gpio_level(g_fd_b);
         int sw = read_gpio_level(g_fd_sw);
 
+        // --- 原始电平抓取与打印 (调试去噪用) ---
+        static int last_raw_a = -1, last_raw_b = -1, last_raw_sw = -1;
+        if (a != last_raw_a || b != last_raw_b || sw != last_raw_sw) {
+            printf("[EC11 RAW] A:%d B:%d SW:%d | ms:%lld\n", a, b, sw, get_current_ms());
+            last_raw_a = a;
+            last_raw_b = b;
+            last_raw_sw = sw;
+        }
+
         // ----------------------------------------------------
-        // 1. 旋钮正交解码 (绝对状态机，无视轻微抖动)
-        // 标准 EC11 的两个引脚静止时都在定位点 (高电平 11)
+        // 1. 旋钮正交解码 (防抖动深谷状态机)
+        // 只有完整经历过 (1,1)->(A低或B低)->(0,0)->(1,1) 才算一次有效转动
         // ----------------------------------------------------
         if (a == 1 && b == 1) {
-            // 回到定位点，结算上一次的转动
-            if (rotation_step == 1) {
-                click_key(KEY_LEFT);  // A相先拉低，判定为逆时针/向左
-            } else if (rotation_step == 2) {
-                click_key(KEY_RIGHT); // B相先拉低，判定为顺时针/向右
+            if (rotation_step == 3) {
+                click_key(KEY_RIGHT);  // A先拉低，根据日志物理表现为顺时针
+            } else if (rotation_step == 4) {
+                click_key(KEY_LEFT);   // B先拉低，根据日志物理表现为逆时针
             }
-            rotation_step = 0; // 重置状态
+            rotation_step = 0; 
         } 
         else if (rotation_step == 0) {
-            // 刚离开定位点，记录谁先被拉低
-            if (a == 0 && last_a == 1 && b == 1) {
-                rotation_step = 1; // 标记A领先
-            } else if (b == 0 && last_b == 1 && a == 1) {
-                rotation_step = 2; // 标记B领先
-            }
+            if (a == 0 && b == 1) rotation_step = 1;
+            else if (b == 0 && a == 1) rotation_step = 2;
         }
+        else if (rotation_step == 1 && a == 0 && b == 0) {
+            rotation_step = 3;
+        }
+        else if (rotation_step == 2 && a == 0 && b == 0) {
+            rotation_step = 4;
+        }
+        
         last_a = a;
         last_b = b;
 
         // ----------------------------------------------------
-        // 2. 按键 SW 处理 (含软件消抖与长短按判定)
+        // 2. 串扰极度智能剥离与 SW 按键处理
+        // 现象：日志证明 A 相与 SW 引脚在硬件上存在严重短接/串扰！按下SW必导致A=0；A=0必导致SW=0。
+        // 破局：既然 A 和 SW 绑死了，我们就看 B！
+        // 如果在按键期间 B 一直是 1，说明是真实的按压。如果 B 变成了 0，说明是在转动！
         // ----------------------------------------------------
+        if (press_time > 0 && b == 0) {
+            b_went_low_during_press = 1;
+        }
+
         if (sw != last_sw) {
             sw_stable_cnt++;
-            // 连续 10 次 (10ms) 电平不翻转，才认为是有效电平变化，彻底过滤物理抖动
             if (sw_stable_cnt > 10) { 
                 if (sw == 0) {
                     // 按下事件确认
                     press_time = get_current_ms();
+                    // 初始化 B 相监控标志
+                    b_went_low_during_press = (b == 0) ? 1 : 0; 
                 } else {
                     // 抬起事件确认
                     long long duration = get_current_ms() - press_time;
-                    if (press_time > 0 && duration > 50) { // 剔除超短毛刺
-                        if (duration >= LONG_PRESS_MS) {
-                            LOG_INFO("[EC11] 长按触发 (%lld ms)", duration);
-                            click_key(KEY_ESC);
+                    if (press_time > 0 && duration > 50) { 
+                        // 如果按键期间 B 变过低电平，说明是转动带来的 A/SW 联动串扰！
+                        if (b_went_low_during_press) {
+                            LOG_INFO("[EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)");
                         } else {
-                            LOG_INFO("[EC11] 短按触发 (%lld ms)", duration);
-                            click_key(KEY_SPACE);
+                            if (duration >= LONG_PRESS_MS) {
+                                LOG_INFO("[EC11] 长按触发 (%lld ms)", duration);
+                                click_key(KEY_ESC);
+                            } else {
+                                LOG_INFO("[EC11] 短按触发 (%lld ms)", duration);
+                                click_key(KEY_SPACE);
+                            }
                         }
                     }
                     press_time = 0;

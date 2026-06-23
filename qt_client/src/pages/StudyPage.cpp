@@ -197,14 +197,11 @@ StudyPage::StudyPage(QWidget *parent) : QWidget(parent)
     pauseBtn = makeCtrlBtn("⏸  暂停", "rgba(255,255,255,0.10)"); // 移除局部声明
     stopBtn  = makeCtrlBtn("⏹  结束", "rgba(239,68,68,0.25)"); // 移除局部声明
 
-
     connect(pauseBtn, &QPushButton::clicked, this, [this](){
         if (timer->isActive()) {
-            timer->stop();
-            pauseBtn->setText("▶  继续");
+            pauseTimer();
         } else {
-            timer->start(1000);
-            pauseBtn->setText("⏸  暂停");
+            resumeTimer();
         }
     });
     connect(stopBtn, &QPushButton::clicked, this, &StudyPage::studyFinished);
@@ -281,6 +278,22 @@ void StudyPage::stopTimer()
     timeDisplay->setText("00:00");
     ring->setProgress(0.0);
     tipWidget->setVisible(false);
+}
+
+void StudyPage::pauseTimer()
+{
+    if (timer->isActive()) {
+        timer->stop();
+        pauseBtn->setText("▶  继续");
+    }
+}
+
+void StudyPage::resumeTimer()
+{
+    if (!timer->isActive() && (isCountdown ? seconds > 0 : true)) {
+        timer->start(1000);
+        pauseBtn->setText("⏸  暂停");
+    }
 }
 
 void StudyPage::tick()

@@ -21,6 +21,7 @@ extern LogLevel g_log_level;
     do { \
         if (g_log_level <= LOG_LEVEL_DEBUG) { \
             printf("[DEBUG][%s:%d] " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); \
+            fflush(stdout); \
         } \
     } while(0)
 
@@ -28,6 +29,7 @@ extern LogLevel g_log_level;
     do { \
         if (g_log_level <= LOG_LEVEL_INFO) { \
             printf("[INFO][%s:%d] " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); \
+            fflush(stdout); \
         } \
     } while(0)
 
@@ -35,6 +37,7 @@ extern LogLevel g_log_level;
     do { \
         if (g_log_level <= LOG_LEVEL_WARN) { \
             printf("[WARN][%s:%d] " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); \
+            fflush(stdout); \
         } \
     } while(0)
 
@@ -42,6 +45,7 @@ extern LogLevel g_log_level;
     do { \
         if (g_log_level <= LOG_LEVEL_ERROR) { \
             printf("[ERROR][%s:%d] " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); \
+            fflush(stdout); \
         } \
     } while(0)
 

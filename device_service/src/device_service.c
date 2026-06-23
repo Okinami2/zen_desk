@@ -11,8 +11,8 @@
 
 #define PWM_CHIP_PATH "/sys/class/pwm/pwmchip0/"
 #define PWM_PERIOD 1000000
-#define PWM_WARM_CHANNEL BOARD_PWM_LAMP_WARM_CHANNEL
-#define PWM_COLD_CHANNEL BOARD_PWM_LAMP_COLD_CHANNEL
+#define PWM_COLD_CHANNEL BOARD_PWM_LAMP_WARM_CHANNEL
+#define PWM_WARM_CHANNEL BOARD_PWM_LAMP_COLD_CHANNEL
 #define LAMP_TICK_US 30000
 #define BREATH_PERIOD_MS 10000
 
@@ -39,6 +39,14 @@ static LampScene g_target_scene = {0, 0.5f, LAMP_MODE_STATIC, 1500, 0};
 static int g_current_brightness = 0;
 static float g_current_color_ratio = 0.5f;
 static unsigned int g_breath_phase_ms = 0;
+
+/* 语音干预保护机制: 记录上次语音设置的状态 */
+static int g_voice_override = 0;
+static LampScene g_saved_voice_scene;
+
+/* 离座保护机制: 记录离座前的状态 */
+static int g_has_saved_radar_scene = 0;
+static LampScene g_saved_radar_scene;
 
 static int pwm_write(int channel, const char *node, int value) {
     char path[128];
@@ -87,6 +95,9 @@ static int pwm_enable(int channel, int enable) {
     return 0;
 }
 
+static int g_last_cold_duty = -1;
+static int g_last_warm_duty = -1;
+
 static int lamp_apply_pwm(int brightness, float color_ratio) {
     int cold_value;
     int warm_value;
@@ -111,11 +122,18 @@ static int lamp_apply_pwm(int brightness, float color_ratio) {
     cold_duty = PWM_PERIOD - cold_value;
     warm_duty = PWM_PERIOD - warm_value;
 
-    if (pwm_write(PWM_COLD_CHANNEL, "duty_cycle", cold_duty) != 0) {
-        return -1;
+    if (cold_duty != g_last_cold_duty) {
+        if (pwm_write(PWM_COLD_CHANNEL, "duty_cycle", cold_duty) != 0) {
+            return -1;
+        }
+        g_last_cold_duty = cold_duty;
     }
-    if (pwm_write(PWM_WARM_CHANNEL, "duty_cycle", warm_duty) != 0) {
-        return -1;
+    
+    if (warm_duty != g_last_warm_duty) {
+        if (pwm_write(PWM_WARM_CHANNEL, "duty_cycle", warm_duty) != 0) {
+            return -1;
+        }
+        g_last_warm_duty = warm_duty;
     }
 
     return 0;
@@ -331,12 +349,32 @@ void device_service_cleanup() {
 }
 
 void device_handle_fusion_state(const FusionState *state) {
+    if (g_device_service.current_state == state->current_state) {
+        return; /* 状态未改变，直接返回，避免被高频重复调用覆盖用户设置 */
+    }
+
     LOG_INFO("Received fusion state: %d", state->current_state);
 
     switch (state->current_state) {
         case STATE_SEATED_IDLE:
-            LOG_INFO("User is seated but idle, switching to reading light");
-            set_lamp_scene(70, 0.45f, LAMP_MODE_STATIC, 1800, 0);
+            if (g_has_saved_radar_scene) {
+                LOG_INFO("User is seated, restoring previous scene");
+                pthread_mutex_lock(&g_lamp_mutex);
+                g_target_scene = g_saved_radar_scene;
+                g_target_scene.transition_ms = 1800;
+                pthread_mutex_unlock(&g_lamp_mutex);
+                g_has_saved_radar_scene = 0;
+            } else if (g_voice_override) {
+                LOG_INFO("User is seated, restoring voice-configured lamp scene");
+                pthread_mutex_lock(&g_lamp_mutex);
+                g_target_scene = g_saved_voice_scene;
+                /* 入座点亮时加入平滑渐变效果 */
+                g_target_scene.transition_ms = 1800;
+                pthread_mutex_unlock(&g_lamp_mutex);
+            } else {
+                LOG_INFO("User is seated but idle, switching to reading light");
+                set_lamp_scene(70, 0.45f, LAMP_MODE_STATIC, 1800, 0);
+            }
             break;
 
         case STATE_FOCUSED:
@@ -355,8 +393,12 @@ void device_handle_fusion_state(const FusionState *state) {
             break;
 
         case STATE_ABSENT:
-            LOG_INFO("User is absent, fading lamp off");
-            set_lamp_scene(0, 0.45f, LAMP_MODE_STATIC, 10000, 0);
+            LOG_INFO("User is absent, turning lamp off in 2 seconds");
+            pthread_mutex_lock(&g_lamp_mutex);
+            g_saved_radar_scene = g_target_scene;
+            g_has_saved_radar_scene = 1;
+            pthread_mutex_unlock(&g_lamp_mutex);
+            set_lamp_scene(0, 0.45f, LAMP_MODE_STATIC, 2000, 0);
             break;
 
         default:
@@ -372,6 +414,10 @@ int device_control_lamp(uint8_t action, uint8_t brightness, uint16_t color_temp)
 
     if (action == 0) {
         set_lamp_scene(0, 0.45f, LAMP_MODE_STATIC, 2500, 0);
+        pthread_mutex_lock(&g_lamp_mutex);
+        g_voice_override = 1;
+        g_saved_voice_scene = g_target_scene;
+        pthread_mutex_unlock(&g_lamp_mutex);
         return 0;
     }
 
@@ -385,14 +431,46 @@ int device_control_lamp(uint8_t action, uint8_t brightness, uint16_t color_temp)
 
     if (action == 2) {
         set_lamp_scene(brightness, color_ratio, LAMP_MODE_BREATH, 1200, 8);
+        pthread_mutex_lock(&g_lamp_mutex);
+        g_voice_override = 1;
+        g_saved_voice_scene = g_target_scene;
+        pthread_mutex_unlock(&g_lamp_mutex);
         return 0;
     }
 
     if (action == 1) {
         set_lamp_scene(brightness, color_ratio, LAMP_MODE_STATIC, 1500, 0);
+        pthread_mutex_lock(&g_lamp_mutex);
+        g_voice_override = 1;
+        g_saved_voice_scene = g_target_scene;
+        pthread_mutex_unlock(&g_lamp_mutex);
         return 0;
     }
 
     LOG_WARN("Unknown lamp action: %d", action);
     return -1;
+}
+
+int device_adjust_lamp_brightness(int delta_percent) {
+    pthread_mutex_lock(&g_lamp_mutex);
+    
+    // 当前目标亮度百分比
+    int current_percent = (g_target_scene.brightness * 100) / PWM_PERIOD;
+    int new_percent = current_percent + delta_percent;
+    
+    if (new_percent < 0) new_percent = 0;
+    if (new_percent > 100) new_percent = 100;
+    
+    g_target_scene.brightness = (new_percent * PWM_PERIOD) / 100;
+    // 调整亮度时保持当前色温并切换为静态模式，快速过渡
+    g_target_scene.mode = LAMP_MODE_STATIC;
+    g_target_scene.transition_ms = 800; 
+    
+    g_voice_override = 1;
+    g_saved_voice_scene = g_target_scene;
+    
+    LOG_INFO("Lamp brightness adjusted to %d%%", new_percent);
+    
+    pthread_mutex_unlock(&g_lamp_mutex);
+    return 0;
 }

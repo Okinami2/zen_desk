@@ -7,6 +7,9 @@
 #include <QLabel>
 #include <QEvent>     // 补充必需的头文件
 #include <QKeyEvent>  // 补充必需的头文件
+#include <QUdpSocket>
+#include <QTimer>
+#include "protocol.h"
 
 // 定义四大交互层级
 enum InteractionLayer {
@@ -75,6 +78,9 @@ private slots:
     void stopStudy();
     void closeActiveDialog(); // 统一安全的弹窗清理函数
 
+    void onUdpReadyRead();
+    void hideMicIcon();
+
 private:
     QStackedWidget *stack;
 
@@ -117,6 +123,11 @@ private:
     // UI刷新辅助函数
     void updateWidgetFocusStyle(QWidget* w, bool focused, const QString& extraProp = "", bool extraVal = false);
     void handleDialogKey(int key);
+
+    // UDP & UI Events
+    QUdpSocket *udpSocket = nullptr;
+    QLabel *micIconLabel = nullptr;
+    QTimer *micTimer = nullptr;
 };
 
 #endif // MAINWINDOW_H

@@ -1,6 +1,6 @@
 #!/bin/sh
 # 慧学引擎 - 一键启动所有服务
-# 启动顺序: fusion(必须先起, 监听8888) → radar(连fusion) → vision(独立)
+# 启动顺序: fusion(必须先起, 监听8888) → radar/asr(连fusion) → vision(独立)
 
 set -e
 
@@ -12,11 +12,17 @@ PID_DIR="$PROJ_DIR/out/pid"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
-# 检查是否已启动
+# 检查是否已启动，清理僵尸 PID 文件
 if [ -f "$PID_DIR/fusion_service.pid" ]; then
-    echo "[WARN] fusion_service already running? pid=$(cat $PID_DIR/fusion_service.pid)"
-    echo "       If you want to restart, run stop_all.sh first."
-    exit 1
+    old_pid=$(cat "$PID_DIR/fusion_service.pid")
+    if kill -0 "$old_pid" 2>/dev/null; then
+        echo "[WARN] fusion_service already running? pid=$old_pid"
+        echo "       If you want to restart, run stop_all.sh first."
+        exit 1
+    else
+        echo "[INFO] Found stale fusion_service.pid, cleaning up..."
+        rm -f "$PID_DIR/"*.pid
+    fi
 fi
 
 echo "===== 慧学引擎 - 启动所有服务 ====="
@@ -44,11 +50,24 @@ echo $! > "$PID_DIR/radar_service.pid"
 sleep 1
 echo "       radar_service started (pid=$(cat $PID_DIR/radar_service.pid))"
 
+# ---- 3. asr_service (连接 fusion) ----
+echo "[3/4] Starting asr_service..."
+"$BIN_DIR/asr_service" \
+    >"$LOG_DIR/asr_service.log" 2>&1 &
+echo $! > "$PID_DIR/asr_service.pid"
+sleep 1
+echo "       asr_service started (pid=$(cat $PID_DIR/asr_service.pid))"
+
+# ---- 4. device_service (EC11旋钮等) ----
+echo "[4/4] Skipping standalone device_service (now embedded in fusion_service)..."
+
 echo ""
 echo "===== All services started ====="
 echo "  fusion:  pid=$(cat $PID_DIR/fusion_service.pid)  log=$LOG_DIR/fusion_service.log"
-echo "  radar:   pid=$(cat $PID_DIR/radar_service.pid)  log=$LOG_DIR/radar_service.log"
+echo "  radar:   pid=$(cat $PID_DIR/radar_service.pid)   log=$LOG_DIR/radar_service.log"
+echo "  asr:     pid=$(cat $PID_DIR/asr_service.pid)     log=$LOG_DIR/asr_service.log"
 echo ""
 echo "  Run 'tail -f $LOG_DIR/fusion_service.log' to watch fusion"
 echo "  Run 'tail -f $LOG_DIR/radar_service.log'  to watch radar"
+echo "  Run 'tail -f $LOG_DIR/asr_service.log'    to watch asr"
 echo "  Run 'scripts/stop_all.sh' to stop all services"

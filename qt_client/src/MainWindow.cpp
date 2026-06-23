@@ -20,6 +20,7 @@
 #include <QApplication>
 #include <QStyle>
 #include <QDebug>
+#include <QNetworkDatagram>
 
 // ════════════════════════════════════════════════════════════
 //  NavButton
@@ -160,6 +161,32 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
     // 全局接管事件：此句是突破“焦点陷阱”的核心！
     qApp->installEventFilter(this);
+
+    // ── UDP 监听与麦克风图标 ──────────────────────────────────────────────
+    micIconLabel = new QLabel("🎤", this);
+    micIconLabel->setFixedSize(60, 60);
+    micIconLabel->setAlignment(Qt::AlignCenter);
+    micIconLabel->setStyleSheet("background: rgba(30, 30, 46, 200); color: #4F46E5; font-size: 32px; border-radius: 30px; border: 2px solid #4F46E5;");
+    micIconLabel->move(width() - 80, height() - 80); // 右下角
+    micIconLabel->hide();
+
+    // 左下角常驻 test 字样
+    QLabel *testLabel = new QLabel("test", this);
+    testLabel->setStyleSheet("color: rgba(255,255,255,100); font-size: 24px; font-weight: bold; background: transparent;");
+    testLabel->move(20, height() - 50); // 左下角
+    testLabel->show();
+
+    micTimer = new QTimer(this);
+    micTimer->setSingleShot(true);
+    connect(micTimer, &QTimer::timeout, this, &MainWindow::hideMicIcon);
+
+    udpSocket = new QUdpSocket(this);
+    if (udpSocket->bind(QHostAddress::LocalHost, 8889)) {
+        qDebug() << "UDP socket bound to port 8889 successfully";
+        connect(udpSocket, &QUdpSocket::readyRead, this, &MainWindow::onUdpReadyRead);
+    } else {
+        qDebug() << "Failed to bind UDP socket to port 8889";
+    }
 
     showHome();
 }
@@ -464,6 +491,67 @@ void MainWindow::closeActiveDialog() {
         currentLayer = LAYER_HOME_FOCUS;
         updateWidgetFocusStyle(homePage->getEnterBtn(), true);
     }
+}
+// =======================================================
+
+// ==================== UDP 联动槽函数 ====================
+void MainWindow::onUdpReadyRead() {
+    while (udpSocket->hasPendingDatagrams()) {
+        QNetworkDatagram datagram = udpSocket->receiveDatagram();
+        QByteArray data = datagram.data();
+        if (data.size() == sizeof(UiEventMessage)) {
+            UiEventMessage msg;
+            memcpy(&msg, data.constData(), sizeof(msg));
+            
+            if (msg.event_type == UI_EVENT_WAKEUP_ASR) {
+                micIconLabel->raise();
+                micIconLabel->show();
+                micTimer->start(3000); // 3秒后自动隐藏
+            } else if (msg.event_type == UI_EVENT_STATE_UPDATE) {
+                // 如果是被动状态更新（如雷达侦测离座），则进行相应处理
+                // 注意：由于引入了主动 ACTION，我们将专注于雷达被动退出，不再用 STATE_FOCUSED 触发开始，防止冲突
+                if ((msg.state.current_state == STATE_SEATED_IDLE || msg.state.current_state == STATE_ABSENT) && inStudyMode) {
+                    stopStudy();
+                }
+            } else if (msg.event_type == UI_EVENT_SHOW_DATA) {
+                if (!inStudyMode) {
+                    showStats();
+                }
+            } else if (msg.event_type == UI_EVENT_SHOW_HOME) {
+                if (!inStudyMode) {
+                    showHome();
+                }
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_25) {
+                closeActiveDialog();
+                startStudy(25);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_45) {
+                closeActiveDialog();
+                startStudy(45);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_60) {
+                closeActiveDialog();
+                startStudy(60);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_FREE) {
+                closeActiveDialog();
+                startStudy(-1);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_PAUSE) {
+                if (inStudyMode) {
+                    studyPage->pauseTimer();
+                }
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_RESUME) {
+                if (inStudyMode) {
+                    studyPage->resumeTimer();
+                }
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_STOP) {
+                if (inStudyMode) {
+                    stopStudy();
+                }
+            }
+        }
+    }
+}
+
+void MainWindow::hideMicIcon() {
+    micIconLabel->hide();
 }
 // =======================================================
 

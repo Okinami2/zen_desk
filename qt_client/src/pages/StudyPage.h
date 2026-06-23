@@ -35,6 +35,8 @@ public:
 
     void startTimer(int minutes);   // <0 = 正计时
     void stopTimer();
+    void pauseTimer();
+    void resumeTimer();
 
     QPushButton* getPauseBtn() const { return pauseBtn; } // 新增 Getter
     QPushButton* getStopBtn() const { return stopBtn; }   // 新增 Getter

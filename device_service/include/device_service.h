@@ -36,4 +36,12 @@ void device_handle_fusion_state(const FusionState *state);
 // 控制台灯
 int device_control_lamp(uint8_t action, uint8_t brightness, uint16_t color_temp);
 
+/**
+ * @brief 相对调整台灯亮度
+ * 
+ * @param delta_percent 相对亮度调整百分比 (如 +20 或 -20)
+ * @return 0 成功, 其它 失败
+ */
+int device_adjust_lamp_brightness(int delta_percent);
+
 #endif // DEVICE_SERVICE_H
