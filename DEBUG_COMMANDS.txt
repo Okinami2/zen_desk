@@ -41,3 +41,6 @@ tail -f out/log/radar_service.log
 
 3.2 强杀并清理所有后台服务：
 ./scripts/stop_all.sh
+
+chmod +x /root/zen_desk/out/bin/*
+chmod +x /root/zen_desk/scripts/*

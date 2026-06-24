@@ -7,6 +7,7 @@
 #include <QPainterPath>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QScreen>
 #include <QFile>
 #include <QDialog>
 #include <QTabWidget>
@@ -163,11 +164,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     qApp->installEventFilter(this);
 
     // ── UDP 监听与麦克风图标 ──────────────────────────────────────────────
-    micIconLabel = new QLabel("🎤", this);
-    micIconLabel->setFixedSize(60, 60);
+    QRect screenRect = QApplication::primaryScreen()->geometry();
+    micIconLabel = new QLabel("Listening...", this);
+    micIconLabel->setFixedSize(160, 40);
     micIconLabel->setAlignment(Qt::AlignCenter);
-    micIconLabel->setStyleSheet("background: rgba(30, 30, 46, 200); color: #4F46E5; font-size: 32px; border-radius: 30px; border: 2px solid #4F46E5;");
-    micIconLabel->move(width() - 80, height() - 80); // 右下角
+    micIconLabel->setStyleSheet("background: rgba(30, 30, 46, 200); color: #4F46E5; font-size: 18px; border-radius: 20px; border: 2px solid #4F46E5;");
+    micIconLabel->move((screenRect.width() - 160) / 2, screenRect.height() - 120); // 绝对居中靠下
     micIconLabel->hide();
 
     // 左下角常驻 test 字样
@@ -510,7 +512,7 @@ void MainWindow::onUdpReadyRead() {
             } else if (msg.event_type == UI_EVENT_STATE_UPDATE) {
                 // 如果是被动状态更新（如雷达侦测离座），则进行相应处理
                 // 注意：由于引入了主动 ACTION，我们将专注于雷达被动退出，不再用 STATE_FOCUSED 触发开始，防止冲突
-                if ((msg.state.current_state == STATE_SEATED_IDLE || msg.state.current_state == STATE_ABSENT) && inStudyMode) {
+                if ((msg.state.current_state == STATE_ABSENT) && inStudyMode) {
                     stopStudy();
                 }
             } else if (msg.event_type == UI_EVENT_SHOW_DATA) {
