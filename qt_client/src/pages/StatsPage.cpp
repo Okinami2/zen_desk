@@ -192,7 +192,7 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
     tcLay->setContentsMargins(16, 0, 16, 0);
     QLabel *tcLabel = new QLabel("有效学习");
     tcLabel->setStyleSheet("font-size: 14px; color: #6366F1; background: transparent;");
-    QLabel *tcVal = new QLabel("3 小时 42 分");
+    tcVal = new QLabel("0 小时 0 分");
     tcVal->setStyleSheet("font-size: 20px; font-weight: 700; color: #4F46E5; background: transparent;");
     tcLay->addWidget(tcLabel);
     tcLay->addSpacing(8);
@@ -310,7 +310,7 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
     distTitle->setStyleSheet("font-size: 14px; color: #6B7280; background: transparent;");
     distLay->addWidget(distTitle);
 
-    auto makeDistRow = [](const QString &icon, const QString &label, const QString &val, const QColor &vc) -> QWidget* {
+    auto makeDistRow = [](const QString &icon, const QString &label, const QString &val, const QColor &vc, QLabel*& outLabel) -> QWidget* {
         QWidget *row = new QWidget();
         row->setStyleSheet("background: transparent;");
         QHBoxLayout *rl = new QHBoxLayout(row);
@@ -322,18 +322,18 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
         ico->setStyleSheet("font-size: 18px; background: #FEF3C7; border-radius: 8px;");
         QLabel *lbl = new QLabel(label);
         lbl->setStyleSheet("font-size: 14px; color: #6B7280; background: transparent;");
-        QLabel *v = new QLabel(val);
-        v->setStyleSheet(QString("font-size: 20px; font-weight: 700; color: %1; background: transparent;").arg(vc.name()));
+        outLabel = new QLabel(val);
+        outLabel->setStyleSheet(QString("font-size: 20px; font-weight: 700; color: %1; background: transparent;").arg(vc.name()));
         rl->addWidget(ico);
         rl->addWidget(lbl);
         rl->addStretch();
-        rl->addWidget(v);
+        rl->addWidget(outLabel);
         return row;
     };
 
-    distLay->addWidget(makeDistRow("😶", "发呆次数", "5 次", QColor(0xF5,0x9E,0x0B)));
-    distLay->addWidget(makeDistRow("⏱", "走神时长", "12 分钟", QColor(0xEF,0x44,0x44)));
-    distLay->addWidget(makeDistRow("🚶", "离座次数", "2 次", QColor(0x6B,0x72,0x80)));
+    distLay->addWidget(makeDistRow("😶", "发呆次数", "0 次", QColor(0xF5,0x9E,0x0B), distractedCountVal));
+    distLay->addWidget(makeDistRow("⏱", "走神时长", "0 分钟", QColor(0xEF,0x44,0x44), distractedTimeVal));
+    distLay->addWidget(makeDistRow("🚶", "离座次数", "0 次", QColor(0x6B,0x72,0x80), absentCountVal));
     rightLay->addWidget(distCard);
 
     rightLay->addStretch();
@@ -344,4 +344,22 @@ void StatsPage::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.fillRect(rect(), QColor(0xF4, 0xF5, 0xF7));
+}
+
+void StatsPage::updateStatsData(int totalSeconds, int absentCount, int distractedCount, int distractedSeconds)
+{
+    // Subtract distracted and absent times from total time? The user said "有效学习那里应该会吧走神时间减去".
+    // Currently, distractedSeconds and distractedCount are placeholders (0).
+    // Total seconds represents the time the timer was actively running (which means NOT auto-paused).
+    // So if distracted time is provided later, we subtract it here.
+    int effectiveSeconds = totalSeconds - distractedSeconds;
+    if (effectiveSeconds < 0) effectiveSeconds = 0;
+
+    int hours = effectiveSeconds / 3600;
+    int minutes = (effectiveSeconds % 3600) / 60;
+    
+    tcVal->setText(QString("%1 小时 %2 分").arg(hours).arg(minutes));
+    absentCountVal->setText(QString("%1 次").arg(absentCount));
+    distractedCountVal->setText(QString("%1 次").arg(distractedCount));
+    distractedTimeVal->setText(QString("%1 分钟").arg(distractedSeconds / 60));
 }

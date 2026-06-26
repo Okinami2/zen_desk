@@ -40,9 +40,16 @@ class StatsPage : public QWidget {
     Q_OBJECT
 public:
     explicit StatsPage(QWidget *parent = nullptr);
+    void updateStatsData(int totalSeconds, int absentCount, int distractedCount, int distractedSeconds);
 
 protected:
     void paintEvent(QPaintEvent *) override;
+
+private:
+    QLabel *tcVal;
+    QLabel *absentCountVal;
+    QLabel *distractedCountVal;
+    QLabel *distractedTimeVal;
 };
 
 #endif // STATSPAGE_H

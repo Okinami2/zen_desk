@@ -190,7 +190,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         qDebug() << "Failed to bind UDP socket to port 8889";
     }
 
+    // 初始化真实数据累计定时器
+    studyAccumulationTimer = new QTimer(this);
+    connect(studyAccumulationTimer, &QTimer::timeout, this, &MainWindow::onStudyAccumulationTick);
+    studyAccumulationTimer->start(1000); // 1秒触发一次
+
     showHome();
+}
+
+void MainWindow::onStudyAccumulationTick() {
+    // 只有在专注模式下，且没有被自动暂停（人在座位上），才进行有效学习时间的累加
+    if (inStudyMode && !isAutoPaused) {
+        effectiveStudySeconds++;
+    }
 }
 
 void MainWindow::setActiveNav(NavButton *active)
@@ -209,8 +221,14 @@ void MainWindow::showHome()
 void MainWindow::showStats()
 {
     if (inStudyMode) return;
+
+    // 在切入统计页面前，先把最新的真实数据灌入
+    statsPage->updateStatsData(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
+
     stack->setCurrentWidget(statsPage);
     setActiveNav(btnStats);
+    currentLayer = LAYER_HOME_BROWSE;
+    hideMicIcon();
 }
 
 // ── 专注设置弹窗（精心设计版） ────────────────────────────────────────────
@@ -512,8 +530,20 @@ void MainWindow::onUdpReadyRead() {
             } else if (msg.event_type == UI_EVENT_STATE_UPDATE) {
                 // 如果是被动状态更新（如雷达侦测离座），则进行相应处理
                 // 注意：由于引入了主动 ACTION，我们将专注于雷达被动退出，不再用 STATE_FOCUSED 触发开始，防止冲突
-                if ((msg.state.current_state == STATE_ABSENT) && inStudyMode) {
-                    stopStudy();
+                if (inStudyMode) {
+                    if (msg.state.current_state == STATE_ABSENT) {
+                        if (!isAutoPaused) {
+                            isAutoPaused = true;
+                            absentCount++;
+                            studyPage->pauseTimer();
+                        }
+                    } else if (msg.state.current_state == STATE_SEATED_IDLE || 
+                               msg.state.current_state == STATE_FOCUSED) {
+                        if (isAutoPaused) {
+                            isAutoPaused = false;
+                            studyPage->resumeTimer();
+                        }
+                    }
                 }
             } else if (msg.event_type == UI_EVENT_SHOW_DATA) {
                 if (!inStudyMode) {

@@ -128,6 +128,18 @@ private:
     QUdpSocket *udpSocket = nullptr;
     QLabel *micIconLabel = nullptr;
     QTimer *micTimer = nullptr;
+
+    // 真实数据统计变量
+    bool isAutoPaused = false;
+    int absentCount = 0;
+    int distractedCount = 0;
+    int distractedSeconds = 0;
+    int effectiveStudySeconds = 0;
+
+    QTimer *studyAccumulationTimer = nullptr;
+
+private slots:
+    void onStudyAccumulationTick();
 };
 
 #endif // MAINWINDOW_H

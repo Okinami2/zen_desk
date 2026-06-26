@@ -201,8 +201,8 @@ void Overlay::clicked()
     QMetaObject::activate(this, &staticMetaObject, 0, nullptr);
 }
 struct qt_meta_stringdata_MainWindow_t {
-    QByteArrayData data[11];
-    char stringdata0[126];
+    QByteArrayData data[12];
+    char stringdata0[150];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -221,13 +221,14 @@ QT_MOC_LITERAL(6, 63, 7), // "minutes"
 QT_MOC_LITERAL(7, 71, 9), // "stopStudy"
 QT_MOC_LITERAL(8, 81, 17), // "closeActiveDialog"
 QT_MOC_LITERAL(9, 99, 14), // "onUdpReadyRead"
-QT_MOC_LITERAL(10, 114, 11) // "hideMicIcon"
+QT_MOC_LITERAL(10, 114, 11), // "hideMicIcon"
+QT_MOC_LITERAL(11, 126, 23) // "onStudyAccumulationTick"
 
     },
     "MainWindow\0showHome\0\0showStats\0"
     "showStudySetupDialog\0startStudy\0minutes\0"
     "stopStudy\0closeActiveDialog\0onUdpReadyRead\0"
-    "hideMicIcon"
+    "hideMicIcon\0onStudyAccumulationTick"
 };
 #undef QT_MOC_LITERAL
 
@@ -237,7 +238,7 @@ static const uint qt_meta_data_MainWindow[] = {
        8,       // revision
        0,       // classname
        0,    0, // classinfo
-       9,   14, // methods
+      10,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -245,21 +246,23 @@ static const uint qt_meta_data_MainWindow[] = {
        0,       // signalCount
 
  // slots: name, argc, parameters, tag, flags
-       1,    0,   59,    2, 0x08 /* Private */,
-       3,    0,   60,    2, 0x08 /* Private */,
-       4,    0,   61,    2, 0x08 /* Private */,
-       5,    1,   62,    2, 0x08 /* Private */,
-       5,    0,   65,    2, 0x28 /* Private | MethodCloned */,
-       7,    0,   66,    2, 0x08 /* Private */,
-       8,    0,   67,    2, 0x08 /* Private */,
-       9,    0,   68,    2, 0x08 /* Private */,
-      10,    0,   69,    2, 0x08 /* Private */,
+       1,    0,   64,    2, 0x08 /* Private */,
+       3,    0,   65,    2, 0x08 /* Private */,
+       4,    0,   66,    2, 0x08 /* Private */,
+       5,    1,   67,    2, 0x08 /* Private */,
+       5,    0,   70,    2, 0x28 /* Private | MethodCloned */,
+       7,    0,   71,    2, 0x08 /* Private */,
+       8,    0,   72,    2, 0x08 /* Private */,
+       9,    0,   73,    2, 0x08 /* Private */,
+      10,    0,   74,    2, 0x08 /* Private */,
+      11,    0,   75,    2, 0x08 /* Private */,
 
  // slots: parameters
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void, QMetaType::Int,    6,
+    QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
@@ -284,6 +287,7 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 6: _t->closeActiveDialog(); break;
         case 7: _t->onUdpReadyRead(); break;
         case 8: _t->hideMicIcon(); break;
+        case 9: _t->onStudyAccumulationTick(); break;
         default: ;
         }
     }
@@ -318,13 +322,13 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 9)
+        if (_id < 10)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 9;
+        _id -= 10;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 9)
+        if (_id < 10)
             *reinterpret_cast<int*>(_a[0]) = -1;
-        _id -= 9;
+        _id -= 10;
     }
     return _id;
 }
