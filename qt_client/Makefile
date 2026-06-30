@@ -37,7 +37,7 @@ MOVE          = mv -f
 TAR           = tar -cf
 COMPRESS      = gzip -9f
 DISTNAME      = qt_client1.0.0
-DISTDIR = /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/.tmp/qt_client1.0.0
+DISTDIR = /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/.tmp/qt_client1.0.0
 LINK          = g++
 LFLAGS        = -Wl,-O1
 LIBS          = $(SUBLIBS) /usr/lib/x86_64-linux-gnu/libQt5Widgets.so /usr/lib/x86_64-linux-gnu/libQt5Gui.so /usr/lib/x86_64-linux-gnu/libQt5Network.so /usr/lib/x86_64-linux-gnu/libQt5Core.so -lGL -lpthread   
@@ -88,13 +88,15 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/qconfig.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_accessibility_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_bootstrap_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_charts.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_concurrent.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_concurrent_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_core.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_core_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_dbus.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_dbus_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designer.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designer_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designercomponents_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_devicediscovery_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_edid_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_egl_support_private.pri \
@@ -106,6 +108,8 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_glx_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_gui.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_gui_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_help.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_help_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_input_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_kms_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_linuxaccessibility_support_private.pri \
@@ -130,7 +134,12 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_theme_support_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uiplugin.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uitools.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uitools_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_vulkan_support_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkit.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkitwidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri \
@@ -193,13 +202,15 @@ Makefile: qt_client.pro /usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++/qmake.co
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/qconfig.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_accessibility_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_bootstrap_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_charts.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_concurrent.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_concurrent_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_core.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_core_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_dbus.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_dbus_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designer.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designer_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designercomponents_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_devicediscovery_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_edid_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_egl_support_private.pri \
@@ -211,6 +222,8 @@ Makefile: qt_client.pro /usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++/qmake.co
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_glx_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_gui.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_gui_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_help.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_help_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_input_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_kms_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_linuxaccessibility_support_private.pri \
@@ -235,7 +248,12 @@ Makefile: qt_client.pro /usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++/qmake.co
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_theme_support_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uiplugin.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uitools.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uitools_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_vulkan_support_private.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkit.pri \
+		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkitwidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri \
@@ -281,13 +299,15 @@ Makefile: qt_client.pro /usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++/qmake.co
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/qconfig.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_accessibility_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_bootstrap_private.pri:
-/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_charts.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_concurrent.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_concurrent_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_core.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_core_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_dbus.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_dbus_private.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designer.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designer_private.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_designercomponents_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_devicediscovery_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_edid_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_egl_support_private.pri:
@@ -299,6 +319,8 @@ Makefile: qt_client.pro /usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++/qmake.co
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_glx_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_gui.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_gui_private.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_help.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_help_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_input_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_kms_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_linuxaccessibility_support_private.pri:
@@ -323,7 +345,12 @@ Makefile: qt_client.pro /usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++/qmake.co
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_theme_support_private.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uiplugin.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uitools.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_uitools_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_vulkan_support_private.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkit.pri:
+/usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkitwidgets.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets_private.pri:
 /usr/lib/x86_64-linux-gnu/qt5/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri:
@@ -550,7 +577,7 @@ moc_MainWindow.cpp: src/MainWindow.h \
 		../common/include/protocol.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/MainWindow.h -o moc_MainWindow.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/MainWindow.h -o moc_MainWindow.cpp
 
 moc_HomePage.cpp: src/pages/HomePage.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtWidgets/QWidget \
@@ -668,7 +695,7 @@ moc_HomePage.cpp: src/pages/HomePage.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtGui/qicon.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/HomePage.h -o moc_HomePage.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/HomePage.h -o moc_HomePage.cpp
 
 moc_StatsPage.cpp: src/pages/StatsPage.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtWidgets/QWidget \
@@ -780,7 +807,7 @@ moc_StatsPage.cpp: src/pages/StatsPage.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtCore/QVector \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatsPage.h -o moc_StatsPage.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatsPage.h -o moc_StatsPage.cpp
 
 moc_StudyPage.cpp: src/pages/StudyPage.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtWidgets/QWidget \
@@ -903,7 +930,7 @@ moc_StudyPage.cpp: src/pages/StudyPage.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtGui/qicon.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StudyPage.h -o moc_StudyPage.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StudyPage.h -o moc_StudyPage.cpp
 
 moc_MockFusionClient.cpp: src/services/MockFusionClient.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtCore/QObject \
@@ -965,7 +992,7 @@ moc_MockFusionClient.cpp: src/services/MockFusionClient.h \
 		/usr/include/x86_64-linux-gnu/qt5/QtCore/QString \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/services/MockFusionClient.h -o moc_MockFusionClient.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/services/MockFusionClient.h -o moc_MockFusionClient.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
