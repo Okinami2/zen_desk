@@ -34,7 +34,7 @@
 #define SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX    0
 #define SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX    1
 #define SAMPLE_SVP_NPU_GAZE_MODEL_IDX        2
-#define SAMPLE_SVP_ENABLE_GAZE_MODEL         1
+#define SAMPLE_SVP_ENABLE_GAZE_MODEL         0
 
 #if SAMPLE_SVP_ENABLE_GAZE_MODEL
 #define SAMPLE_SVP_NPU_ACTIVE_TASK_NUM       3
@@ -2109,7 +2109,7 @@ static td_s32 sample_svp_estimate_head_from_landmarks(const sample_svp_landmark1
     }
 
     yaw_norm = (nose_x - eye_mid_x) / eye_dist;
-    pose->yaw_deg = sample_svp_clamp_f32(yaw_norm * 75.0f,
+    pose->yaw_deg = sample_svp_clamp_f32(-yaw_norm * 75.0f,
         -SAMPLE_SVP_HEAD_YAW_LIMIT_DEG, SAMPLE_SVP_HEAD_YAW_LIMIT_DEG);
 
     pitch_ratio = (nose_y - eye_mid_y) / eye_to_mouth;

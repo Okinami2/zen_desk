@@ -22,7 +22,7 @@ import numpy as np
 
 DEFAULT_ONNX = (
     r"D:\PycharmProjects\zen_desk\models"
-    r"\gaze-estimation-adas-0002_60x60_fp32_op12.onnx"
+    r"\gaze_estimation.onnx"
 )
 
 
