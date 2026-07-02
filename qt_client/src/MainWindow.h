@@ -143,6 +143,10 @@ private:
     int distractedSeconds = 0;
     int effectiveStudySeconds = 0;
 
+    bool isDistracted = false;
+    int lastBlinkCount = -1;
+    qint64 lastBlinkTime = 0;
+
     QTimer *studyAccumulationTimer = nullptr;
 
 private slots:

@@ -6,6 +6,7 @@
 
 #include <QPainter>
 #include <QPainterPath>
+#include <QDateTime>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScreen>
@@ -213,6 +214,9 @@ void MainWindow::onStudyAccumulationTick() {
     // 只有在专注模式下，且没有被自动暂停（人在座位上），才进行有效学习时间的累加
     if (inStudyMode && !isAutoPaused) {
         effectiveStudySeconds++;
+        if (isDistracted) {
+            distractedSeconds++;
+        }
     }
 }
 
@@ -564,9 +568,45 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     const float yaw = static_cast<float>(obj.value("yaw").toDouble(0.0));
     const float pitch = static_cast<float>(obj.value("pitch").toDouble(0.0));
     const float roll = static_cast<float>(obj.value("roll").toDouble(0.0));
+    const bool yawning = obj.value("yawning").toBool(false);
+    const int blink_count = obj.value("blink_count").toInt(0);
 
     statusPage->setFacePresent(hasFace, score);
     statusPage->setAttention(attention, yaw, pitch, roll);
+
+    if (inStudyMode) {
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (lastBlinkCount == -1 || blink_count != lastBlinkCount) {
+            lastBlinkCount = blink_count;
+            lastBlinkTime = now;
+        }
+
+        bool currentlyDistracted = false;
+        if (attention == "left" || attention == "right" || attention == "up" || attention == "down") {
+            currentlyDistracted = true;
+        } else if (attention == "front") {
+            if (yawning) {
+                currentlyDistracted = true;
+            } else if (lastBlinkTime > 0 && (now - lastBlinkTime) >= 10000) {
+                currentlyDistracted = true;
+            }
+        }
+
+        if (currentlyDistracted && !isDistracted) {
+            distractedCount++;
+        }
+        isDistracted = currentlyDistracted;
+
+        if (isDistracted) {
+            statusPage->setFusionState(STATE_DISTRACTED, score);
+        } else if (!isAutoPaused) {
+            statusPage->setFusionState(STATE_FOCUSED, score);
+        }
+    } else {
+        isDistracted = false;
+        lastBlinkCount = -1;
+        lastBlinkTime = 0;
+    }
 }
 
 // ==================== UDP 联动槽函数 ====================
