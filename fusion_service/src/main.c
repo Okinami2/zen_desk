@@ -42,6 +42,7 @@ int main(int argc, char *argv[]) {
 
     // 主循环
     while (!g_exit) {
+        fusion_service_broadcast_state();
         sleep(1);
     }
 

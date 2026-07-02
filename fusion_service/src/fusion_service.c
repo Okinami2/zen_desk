@@ -387,3 +387,25 @@ int fusion_send_state(const FusionState *state) {
     }
     return 0;
 }
+
+void fusion_service_broadcast_state() {
+    if (g_udp_fd < 0) return;
+    
+    FusionState fs;
+    memset(&fs, 0, sizeof(fs));
+    
+    pthread_mutex_lock(&g_fusion_service.mutex);
+    fs.current_state = g_fusion_service.current_state;
+    fs.state_score = g_fusion_service.latest_radar.radar_quality > 0 ? g_fusion_service.latest_radar.radar_quality : 1.0f;
+    fs.intervention_level = 0;
+    fs.duration_minutes = 0;
+    fs.timestamp = time(NULL);
+    pthread_mutex_unlock(&g_fusion_service.mutex);
+    
+    UiEventMessage msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.event_type = UI_EVENT_STATE_UPDATE;
+    msg.state = fs;
+    
+    sendto(g_udp_fd, &msg, sizeof(msg), 0, (struct sockaddr*)&g_udp_addr, sizeof(g_udp_addr));
+}
