@@ -194,11 +194,11 @@ static const td_char *vision_debug_attention_label(const sample_svp_frame_result
     if (result->gaze.pitch_deg < -15.0f) {
         return "up";
     }
-    if (result->gaze.yaw_deg > 18.0f) {
-        return "right";
-    }
-    if (result->gaze.yaw_deg < -18.0f) {
+    if (result->gaze.yaw_deg > 12.0f) {
         return "left";
+    }
+    if (result->gaze.yaw_deg < -12.0f) {
+        return "right";
     }
     return "front";
 }
