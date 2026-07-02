@@ -155,6 +155,7 @@ static void* ec11_poll_thread(void* arg) {
         static int last_raw_a = -1, last_raw_b = -1, last_raw_sw = -1;
         if (a != last_raw_a || b != last_raw_b || sw != last_raw_sw) {
             printf("[EC11 RAW] A:%d B:%d SW:%d | ms:%lld\n", a, b, sw, get_current_ms());
+            fflush(stdout);
             last_raw_a = a;
             last_raw_b = b;
             last_raw_sw = sw;
