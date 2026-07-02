@@ -82,6 +82,7 @@ private slots:
 
     void onUdpReadyRead();
     void hideMicIcon();
+    void sendTcpCommand(uint8_t cmd_id);
 
 private:
     QStackedWidget *stack;

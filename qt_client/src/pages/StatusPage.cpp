@@ -134,7 +134,7 @@ void StatusPage::setFusionState(LearningState state, float score)
 
 QString StatusPage::attentionText(const QString &attention) const
 {
-    if (attention == "front") return "看前方";
+    if (attention == "front") return "桌面学习区";
     if (attention == "left") return "左偏";
     if (attention == "right") return "右偏";
     if (attention == "up") return "抬头";

@@ -1460,6 +1460,12 @@ MainWindow.o: src/MainWindow.cpp src/MainWindow.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcborcommon.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qregularexpression.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/quuid.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork/QTcpSocket \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork/qtcpsocket.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QtEndian \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qendian.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qfloat16.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QDateTime \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QJsonObject \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qjsonobject.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork/QNetworkDatagram \

@@ -23,6 +23,9 @@
 #include <QStyle>
 #include <QDebug>
 #include <QJsonDocument>
+#include <QTcpSocket>
+#include <QtEndian>
+#include <QDateTime>
 #include <QJsonObject>
 #include <QNetworkDatagram>
 #include <cstring>
@@ -164,10 +167,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(homePage, &HomePage::enterStudyRequested, this, &MainWindow::showStudySetupDialog);
 
     // StudyPage 完成信号
-    connect(studyPage, &StudyPage::studyFinished, this, &MainWindow::stopStudy);
-
-    // ... 原构造函数结尾 ...
-    connect(studyPage, &StudyPage::studyFinished, this, &MainWindow::stopStudy);
+    connect(studyPage, &StudyPage::studyFinished, this, [this]() {
+        sendTcpCommand(ASR_CMD_STUDY_STOP);
+    });
 
     // 全局接管事件：此句是突破“焦点陷阱”的核心！
     qApp->installEventFilter(this);
@@ -437,8 +439,13 @@ void MainWindow::showStudySetupDialog()
 
     connect(startBtn, &QPushButton::clicked, this, [this]() {
         int min = (dialogActiveTab == 0) ? *activeSelectedMin : -1;
-        closeActiveDialog();
-        startStudy(min);
+        
+        uint8_t cmd = ASR_CMD_STUDY_START; // default free study
+        if (min == 25) cmd = ASR_CMD_STUDY_START_25;
+        else if (min == 45) cmd = ASR_CMD_STUDY_START_45;
+        else if (min == 60) cmd = ASR_CMD_STUDY_START_60;
+        
+        sendTcpCommand(cmd);
     });
 
     QGraphicsOpacityEffect *eff = new QGraphicsOpacityEffect(activeDialogPanel);
@@ -640,6 +647,25 @@ void MainWindow::onUdpReadyRead() {
 
 void MainWindow::hideMicIcon() {
     micIconLabel->hide();
+}
+
+void MainWindow::sendTcpCommand(uint8_t cmd_id) {
+    QTcpSocket socket;
+    socket.connectToHost("127.0.0.1", 8888);
+    if (socket.waitForConnected(500)) {
+        uint32_t type = qToBigEndian<uint32_t>(MSG_ASR_COMMAND);
+        uint32_t len = qToBigEndian<uint32_t>(sizeof(AsrCommand));
+        AsrCommand cmd;
+        memset(&cmd, 0, sizeof(AsrCommand));
+        cmd.command_id = cmd_id;
+        cmd.timestamp = QDateTime::currentMSecsSinceEpoch();
+        
+        socket.write((const char*)&type, 4);
+        socket.write((const char*)&len, 4);
+        socket.write((const char*)&cmd, sizeof(AsrCommand));
+        socket.waitForBytesWritten(500);
+        socket.disconnectFromHost();
+    }
 }
 // =======================================================
 
