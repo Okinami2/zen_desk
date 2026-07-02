@@ -1,0 +1,135 @@
+hieulerpi1 ~/zen_desk # cat out/log/fusion_service.log
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/main.c:18] Fusion Service Starting...
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:284] Initializing fusion service...
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:259] Initializing device service...
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:243] [EC11] 正在初始化虚拟键盘...
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:281] [EC11] 虚拟键盘 ZenDesk_EC11_Knob 挂载成功！
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:293] Device service initialized
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:306] Fusion service initialized
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:311] Starting fusion service...
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:298] Starting device service...
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:318] Device service started
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:147] [EC11] 引脚 (A:71, B:72, SW:70) 监听中...
+[EC11 RAW] A:1 B:1 SW:1 | ms:3256152
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:329] Fusion service started
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:212] TCP server listening on :8888
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:55] TCP client thread started (fd=9)
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:75] Recv radar: presence=0, motion=0.00, dist=1.11 m
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:378] Fusion state: state=4, score=1.00, intervention=0, duration=0 min
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:55] TCP client thread started (fd=10)
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:75] Recv radar: presence=1, motion=0.30, dist=1.14 m
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:378] Fusion state: state=0, score=1.00, intervention=0, duration=0 min
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:356] Received fusion state: 0
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:375] User is seated but idle, switching to reading light
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:80] Recv ASR Command: 0x00
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:91] ASR Wakeup received, broadcasting to UI
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:80] Recv ASR Command: 0x00
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:91] ASR Wakeup received, broadcasting to UI
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:80] Recv ASR Command: 0x12
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:140] ASR requested Lamp OFF
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:80] Recv ASR Command: 0x11
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:136] ASR requested Lamp ON
+[EC11 RAW] A:0 B:1 SW:1 | ms:3301126
+[EC11 RAW] A:0 B:1 SW:0 | ms:3301127
+[EC11 RAW] A:0 B:0 SW:0 | ms:3301162
+[EC11 RAW] A:1 B:0 SW:1 | ms:3301188
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3301202
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:0 B:1 SW:0 | ms:3301667
+[EC11 RAW] A:1 B:1 SW:0 | ms:3301668
+[EC11 RAW] A:0 B:1 SW:0 | ms:3301669
+[EC11 RAW] A:0 B:0 SW:0 | ms:3301726
+[EC11 RAW] A:1 B:0 SW:1 | ms:3301757
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3301783
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:1 B:0 SW:1 | ms:3302650
+[EC11 RAW] A:0 B:0 SW:0 | ms:3302662
+[EC11 RAW] A:0 B:1 SW:0 | ms:3302668
+[EC11 RAW] A:1 B:1 SW:1 | ms:3302676
+[EC11] 发送按键事件 -> Code: 105
+[EC11 RAW] A:0 B:1 SW:0 | ms:3303983
+[EC11 RAW] A:0 B:0 SW:0 | ms:3304010
+[EC11 RAW] A:1 B:0 SW:1 | ms:3304023
+[EC11 RAW] A:1 B:1 SW:1 | ms:3304036
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:0 B:1 SW:0 | ms:3317840
+[EC11 RAW] A:0 B:0 SW:0 | ms:3317916
+[EC11 RAW] A:1 B:0 SW:1 | ms:3317937
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3317958
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:0 B:1 SW:0 | ms:3319244
+[EC11 RAW] A:0 B:0 SW:0 | ms:3319294
+[EC11 RAW] A:1 B:0 SW:1 | ms:3319310
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3319329
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:1 B:0 SW:1 | ms:3320338
+[EC11 RAW] A:0 B:0 SW:0 | ms:3320371
+[EC11 RAW] A:0 B:1 SW:0 | ms:3320403
+[EC11 RAW] A:1 B:1 SW:1 | ms:3320428
+[EC11] 发送按键事件 -> Code: 105
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:0 B:1 SW:0 | ms:3321145
+[EC11 RAW] A:0 B:0 SW:0 | ms:3321204
+[EC11 RAW] A:1 B:0 SW:1 | ms:3321218
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3321235
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:0 B:1 SW:0 | ms:3371169
+[EC11 RAW] A:0 B:0 SW:0 | ms:3371220
+[EC11 RAW] A:1 B:0 SW:1 | ms:3371234
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3371255
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:0 B:1 SW:0 | ms:3371275
+[EC11 RAW] A:1 B:1 SW:1 | ms:3371335
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:219] [EC11] 短按触发 (60 ms)
+[EC11] 发送按键事件 -> Code: 57
+[EC11 RAW] A:1 B:0 SW:1 | ms:3372142
+[EC11 RAW] A:0 B:0 SW:0 | ms:3372194
+[EC11 RAW] A:0 B:1 SW:0 | ms:3372234
+[EC11 RAW] A:1 B:1 SW:1 | ms:3372270
+[EC11] 发送按键事件 -> Code: 105
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:0 SW:1 | ms:3372765
+[EC11 RAW] A:0 B:0 SW:0 | ms:3372783
+[EC11 RAW] A:0 B:1 SW:0 | ms:3372793
+[EC11 RAW] A:1 B:1 SW:1 | ms:3372802
+[EC11] 发送按键事件 -> Code: 105
+[EC11 RAW] A:0 B:1 SW:0 | ms:3373856
+[EC11 RAW] A:0 B:0 SW:0 | ms:3373910
+[EC11 RAW] A:1 B:0 SW:1 | ms:3373926
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3373947
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:1 B:0 SW:1 | ms:3374382
+[EC11 RAW] A:0 B:0 SW:0 | ms:3374404
+[EC11 RAW] A:0 B:1 SW:0 | ms:3374423
+[EC11 RAW] A:1 B:1 SW:1 | ms:3374444
+[EC11] 发送按键事件 -> Code: 105
+[EC11 RAW] A:0 B:1 SW:0 | ms:3374771
+[EC11 RAW] A:0 B:0 SW:0 | ms:3374801
+[EC11 RAW] A:1 B:0 SW:1 | ms:3374813
+[EC11 RAW] A:1 B:1 SW:1 | ms:3374826
+[EC11] 发送按键事件 -> Code: 106
+[EC11 RAW] A:0 B:1 SW:0 | ms:3375754
+[EC11 RAW] A:1 B:1 SW:1 | ms:3377091
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:216] [EC11] 长按触发 (1337 ms)
+[EC11] 发送按键事件 -> Code: 1
+[EC11 RAW] A:0 B:1 SW:0 | ms:3377887
+[EC11 RAW] A:0 B:0 SW:0 | ms:3377979
+[EC11 RAW] A:1 B:0 SW:1 | ms:3378006
+[INFO][/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/ec11.c:213] [EC11] 按键被屏蔽 (检出旋转串扰，B相曾被拉低)
+[EC11 RAW] A:1 B:1 SW:1 | ms:3378032
+[EC11] 发送按键事件 -> Code: 106
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:75] Recv radar: presence=0, motion=0.00, dist=1.68 m
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:378] Fusion state: state=4, score=1.00, intervention=0, duration=0 min
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:356] Received fusion state: 4
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:396] User is absent, turning lamp off in 2 seconds
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:75] Recv radar: presence=1, motion=0.30, dist=1.00 m
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/fusion_service/src/fusion_service.c:378] Fusion state: state=0, score=1.00, intervention=0, duration=0 min
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:356] Received fusion state: 0
+[INFO][/home/okinami/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/device_service/src/device_service.c:361] User is seated, restoring previous scene
