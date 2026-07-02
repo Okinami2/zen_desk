@@ -169,6 +169,10 @@ static td_void vision_debug_send_telemetry(vision_debug_context *ctx,
     if (ctx->telemetry_enabled != TD_TRUE) {
         return;
     }
+    
+    // Print to stdout so user can collect the data from vision_service.log
+    fprintf(stdout, "TELEMETRY: %s", json);
+    
     sent = sendto(ctx->telemetry_fd, json, length, MSG_DONTWAIT,
         (const struct sockaddr *)&ctx->telemetry_addr, ctx->telemetry_addr_len);
     if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
