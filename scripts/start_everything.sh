@@ -24,7 +24,13 @@ trap cleanup EXIT INT TERM HUP
 echo ">>> [清理] 正在排查并清理上次可能遗留的僵尸进程..."
 "$SCRIPT_DIR/stop_all.sh" > /dev/null 2>&1 || true
 
-# 1. 启动视觉服务。vision_service 作为 MPP/NPU owner，需要先初始化屏幕。
+# 1. 应用引脚复用和设备驱动 (确保 Qt 启动前 EC11 旋钮已加载)
+echo ">>> [启动] 正在初始化引脚复用和设备驱动..."
+if ! "$PROJ_DIR/out/bin/pinmux_init" --apply > /dev/null 2>&1; then
+    echo "[WARN] pinmux_init 失败，EC11 可能无法使用"
+fi
+
+# 2. 启动视觉服务。vision_service 作为 MPP/NPU owner，需要先初始化屏幕。
 echo ">>> [启动] 正在启动视觉服务以初始化屏幕..."
 VISION_DISPLAY_ENABLE=1 \
 VISION_DISPLAY_READY_FILE="$VISION_DISPLAY_READY_FILE" \
