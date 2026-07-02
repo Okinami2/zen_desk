@@ -121,9 +121,6 @@ typedef struct {
     td_bool do_reset_controls;
 } uvc_ctrl_info;
 
-td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
-    td_u32 width, td_u32 height);
-
 #define UVC_LITE_MAX_BUFFERS 8
 
 typedef struct {
@@ -149,7 +146,7 @@ typedef struct {
 
 td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
     const td_char *dev_name, const td_char *type_name, td_u32 width, td_u32 height,
-    td_bool preview_enable);
+    td_bool mpp_attached);
 td_s32 sample_uvc_capture_read_frame(sample_uvc_capture_ctx *cap,
     ot_video_frame_info *frame, td_s32 timeout_ms);
 td_s32 sample_uvc_capture_release_frame(const ot_video_frame_info *frame);

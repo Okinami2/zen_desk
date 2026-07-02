@@ -55,6 +55,13 @@ typedef enum {
 - attention_region: 注意力区域
 - face_quality: 人脸质量
 
+**当前实现状态**:
+
+- 稳定主流程使用两级 NPU：`face_detection.om` + `landmark106.om`。
+- 注意力方向暂时由 106 点规则估计，不依赖第三个 gaze 模型。
+- telemetry/snapshot JSON 输出 `attention`，取值为 `front/left/right/up/down/eyes_closed/no_face/error`。
+- 第三个 gaze 模型仍保留调试代码，但默认不参与主流程；重新启用前必须先通过 `tools/compare_gaze_accuracy.py` 与原 ONNX 做一致性验证。
+
 ### 3.2 雷达服务
 
 **输入**: 毫米波雷达数据
@@ -93,8 +100,8 @@ typedef enum {
 ### 4.2 第二阶段：核心功能
 
 1. 完善人脸检测和跟踪
-2. 实现头姿估计
-3. 实现注意力区域判断
+2. 实现基于 106 点的头姿估计
+3. 实现稳定版注意力区域判断
 4. 实现雷达微动估计
 5. 完成四状态识别
 
@@ -104,6 +111,7 @@ typedef enum {
 2. 优化状态平滑逻辑
 3. 完善联动策略
 4. 开发Qt可视化界面
+5. 修复或替换第三个 gaze 模型，增强眼球方向判断
 
 ## 5. 测试方案
 

@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "pages/HomePage.h"
+#include "pages/StatusPage.h"
 #include "pages/StatsPage.h"
 #include "pages/StudyPage.h"
 
@@ -21,7 +22,10 @@
 #include <QApplication>
 #include <QStyle>
 #include <QDebug>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkDatagram>
+#include <cstring>
 
 // ════════════════════════════════════════════════════════════
 //  NavButton
@@ -126,20 +130,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     sideLay->addSpacing(24);
 
     btnHome   = new NavButton("○",  sidebar);
+    btnStatus = new NavButton("◉",  sidebar);
     btnStats  = new NavButton("▦",  sidebar);
 
     sideLay->addWidget(btnHome);
+    sideLay->addWidget(btnStatus);
     sideLay->addWidget(btnStats);
     sideLay->addStretch();
 
     // ── 内容区 ────────────────────────────────────────────────────────────
     stack = new QStackedWidget();
 
-    homePage  = new HomePage(this);
-    statsPage = new StatsPage(this);
-    studyPage = new StudyPage(this);
+    homePage   = new HomePage(this);
+    statusPage = new StatusPage(this);
+    statsPage  = new StatsPage(this);
+    studyPage  = new StudyPage(this);
 
     stack->addWidget(homePage);
+    stack->addWidget(statusPage);
     stack->addWidget(statsPage);
     stack->addWidget(studyPage);
 
@@ -149,6 +157,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
     // ── 信号连接 ──────────────────────────────────────────────────────────
     connect(btnHome,   &QPushButton::clicked, this, &MainWindow::showHome);
+    connect(btnStatus, &QPushButton::clicked, this, &MainWindow::showStatus);
     connect(btnStats,  &QPushButton::clicked, this, &MainWindow::showStats);
 
     // HomePage 中的"进入专注"按钮
@@ -207,7 +216,7 @@ void MainWindow::onStudyAccumulationTick() {
 
 void MainWindow::setActiveNav(NavButton *active)
 {
-    for (NavButton *b : {btnHome, btnStats})
+    for (NavButton *b : {btnHome, btnStatus, btnStats})
         b->setActive(b == active);
 }
 
@@ -229,6 +238,13 @@ void MainWindow::showStats()
     setActiveNav(btnStats);
     currentLayer = LAYER_HOME_BROWSE;
     hideMicIcon();
+}
+
+void MainWindow::showStatus()
+{
+    if (inStudyMode) return;
+    stack->setCurrentWidget(statusPage);
+    setActiveNav(btnStatus);
 }
 
 // ── 专注设置弹窗（精心设计版） ────────────────────────────────────────────
@@ -514,6 +530,38 @@ void MainWindow::closeActiveDialog() {
 }
 // =======================================================
 
+void MainWindow::handleFusionState(const FusionState &state)
+{
+    statusPage->setFusionState(state.current_state, state.state_score);
+    statusPage->setSeatPresent(state.current_state != STATE_ABSENT, 0.0f, state.state_score);
+}
+
+void MainWindow::handleVisionTelemetry(const QByteArray &data)
+{
+    QJsonParseError error;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+        return;
+    }
+
+    const QJsonObject obj = doc.object();
+    if (obj.contains("ok") && !obj.value("ok").toBool(true)) {
+        statusPage->setFacePresent(false, 0.0f);
+        statusPage->setAttention("error", 0.0f, 0.0f, 0.0f);
+        return;
+    }
+
+    const bool hasFace = obj.value("has_face").toBool(false);
+    const float score = static_cast<float>(obj.value("score").toDouble(0.0));
+    const QString attention = obj.value("attention").toString(hasFace ? "front" : "no_face");
+    const float yaw = static_cast<float>(obj.value("yaw").toDouble(0.0));
+    const float pitch = static_cast<float>(obj.value("pitch").toDouble(0.0));
+    const float roll = static_cast<float>(obj.value("roll").toDouble(0.0));
+
+    statusPage->setFacePresent(hasFace, score);
+    statusPage->setAttention(attention, yaw, pitch, roll);
+}
+
 // ==================== UDP 联动槽函数 ====================
 void MainWindow::onUdpReadyRead() {
     while (udpSocket->hasPendingDatagrams()) {
@@ -521,13 +569,16 @@ void MainWindow::onUdpReadyRead() {
         QByteArray data = datagram.data();
         if (data.size() == sizeof(UiEventMessage)) {
             UiEventMessage msg;
-            memcpy(&msg, data.constData(), sizeof(msg));
+            std::memcpy(&msg, data.constData(), sizeof(msg));
             
             if (msg.event_type == UI_EVENT_WAKEUP_ASR) {
                 micIconLabel->raise();
                 micIconLabel->show();
                 micTimer->start(3000); // 3秒后自动隐藏
+            } else if (msg.event_type == UI_EVENT_ASR_DONE) {
+                hideMicIcon();
             } else if (msg.event_type == UI_EVENT_STATE_UPDATE) {
+                handleFusionState(msg.state);
                 // 如果是被动状态更新（如雷达侦测离座），则进行相应处理
                 // 注意：由于引入了主动 ACTION，我们将专注于雷达被动退出，不再用 STATE_FOCUSED 触发开始，防止冲突
                 if (inStudyMode) {
@@ -578,6 +629,11 @@ void MainWindow::onUdpReadyRead() {
                     stopStudy();
                 }
             }
+            continue;
+        }
+
+        if (data.trimmed().startsWith('{')) {
+            handleVisionTelemetry(data);
         }
     }
 }
@@ -603,7 +659,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
                 // 【层级 1.1：主界浏览】
                 case LAYER_HOME_BROWSE:
                     if (key == Qt::Key_Left || key == Qt::Key_Right) {
-                        if (stack->currentWidget() == homePage) showStats();
+                        if (stack->currentWidget() == homePage) showStatus();
+                        else if (stack->currentWidget() == statusPage) showStats();
                         else showHome();
                     } else if (key == Qt::Key_Space) {
                         if (stack->currentWidget() == homePage) {

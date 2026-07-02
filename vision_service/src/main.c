@@ -78,11 +78,13 @@ static void vision_print_usage(const td_char *program)
         "  --format NAME             MJPEG/H264/H265/YUYV (default: %s)\n"
         "  --width N                 capture width (default: %u)\n"
         "  --height N                capture height (default: %u)\n"
-        "  --hdmi-preview            exclusive VPSS-to-HDMI preview\n"
         "  --telemetry IP:PORT       send per-frame JSON over UDP\n"
         "  --snapshot-dir PATH       save NV21, annotated PPM and JSON\n"
         "  --snapshot-every N        save every Nth frame (default: %u)\n"
-        "  --snapshot-limit N        maximum saved frames, 0=unlimited (default: %u)\n",
+        "  --snapshot-limit N        maximum saved frames, 0=unlimited (default: %u)\n"
+        "  --mpp-attached            use existing MPP SYS/VB owned by vo_init\n"
+        "  --display                 initialize HDMI VO/GFBG in this process\n"
+        "  --display-ready-file PATH write file after display is ready\n",
         program, VISION_UVC_DEV_PATH, VISION_UVC_PIX_FMT,
         VISION_UVC_WIDTH, VISION_UVC_HEIGHT,
         VISION_SNAPSHOT_EVERY, VISION_SNAPSHOT_LIMIT);
@@ -96,30 +98,37 @@ int main(int argc, char *argv[])
         .width = VISION_UVC_WIDTH,
         .height = VISION_UVC_HEIGHT,
         .capture_timeout_ms = VISION_UVC_TIMEOUT_MS,
-        .hdmi_preview = TD_FALSE,
         .telemetry_host = TD_NULL,
         .telemetry_port = VISION_TELEMETRY_PORT,
         .snapshot_dir = TD_NULL,
         .snapshot_every = VISION_SNAPSHOT_EVERY,
         .snapshot_limit = VISION_SNAPSHOT_LIMIT,
+        .mpp_attached = TD_FALSE,
+        .display_enable = TD_FALSE,
+        .display_ready_file = TD_NULL,
     };
     static const struct option options[] = {
         {"device", required_argument, TD_NULL, 'd'},
         {"format", required_argument, TD_NULL, 'f'},
         {"width", required_argument, TD_NULL, 'w'},
         {"height", required_argument, TD_NULL, 'h'},
-        {"hdmi-preview", no_argument, TD_NULL, 'p'},
         {"telemetry", required_argument, TD_NULL, 't'},
         {"snapshot-dir", required_argument, TD_NULL, 's'},
         {"snapshot-every", required_argument, TD_NULL, 'e'},
         {"snapshot-limit", required_argument, TD_NULL, 'l'},
+        {"mpp-attached", no_argument, TD_NULL, 'a'},
+        {"display", no_argument, TD_NULL, 'p'},
+        {"display-ready-file", required_argument, TD_NULL, 'r'},
         {"help", no_argument, TD_NULL, '?'},
         {TD_NULL, 0, TD_NULL, 0}
     };
     td_char *telemetry_endpoint = TD_NULL;
     td_s32 option;
 
-    while ((option = getopt_long(argc, argv, "d:f:w:h:pt:s:e:l:?", options, TD_NULL)) != -1) {
+    setvbuf(stdout, TD_NULL, _IONBF, 0);
+    setvbuf(stderr, TD_NULL, _IONBF, 0);
+
+    while ((option = getopt_long(argc, argv, "d:f:w:h:t:s:e:l:apr:?", options, TD_NULL)) != -1) {
         switch (option) {
             case 'd':
                 config.device_path = optarg;
@@ -138,9 +147,6 @@ int main(int argc, char *argv[])
                     fprintf(stderr, "invalid height: %s\n", optarg);
                     return 2;
                 }
-                break;
-            case 'p':
-                config.hdmi_preview = TD_TRUE;
                 break;
             case 't':
                 telemetry_endpoint = optarg;
@@ -165,6 +171,15 @@ int main(int argc, char *argv[])
                     fprintf(stderr, "invalid snapshot limit: %s\n", optarg);
                     return 2;
                 }
+                break;
+            case 'a':
+                config.mpp_attached = TD_TRUE;
+                break;
+            case 'p':
+                config.display_enable = TD_TRUE;
+                break;
+            case 'r':
+                config.display_ready_file = optarg;
                 break;
             default:
                 vision_print_usage(argv[0]);

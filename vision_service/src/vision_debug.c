@@ -131,6 +131,9 @@ td_void vision_debug_deinit(vision_debug_context *ctx)
     ctx->telemetry_enabled = TD_FALSE;
 }
 
+static const td_char *vision_debug_attention_label(const sample_svp_frame_result *result,
+    td_s32 infer_ret);
+
 static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
     td_u64 frame_id, const sample_svp_frame_result *result,
     td_s32 infer_ret, td_double inference_ms)
@@ -139,6 +142,7 @@ static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
         "{\"frame_id\":%llu,\"timestamp_ms\":%llu,\"ok\":%s,"
         "\"has_face\":%s,\"face\":[%.2f,%.2f,%.2f,%.2f],"
         "\"score\":%.5f,\"yaw\":%.3f,\"pitch\":%.3f,\"roll\":%.3f,"
+        "\"attention\":\"%s\","
         "\"eyes_closed\":%s,\"yawning\":%s,\"blink_count\":%u,"
         "\"yawn_count\":%u,\"inference_ms\":%.3f}\n",
         (unsigned long long)frame_id,
@@ -148,6 +152,7 @@ static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
         result->face.x1, result->face.y1, result->face.x2, result->face.y2,
         result->face.score, result->gaze.yaw_deg, result->gaze.pitch_deg,
         result->gaze.roll_deg,
+        vision_debug_attention_label(result, infer_ret),
         result->state_snapshot.eyes_closed == TD_TRUE ? "true" : "false",
         result->state_snapshot.yawning == TD_TRUE ? "true" : "false",
         result->state_snapshot.blink_count, result->state_snapshot.yawn_count,
@@ -169,6 +174,33 @@ static td_void vision_debug_send_telemetry(vision_debug_context *ctx,
     if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
         fprintf(stderr, "vision: UDP telemetry send failed: %s\n", strerror(errno));
     }
+}
+
+static const td_char *vision_debug_attention_label(const sample_svp_frame_result *result,
+    td_s32 infer_ret)
+{
+    if (infer_ret != TD_SUCCESS) {
+        return "error";
+    }
+    if (result == TD_NULL || result->has_face != TD_TRUE) {
+        return "no_face";
+    }
+    if (result->state_snapshot.eyes_closed == TD_TRUE) {
+        return "eyes_closed";
+    }
+    if (result->gaze.pitch_deg > 15.0f) {
+        return "down";
+    }
+    if (result->gaze.pitch_deg < -15.0f) {
+        return "up";
+    }
+    if (result->gaze.yaw_deg > 18.0f) {
+        return "right";
+    }
+    if (result->gaze.yaw_deg < -18.0f) {
+        return "left";
+    }
+    return "front";
 }
 
 static td_void vision_debug_set_rgb(td_u8 *rgb, td_u32 width, td_u32 height,

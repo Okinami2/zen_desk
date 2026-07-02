@@ -12,6 +12,7 @@
 #include "sample_comm.h"
 #include "sdk_module_init.h"
 #include "securec.h"
+#include "ot_osal_user.h"
 #include "ot_common_vb.h"
 #include "ot_common_video.h"
 #include "ot_common_sys.h"
@@ -126,7 +127,7 @@ static int init_sys_and_vb(void)
 
     vb_cfg.max_pool_cnt = 128;
     vb_cfg.common_pool[0].blk_size = get_vo_vb_blk_size(FB_WIDTH, FB_HEIGHT);
-    vb_cfg.common_pool[0].blk_cnt  = 6;
+    vb_cfg.common_pool[0].blk_cnt  = 12;
 
     ret = sample_comm_sys_init(&vb_cfg);
     if (ret != TD_SUCCESS) {
@@ -140,9 +141,76 @@ static int init_sys_and_vb(void)
     return 0;
 }
 
+static int init_vision_vdec_vb_pool(void)
+{
+    td_s32 ret;
+    sample_vdec_attr sample_vdec[OT_VDEC_MAX_CHN_NUM];
+
+    (td_void)memset_s(sample_vdec, sizeof(sample_vdec), 0, sizeof(sample_vdec));
+
+    sample_vdec[0].type = OT_PT_JPEG;
+    sample_vdec[0].width = FB_WIDTH;
+    sample_vdec[0].height = FB_HEIGHT;
+    sample_vdec[0].mode = OT_VDEC_SEND_MODE_FRAME;
+    sample_vdec[0].sample_vdec_video.dec_mode = OT_VIDEO_DEC_MODE_IP;
+    sample_vdec[0].sample_vdec_video.bit_width = OT_DATA_BIT_WIDTH_8;
+    sample_vdec[0].sample_vdec_video.ref_frame_num = 0;
+    sample_vdec[0].display_frame_num = 2;
+    sample_vdec[0].frame_buf_cnt = sample_vdec[0].display_frame_num + 1;
+    sample_vdec[0].sample_vdec_picture.pixel_format = OT_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
+    sample_vdec[0].sample_vdec_picture.alpha = 255;
+
+    ret = sample_comm_vdec_init_vb_pool(1, sample_vdec, OT_VDEC_MAX_CHN_NUM);
+    if (ret != TD_SUCCESS) {
+        printf("vision VDEC VB pool init failed: %#x\n", ret);
+        return -1;
+    }
+
+    printf("vision VDEC VB pool ready: MJPEG %ux%u frame_buf_cnt=%u\n",
+           FB_WIDTH, FB_HEIGHT, sample_vdec[0].frame_buf_cnt);
+    return 0;
+}
+
+static void deinit_vision_vdec_vb_pool(void)
+{
+    sample_comm_vdec_exit_vb_pool();
+}
+
 static void deinit_sys_and_vb(void)
 {
     sample_comm_sys_exit();
+}
+
+static td_bool env_flag_enabled(const char *name)
+{
+    const char *value = getenv(name);
+
+    if (value == NULL || value[0] == '\0') {
+        return TD_FALSE;
+    }
+    if (strcmp(value, "0") == 0 || strcmp(value, "false") == 0 ||
+        strcmp(value, "FALSE") == 0 || strcmp(value, "off") == 0 ||
+        strcmp(value, "OFF") == 0) {
+        return TD_FALSE;
+    }
+    return TD_TRUE;
+}
+
+static void init_attached_display_modules(void)
+{
+    int ret;
+
+    ret = osal_init();
+    printf("VO attached mode: osal_init ret=%#x\n", ret);
+    ret = ot_base_mod_init();
+    printf("VO attached mode: base init ret=%#x\n", ret);
+    ret = ot_sys_mod_init();
+    printf("VO attached mode: sys init ret=%#x\n", ret);
+    ret = ot_chnl_mod_init();
+    printf("VO attached mode: chnl init ret=%#x\n", ret);
+    ret = ot_vo_mod_init();
+    printf("VO attached mode: vo init ret=%#x\n", ret);
+    fflush(stdout);
 }
 
 static int start_hdmi_vo(void)
@@ -427,6 +495,10 @@ int main(int argc, char *argv[])
 {
     int ret = 0;
     int display_lock_fd;
+    td_bool sdk_inited = TD_FALSE;
+    td_bool sys_inited = TD_FALSE;
+    td_bool vision_vdec_pool_inited = TD_FALSE;
+    td_bool mpp_attached = env_flag_enabled("VO_MPP_ATTACHED");
     const char *ready_file = parse_ready_file(argc, argv);
 
     if (ready_file == (const char *)-1 || install_signal_handlers() != 0) {
@@ -438,17 +510,32 @@ int main(int argc, char *argv[])
     }
 
 #ifdef CONFIG_USER_SPACE
-    SDK_init();
+    if (mpp_attached != TD_TRUE) {
+        SDK_init();
+        sdk_inited = TD_TRUE;
+    } else {
+        printf("VO attached mode: using existing MPP SYS/VB owner; SDK/SYS init skipped\n");
+        init_attached_display_modules();
+    }
 #endif
 
-    ret = init_sys_and_vb();
-    if (ret != 0) {
-        goto exit_sdk;
+    if (mpp_attached != TD_TRUE) {
+        ret = init_sys_and_vb();
+        if (ret != 0) {
+            goto exit_sdk;
+        }
+        sys_inited = TD_TRUE;
+
+        ret = init_vision_vdec_vb_pool();
+        if (ret != 0) {
+            goto exit_sys;
+        }
+        vision_vdec_pool_inited = TD_TRUE;
     }
 
     ret = start_hdmi_vo();
     if (ret != 0) {
-        goto exit_sys;
+        goto exit_vdec_pool;
     }
 
     ret = open_and_config_fb0(&g_fb);
@@ -490,12 +577,21 @@ close_fb:
 stop_vo:
     stop_hdmi_vo();
 
+exit_vdec_pool:
+    if (vision_vdec_pool_inited == TD_TRUE) {
+        deinit_vision_vdec_vb_pool();
+    }
+
 exit_sys:
-    deinit_sys_and_vb();
+    if (sys_inited == TD_TRUE) {
+        deinit_sys_and_vb();
+    }
 
 exit_sdk:
 #ifdef CONFIG_USER_SPACE
-    SDK_exit();
+    if (sdk_inited == TD_TRUE) {
+        SDK_exit();
+    }
 #endif
     (void)flock(display_lock_fd, LOCK_UN);
     close(display_lock_fd);

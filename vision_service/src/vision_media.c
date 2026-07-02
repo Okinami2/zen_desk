@@ -6,25 +6,10 @@ ot_vb_src g_vdec_vb_source = OT_VB_SRC_MOD;
 #define REF_NUM 2
 #define DISPLAY_NUM 2
 
-#define UVC_MEDIA_ENABLE_VO 1
-
-static vdec_display_cfg g_vdec_display_cfg = {
-    .pic_size = PIC_1080P,
-    .intf_sync = OT_VO_OUT_1080P60,
-    .intf_type = OT_VO_INTF_HDMI,
-};
-
 static td_u32 g_input_width;
 static td_u32 g_input_height;
-static ot_size g_disp_size;
-static sample_vo_cfg g_vo_config;
 static td_bool g_is_need_vdec = TD_TRUE;
-static td_bool g_enable_vo = TD_FALSE;
-
-td_void sample_uvc_media_set_preview_enable(td_bool enable)
-{
-    g_enable_vo = enable;
-}
+static td_bool g_mpp_attached = TD_FALSE;
 
 static td_s32 uvc_media_init_module_vb(sample_vdec_attr *sample_vdec, td_u32 vdec_chn_num,
     ot_payload_type type, td_u32 len)
@@ -73,12 +58,6 @@ static td_s32 uvc_media_init_sys_and_vb(sample_vdec_attr *sample_vdec, td_u32 vd
     ot_vb_cfg vb_cfg;
     ot_pic_buf_attr buf_attr = {0};
     td_s32 ret;
-
-    ret = sample_comm_sys_get_pic_size(g_vdec_display_cfg.pic_size, &g_disp_size);
-    if (ret != TD_SUCCESS) {
-        sample_print("sys get pic size fail for %#x!\n", ret);
-        return ret;
-    }
 
     buf_attr.align = 0;
     buf_attr.bit_width = OT_DATA_BIT_WIDTH_8;
@@ -186,37 +165,9 @@ static td_void uvc_media_stop_vdec(td_u32 vdec_chn_num)
     }
 
     sample_comm_vdec_stop(vdec_chn_num);
-    sample_comm_vdec_exit_vb_pool();
-}
-
-static td_s32 uvc_media_config_vpss_ldy_attr(td_u32 vpss_grp_num)
-{
-    td_u32 i;
-    td_s32 ret;
-    ot_low_delay_info vpss_ldy_info;
-
-    if (g_enable_vo != TD_TRUE) {
-        return TD_SUCCESS;
+    if (g_mpp_attached != TD_TRUE) {
+        sample_comm_vdec_exit_vb_pool();
     }
-
-    for (i = 0; i < vpss_grp_num; i++) {
-        ret = ss_mpi_vpss_get_low_delay_attr(i, 0, &vpss_ldy_info);
-        if (ret != TD_SUCCESS) {
-            sample_print("vpss get low delay attr fail for %#x!\n", ret);
-            return ret;
-        }
-
-        vpss_ldy_info.enable = TD_TRUE;
-        vpss_ldy_info.line_cnt = g_disp_size.height / 4;
-
-        ret = ss_mpi_vpss_set_low_delay_attr(i, 0, &vpss_ldy_info);
-        if (ret != TD_SUCCESS) {
-            sample_print("vpss set low delay attr fail for %#x!\n", ret);
-            return ret;
-        }
-    }
-
-    return TD_SUCCESS;
 }
 
 static td_s32 uvc_media_start_vpss(ot_vpss_grp *vpss_grp, td_u32 vpss_grp_num,
@@ -230,23 +181,6 @@ static td_s32 uvc_media_start_vpss(ot_vpss_grp *vpss_grp, td_u32 vpss_grp_num,
     uvc_media_config_vpss_grp_attr(&vpss_grp_attr);
     (td_void)memset_s(vpss_chn_enable, arr_len * sizeof(td_bool), 0, arr_len * sizeof(td_bool));
     (td_void)memset_s(vpss_chn_attr, sizeof(vpss_chn_attr), 0, sizeof(vpss_chn_attr));
-
-    /* ch0: HDMI/VO 预览 */
-    if (g_enable_vo == TD_TRUE) {
-        vpss_chn_enable[0] = TD_TRUE;
-        vpss_chn_attr[0].width = g_disp_size.width;
-        vpss_chn_attr[0].height = g_disp_size.height;
-        vpss_chn_attr[0].chn_mode = OT_VPSS_CHN_MODE_USER;
-        vpss_chn_attr[0].compress_mode = OT_COMPRESS_MODE_NONE;
-        vpss_chn_attr[0].pixel_format = OT_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
-        vpss_chn_attr[0].frame_rate.src_frame_rate = -1;
-        vpss_chn_attr[0].frame_rate.dst_frame_rate = -1;
-        vpss_chn_attr[0].depth = 0;
-        vpss_chn_attr[0].mirror_en = TD_FALSE;
-        vpss_chn_attr[0].flip_en = TD_FALSE;
-        vpss_chn_attr[0].border_en = TD_FALSE;
-        vpss_chn_attr[0].aspect_ratio.mode = OT_ASPECT_RATIO_NONE;
-    }
 
     /* ch1: 应用层取处理后帧 */
     vpss_chn_enable[1] = TD_TRUE;
@@ -274,12 +208,6 @@ static td_s32 uvc_media_start_vpss(ot_vpss_grp *vpss_grp, td_u32 vpss_grp_num,
         }
     }
 
-    ret = uvc_media_config_vpss_ldy_attr(vpss_grp_num);
-    if (ret != TD_SUCCESS) {
-        uvc_media_stop_vpss(*vpss_grp, &vpss_chn_enable[0], OT_VPSS_MAX_CHN_NUM);
-        return ret;
-    }
-
     ret = uvc_media_vdec_bind_vpss(vpss_grp_num);
     if (ret != TD_SUCCESS) {
         uvc_media_vdec_unbind_vpss(vpss_grp_num);
@@ -288,81 +216,6 @@ static td_s32 uvc_media_start_vpss(ot_vpss_grp *vpss_grp, td_u32 vpss_grp_num,
 
     return ret;
 }
-
-#if (UVC_MEDIA_ENABLE_VO == 1)
-static td_s32 uvc_media_vpss_bind_vo(const sample_vo_cfg *vo_config, td_u32 vpss_grp_num)
-{
-    td_u32 i;
-    ot_vo_layer vo_layer = vo_config->vo_dev;
-    td_s32 ret = TD_SUCCESS;
-
-    for (i = 0; i < vpss_grp_num; i++) {
-        ret = sample_comm_vpss_bind_vo(i, 0, vo_layer, i);
-        if (ret != TD_SUCCESS) {
-            sample_print("vpss bind vo fail for %#x!\n", ret);
-            return ret;
-        }
-    }
-    return ret;
-}
-
-static td_s32 uvc_media_vpss_unbind_vo(td_u32 vpss_grp_num, const sample_vo_cfg *vo_config)
-{
-    td_u32 i;
-    ot_vo_layer vo_layer = vo_config->vo_dev;
-    td_s32 ret = TD_SUCCESS;
-
-    for (i = 0; i < vpss_grp_num; i++) {
-        ret = sample_comm_vpss_un_bind_vo(i, 0, vo_layer, i);
-        if (ret != TD_SUCCESS) {
-            sample_print("vpss unbind vo fail for %#x!\n", ret);
-        }
-    }
-    return ret;
-}
-
-static td_void uvc_media_get_default_vo_cfg(sample_vo_cfg *vo_config)
-{
-    vo_config->vo_dev = SAMPLE_VO_DEV_UHD;
-    vo_config->vo_intf_type = g_vdec_display_cfg.intf_type;
-    vo_config->intf_sync = g_vdec_display_cfg.intf_sync;
-    vo_config->pic_size = g_vdec_display_cfg.pic_size;
-    vo_config->bg_color = COLOR_RGB_BLUE;
-    vo_config->dis_buf_len = 3;
-    vo_config->dst_dynamic_range = OT_DYNAMIC_RANGE_SDR8;
-    vo_config->vo_mode = VO_MODE_1MUX;
-    vo_config->pix_format = OT_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
-    vo_config->disp_rect.x = 0;
-    vo_config->disp_rect.y = 0;
-    vo_config->disp_rect.width = g_disp_size.width;
-    vo_config->disp_rect.height = g_disp_size.height;
-    vo_config->image_size.width = g_disp_size.width;
-    vo_config->image_size.height = g_disp_size.height;
-    vo_config->vo_part_mode = OT_VO_PARTITION_MODE_SINGLE;
-    vo_config->compress_mode = OT_COMPRESS_MODE_NONE;
-}
-
-static td_s32 uvc_media_start_vo(sample_vo_cfg *vo_config, td_u32 vpss_grp_num)
-{
-    td_s32 ret;
-
-    uvc_media_get_default_vo_cfg(vo_config);
-
-    ret = sample_comm_vo_start_vo(vo_config);
-    if (ret != TD_SUCCESS) {
-        sample_print("start VO fail for %#x!\n", ret);
-        return ret;
-    }
-
-    ret = uvc_media_vpss_bind_vo(vo_config, vpss_grp_num);
-    if (ret != TD_SUCCESS) {
-        (td_void)uvc_media_vpss_unbind_vo(vpss_grp_num, vo_config);
-        sample_comm_vo_stop_vo(vo_config);
-    }
-
-    return ret;
-}
-#endif
 
 static ot_payload_type uvc_media_get_payload_type(const td_char *type_name)
 {
@@ -393,7 +246,24 @@ static td_void uvc_media_update_vdec_flag(const td_char *type_name)
     }
 }
 
-td_s32 sample_uvc_media_init(const td_char *type_name, td_u32 width, td_u32 height)
+static td_bool uvc_media_is_raw_frame_type(const td_char *type_name)
+{
+    if (type_name == TD_NULL) {
+        return TD_FALSE;
+    }
+
+    return (strcmp(type_name, "YUYV") == 0 ||
+        strcmp(type_name, "NV12") == 0 ||
+        strcmp(type_name, "NV21") == 0) ? TD_TRUE : TD_FALSE;
+}
+
+td_bool sample_uvc_media_direct_frame_enabled(td_void)
+{
+    return (g_mpp_attached == TD_TRUE && g_is_need_vdec == TD_FALSE) ? TD_TRUE : TD_FALSE;
+}
+
+td_s32 sample_uvc_media_init(const td_char *type_name, td_u32 width, td_u32 height,
+    td_bool mpp_attached)
 {
     td_s32 ret;
     td_u32 vdec_chn_num = 1;
@@ -405,8 +275,14 @@ td_s32 sample_uvc_media_init(const td_char *type_name, td_u32 width, td_u32 heig
 
     g_input_width = width;
     g_input_height = height;
+    g_mpp_attached = mpp_attached;
 
     uvc_media_update_vdec_flag(type_name);
+
+    if (g_mpp_attached == TD_TRUE && uvc_media_is_raw_frame_type(type_name) == TD_TRUE) {
+        sample_print("attached raw mode: direct UVC to NV21 VB frames, no VDEC/VPSS\n");
+        return TD_SUCCESS;
+    }
 
     if (g_is_need_vdec == TD_TRUE) {
         payload_type = uvc_media_get_payload_type(type_name);
@@ -415,9 +291,14 @@ td_s32 sample_uvc_media_init(const td_char *type_name, td_u32 width, td_u32 heig
         }
     }
 
-    ret = uvc_media_init_sys_and_vb(&sample_vdec[0], vdec_chn_num, payload_type, OT_VDEC_MAX_CHN_NUM);
-    if (ret != TD_SUCCESS) {
-        return ret;
+    if (g_mpp_attached == TD_TRUE) {
+        sample_print("attached mode: using existing SYS/VB and VDEC module VB pool\n");
+    } else {
+        ret = uvc_media_init_sys_and_vb(&sample_vdec[0], vdec_chn_num,
+            payload_type, OT_VDEC_MAX_CHN_NUM);
+        if (ret != TD_SUCCESS) {
+            return ret;
+        }
     }
 
     ret = uvc_media_start_vdec(&sample_vdec[0], vdec_chn_num, OT_VDEC_MAX_CHN_NUM);
@@ -430,28 +311,14 @@ td_s32 sample_uvc_media_init(const td_char *type_name, td_u32 width, td_u32 heig
         goto stop_vdec;
     }
 
-#if (UVC_MEDIA_ENABLE_VO == 1)
-    if (g_enable_vo == TD_TRUE) {
-        ret = uvc_media_start_vo(&g_vo_config, vpss_grp_num);
-        if (ret != TD_SUCCESS) {
-            goto stop_vpss;
-        }
-    }
-#endif
-
     return TD_SUCCESS;
 
-stop_vpss:
-#if (UVC_MEDIA_ENABLE_VO == 1)
-    (td_void)uvc_media_vpss_unbind_vo(vpss_grp_num, &g_vo_config);
-    sample_comm_vo_stop_vo(&g_vo_config);
-#endif
-    (td_void)uvc_media_vdec_unbind_vpss(vpss_grp_num);
-    uvc_media_stop_vpss(vpss_grp, &vpss_chn_enable[0], OT_VPSS_MAX_CHN_NUM);
 stop_vdec:
     uvc_media_stop_vdec(vdec_chn_num);
 stop_sys:
-    sample_comm_sys_exit();
+    if (g_mpp_attached != TD_TRUE) {
+        sample_comm_sys_exit();
+    }
     return TD_FAILURE;
 }
 
@@ -462,20 +329,18 @@ td_s32 sample_uvc_media_exit(td_void)
     ot_vpss_grp vpss_grp = 0;
     td_bool vpss_chn_enable[OT_VPSS_MAX_CHN_NUM] = {0};
 
-    vpss_chn_enable[0] = g_enable_vo;
-    vpss_chn_enable[1] = TD_TRUE;
-
-#if (UVC_MEDIA_ENABLE_VO == 1)
-    if (g_enable_vo == TD_TRUE) {
-        (td_void)uvc_media_vpss_unbind_vo(vpss_grp_num, &g_vo_config);
-        sample_comm_vo_stop_vo(&g_vo_config);
+    if (sample_uvc_media_direct_frame_enabled() == TD_TRUE) {
+        return TD_SUCCESS;
     }
-#endif
+
+    vpss_chn_enable[1] = TD_TRUE;
 
     (td_void)uvc_media_vdec_unbind_vpss(vpss_grp_num);
     uvc_media_stop_vpss(vpss_grp, &vpss_chn_enable[0], OT_VPSS_MAX_CHN_NUM);
     uvc_media_stop_vdec(vdec_chn_num);
-    sample_comm_sys_exit();
+    if (g_mpp_attached != TD_TRUE) {
+        sample_comm_sys_exit();
+    }
 
     return TD_SUCCESS;
 }
@@ -780,6 +645,183 @@ static td_s32 uvc_media_get_pixel_format(const td_char *type_name, ot_pixel_form
     return TD_SUCCESS;
 }
 
+static td_s32 uvc_media_yuyv_to_nv21_direct(const td_u8 *src, td_u32 size, td_u32 src_stride,
+    td_u32 width, td_u32 height, td_u8 *dst_y, td_u8 *dst_vu, td_u32 dst_y_stride,
+    td_u32 dst_vu_stride)
+{
+    td_u32 row;
+    td_u32 col;
+    td_u32 min_src_stride;
+
+    if (src == TD_NULL || dst_y == TD_NULL || dst_vu == TD_NULL ||
+        width == 0 || height == 0 || (width & 1) != 0 || (height & 1) != 0) {
+        return TD_FAILURE;
+    }
+
+    min_src_stride = width * 2;
+    if (src_stride < min_src_stride) {
+        src_stride = min_src_stride;
+    }
+    if ((td_u64)src_stride * height > size ||
+        dst_y_stride < width || dst_vu_stride < width) {
+        return TD_FAILURE;
+    }
+
+    for (row = 0; row < height; row++) {
+        const td_u8 *src_row = src + (td_u64)row * src_stride;
+        td_u8 *y_row = dst_y + (td_u64)row * dst_y_stride;
+        for (col = 0; col < width; col += 2) {
+            td_u32 off = col * 2;
+            y_row[col] = src_row[off];
+            y_row[col + 1] = src_row[off + 2];
+        }
+        if (dst_y_stride > width) {
+            (td_void)memset_s(y_row + width, dst_y_stride - width, 0, dst_y_stride - width);
+        }
+    }
+
+    for (row = 0; row < height / 2; row++) {
+        const td_u8 *src_row = src + (td_u64)(row * 2) * src_stride;
+        td_u8 *vu_row = dst_vu + (td_u64)row * dst_vu_stride;
+        for (col = 0; col < width; col += 2) {
+            td_u32 off = col * 2;
+            vu_row[col] = src_row[off + 3];
+            vu_row[col + 1] = src_row[off + 1];
+        }
+        if (dst_vu_stride > width) {
+            (td_void)memset_s(vu_row + width, dst_vu_stride - width, 128, dst_vu_stride - width);
+        }
+    }
+
+    return TD_SUCCESS;
+}
+
+static td_s32 uvc_media_semiplanar_to_nv21_direct(const td_u8 *src, td_u32 size, td_u32 src_stride,
+    td_u32 width, td_u32 height, td_bool src_is_nv21, td_u8 *dst_y, td_u8 *dst_vu,
+    td_u32 dst_y_stride, td_u32 dst_vu_stride)
+{
+    td_u32 row;
+    td_u32 col;
+    td_u64 y_size;
+    const td_u8 *src_uv;
+
+    if (src == TD_NULL || dst_y == TD_NULL || dst_vu == TD_NULL ||
+        width == 0 || height == 0 || (width & 1) != 0 || (height & 1) != 0) {
+        return TD_FAILURE;
+    }
+
+    if (src_stride < width) {
+        src_stride = width;
+    }
+    y_size = (td_u64)src_stride * height;
+    if (y_size + (td_u64)src_stride * height / 2 > size ||
+        dst_y_stride < width || dst_vu_stride < width) {
+        return TD_FAILURE;
+    }
+    src_uv = src + y_size;
+
+    for (row = 0; row < height; row++) {
+        errno_t ret = memcpy_s(dst_y + (td_u64)row * dst_y_stride, dst_y_stride,
+            src + (td_u64)row * src_stride, width);
+        if (ret != EOK) {
+            return TD_FAILURE;
+        }
+        if (dst_y_stride > width) {
+            (td_void)memset_s(dst_y + (td_u64)row * dst_y_stride + width,
+                dst_y_stride - width, 0, dst_y_stride - width);
+        }
+    }
+
+    for (row = 0; row < height / 2; row++) {
+        const td_u8 *src_row = src_uv + (td_u64)row * src_stride;
+        td_u8 *vu_row = dst_vu + (td_u64)row * dst_vu_stride;
+        if (src_is_nv21 == TD_TRUE) {
+            errno_t ret = memcpy_s(vu_row, dst_vu_stride, src_row, width);
+            if (ret != EOK) {
+                return TD_FAILURE;
+            }
+        } else {
+            for (col = 0; col < width; col += 2) {
+                vu_row[col] = src_row[col + 1];
+                vu_row[col + 1] = src_row[col];
+            }
+        }
+        if (dst_vu_stride > width) {
+            (td_void)memset_s(vu_row + width, dst_vu_stride - width, 128, dst_vu_stride - width);
+        }
+    }
+
+    return TD_SUCCESS;
+}
+
+static td_s32 uvc_media_copy_raw_to_nv21_frame(td_void *data, td_u32 size, td_u32 stride,
+    const ot_size *pic_size, const td_char *type_name, ot_video_frame_info *frame_info)
+{
+    td_u8 *src = (td_u8 *)data;
+    td_u8 *dst_y = frame_info->video_frame.virt_addr[0];
+    td_u8 *dst_vu = frame_info->video_frame.virt_addr[1];
+
+    if (strcmp(type_name, "YUYV") == 0) {
+        return uvc_media_yuyv_to_nv21_direct(src, size, stride, pic_size->width, pic_size->height,
+            dst_y, dst_vu, frame_info->video_frame.stride[0], frame_info->video_frame.stride[1]);
+    } else if (strcmp(type_name, "NV12") == 0) {
+        return uvc_media_semiplanar_to_nv21_direct(src, size, stride, pic_size->width, pic_size->height,
+            TD_FALSE, dst_y, dst_vu, frame_info->video_frame.stride[0], frame_info->video_frame.stride[1]);
+    } else if (strcmp(type_name, "NV21") == 0) {
+        return uvc_media_semiplanar_to_nv21_direct(src, size, stride, pic_size->width, pic_size->height,
+            TD_TRUE, dst_y, dst_vu, frame_info->video_frame.stride[0], frame_info->video_frame.stride[1]);
+    }
+
+    return TD_FAILURE;
+}
+
+td_s32 sample_uvc_media_build_direct_frame(td_void *data, td_u32 size, td_u32 stride,
+    const ot_size *pic_size, const td_char *type_name, ot_video_frame_info *frame)
+{
+    td_s32 ret;
+    ot_vb_blk vb_blk;
+    ot_pic_buf_attr buf_attr = {0};
+    ot_vb_calc_cfg calc_cfg = {0};
+    ot_video_frame_info frame_info = {0};
+
+    if (sample_uvc_media_direct_frame_enabled() != TD_TRUE ||
+        data == TD_NULL || pic_size == TD_NULL || type_name == TD_NULL || frame == TD_NULL) {
+        return TD_FAILURE;
+    }
+
+    uvc_media_buf_attr_init(pic_size, &buf_attr);
+    buf_attr.pixel_format = OT_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
+    ot_common_get_pic_buf_cfg(&buf_attr, &calc_cfg);
+
+    vb_blk = ss_mpi_vb_get_blk(OT_VB_INVALID_POOL_ID, calc_cfg.vb_size, TD_NULL);
+    if (vb_blk == OT_VB_INVALID_HANDLE) {
+        sample_print("direct frame get vb blk(size:%u) failed!\n", calc_cfg.vb_size);
+        return TD_FAILURE;
+    }
+
+    ret = uvc_media_prepare_frame_info(vb_blk, &buf_attr, &calc_cfg, &frame_info);
+    if (ret != TD_SUCCESS) {
+        (td_void)ss_mpi_vb_release_blk(vb_blk);
+        return ret;
+    }
+    frame_info.video_frame.pixel_format = OT_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
+
+    ret = uvc_media_copy_raw_to_nv21_frame(data, size, stride, pic_size, type_name, &frame_info);
+    (td_void)ss_mpi_sys_munmap(frame_info.video_frame.header_virt_addr[0], calc_cfg.vb_size);
+    frame_info.video_frame.header_virt_addr[0] = TD_NULL;
+    frame_info.video_frame.header_virt_addr[1] = TD_NULL;
+    frame_info.video_frame.virt_addr[0] = TD_NULL;
+    frame_info.video_frame.virt_addr[1] = TD_NULL;
+
+    if (ret != TD_SUCCESS) {
+        (td_void)ss_mpi_vb_release_blk(vb_blk);
+        return ret;
+    }
+
+    *frame = frame_info;
+    return TD_SUCCESS;
+}
+
 td_s32 sample_uvc_media_send_data(td_void *data, td_u32 size, td_u32 stride,
     const ot_size *pic_size, const td_char *type_name)
 {
@@ -855,13 +897,47 @@ td_s32 sample_uvc_media_get_frame(ot_video_frame_info *frame, td_s32 milli_sec)
         return TD_FAILURE;
     }
 
+    if (sample_uvc_media_direct_frame_enabled() == TD_TRUE) {
+        return TD_FAILURE;
+    }
+
     return ss_mpi_vpss_get_chn_frame(0, 1, frame, milli_sec);
+}
+
+static td_s32 uvc_media_release_direct_frame(const ot_video_frame_info *frame)
+{
+    td_phys_addr_t phys_addr;
+    ot_vb_blk vb_blk;
+
+    if (frame == TD_NULL) {
+        return TD_FAILURE;
+    }
+
+    phys_addr = frame->video_frame.header_phys_addr[0];
+    if (phys_addr == 0) {
+        phys_addr = frame->video_frame.phys_addr[0];
+    }
+    if (phys_addr == 0) {
+        return TD_FAILURE;
+    }
+
+    vb_blk = ss_mpi_vb_phys_addr_to_handle(phys_addr);
+    if (vb_blk == OT_VB_INVALID_HANDLE) {
+        sample_print("direct frame phys addr to vb handle failed\n");
+        return TD_FAILURE;
+    }
+
+    return ss_mpi_vb_release_blk(vb_blk);
 }
 
 td_s32 sample_uvc_media_release_frame(const ot_video_frame_info *frame)
 {
     if (frame == TD_NULL) {
         return TD_FAILURE;
+    }
+
+    if (sample_uvc_media_direct_frame_enabled() == TD_TRUE) {
+        return uvc_media_release_direct_frame(frame);
     }
 
     return ss_mpi_vpss_release_chn_frame(0, 1, frame);
