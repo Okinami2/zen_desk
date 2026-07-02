@@ -46,12 +46,12 @@
 #define SAMPLE_SVP_NPU_PATH_LEN              256
 #define SAMPLE_SVP_NPU_MAX_FACE_NUM          16
 
-#define SAMPLE_SVP_NPU_FACE_DET_MODEL_PATH   "./data/model/face_detection.om"
-#define SAMPLE_SVP_NPU_LANDMARK_MODEL_PATH   "./data/model/landmark106.om"
-#define SAMPLE_SVP_NPU_GAZE_MODEL_PATH       "./data/model/gaze.om"
+#define SAMPLE_SVP_NPU_FACE_DET_MODEL_PATH   "./vision_service/src/data/model/face_detection.om"
+#define SAMPLE_SVP_NPU_LANDMARK_MODEL_PATH   "./vision_service/src/data/model/landmark106.om"
+#define SAMPLE_SVP_NPU_GAZE_MODEL_PATH       "./vision_service/src/data/model/gaze.om"
 
-#define SAMPLE_SVP_LANDMARK_INPUT_BIN_PATH   "./data/input/landmark_input.bin"
-#define SAMPLE_SVP_GAZE_INPUT_BIN_PATH       "./data/input/gaze_input.bin"
+#define SAMPLE_SVP_LANDMARK_INPUT_BIN_PATH   "./vision_service/src/data/input/landmark_input.bin"
+#define SAMPLE_SVP_GAZE_INPUT_BIN_PATH       "./vision_service/src/data/input/gaze_input.bin"
 
 #define SAMPLE_SVP_EYE_CLOSED_TH      0.19f
 #define SAMPLE_SVP_MOUTH_OPEN_TH      0.28f
