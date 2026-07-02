@@ -1,5 +1,5 @@
 #!/bin/bash
-# 终极一键启动脚本：同时拉起后台所有服务（Fusion/Radar/ASR）和前台 UI 界面（屏幕/Qt）
+# 终极一键启动脚本：解决依赖死锁问题的完美启动顺序！
 
 set -e
 
@@ -8,8 +8,13 @@ PROJ_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/env.sh"
 VISION_DISPLAY_READY_FILE="${VISION_DISPLAY_READY_FILE:-$PROJ_DIR/out/run/vision_display.ready}"
 
+BIN_DIR="$PROJ_DIR/out/bin"
+LOG_DIR="$PROJ_DIR/out/log"
+PID_DIR="$PROJ_DIR/out/pid"
+mkdir -p "$LOG_DIR" "$PID_DIR"
+
 echo "================================================="
-echo "   Zen Desk - 全量服务启动脚本 (后台服务 + 屏幕UI)   "
+echo "   Zen Desk - 全量服务完美启动脚本 (彻底解决丢包和按键问题)   "
 echo "================================================="
 
 # 0. 注册退出回调：当用户按 Ctrl+C 时，自动帮用户把后台服务也停掉
@@ -24,51 +29,56 @@ trap cleanup EXIT INT TERM HUP
 echo ">>> [清理] 正在排查并清理上次可能遗留的僵尸进程..."
 "$SCRIPT_DIR/stop_all.sh" > /dev/null 2>&1 || true
 
-# 1. 应用引脚复用和设备驱动 (确保 Qt 启动前 EC11 旋钮已加载)
-echo ">>> [启动] 正在初始化引脚复用和设备驱动..."
-if ! "$PROJ_DIR/out/bin/pinmux_init" --apply > /dev/null 2>&1; then
-    echo "[WARN] pinmux_init 失败，EC11 可能无法使用"
+echo ">>> [第1步] 应用引脚复用和设备驱动..."
+if ! "$BIN_DIR/pinmux_init" --apply > /dev/null 2>&1; then
+    echo "[WARN] pinmux_init 失败，外设可能无法使用"
 fi
 
-# 2. 启动视觉服务。vision_service 作为 MPP/NPU owner，需要先初始化屏幕。
-echo ">>> [启动] 正在启动视觉服务以初始化屏幕..."
+echo ">>> [第2步] 启动视觉服务，初始化屏幕..."
 VISION_DISPLAY_ENABLE=1 \
 VISION_DISPLAY_READY_FILE="$VISION_DISPLAY_READY_FILE" \
 "$SCRIPT_DIR/start_vision.sh"
 
-echo ""
-echo ">>> [启动] 等待 vision 初始化屏幕..."
 attempt=0
 while [ ! -f "$VISION_DISPLAY_READY_FILE" ]; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 100 ]; then
-        echo "[ERROR] 等待屏幕初始化超时: $VISION_DISPLAY_READY_FILE" >&2
+        echo "[ERROR] 等待屏幕初始化超时!" >&2
         exit 1
     fi
     sleep 0.1
 done
+echo "       屏幕已就绪。"
 
-# 2. 检查 Qt 客户端可执行文件是否存在
+echo ">>> [第3步] 启动 Fusion 引擎 (建立 EC11 虚拟键盘 和 TCP 服务端)..."
+"$BIN_DIR/fusion_service" >"$LOG_DIR/fusion_service.log" 2>&1 &
+echo $! > "$PID_DIR/fusion_service.pid"
+# 必须等 fusion 完全启动，虚拟键盘设备 /proc/bus/input/devices 才会出现！
+sleep 1.5
+
 QT_BIN="${QT_BIN:-$PROJ_DIR/qt_client/qt_client}"
 if [ ! -x "$QT_BIN" ]; then
-    echo "[ERROR] 找不到编译好的 Qt 客户端可执行文件: $QT_BIN"
-    echo "        由于板子上可能没有交叉编译好的版本，您可以尝试运行："
-    echo "        $SCRIPT_DIR/run_qt_client.sh"
-    echo "        让板子自己进行本地编译。"
+    echo "[ERROR] 找不到 Qt 客户端: $QT_BIN"
     exit 1
 fi
 
-echo ">>> [启动] 屏幕已就绪，正在启动 UI 客户端..."
-# 放入后台，这样我们可以紧接着去启动雷达和融合服务
+echo ">>> [第4步] 屏幕与外设就绪，启动 Qt UI 客户端..."
 QT_BIN="$QT_BIN" "$SCRIPT_DIR/run_qt_fb.sh" "$@" &
 QT_PID=$!
+# 必须等 Qt 完全启动并绑定 8889 UDP 端口！
+sleep 1.5
 
-# 留出 1 秒钟给 Qt 客户端绑定 8889 UDP 端口
-sleep 1
+echo ">>> [第5步] Qt 准备就绪！启动雷达和语音引擎，触发首包状态下发..."
+"$BIN_DIR/radar_service" >"$LOG_DIR/radar_service.log" 2>&1 &
+echo $! > "$PID_DIR/radar_service.pid"
 
-echo ">>> [启动] UI 启动完毕，正在启动融合、雷达、语音等后台服务..."
-# 3. 启动后台服务 (vision 已经启动过了，所以 VISION_ENABLE=0)
-VISION_ENABLE=0 "$SCRIPT_DIR/start_all.sh"
+"$BIN_DIR/asr_service" >"$LOG_DIR/asr_service.log" 2>&1 &
+echo $! > "$PID_DIR/asr_service.pid"
 
-# 4. 等待 Qt 客户端退出 (防止脚本直接结束)
+echo ""
+echo "===== 🎉 所有服务启动完成，系统全状态运行中！ ====="
+echo "  Run 'tail -f $LOG_DIR/fusion_service.log' to watch fusion"
+echo "  按 Ctrl+C 或退出 UI 即可安全结束全部进程。"
+
+# 前台挂起，等待 Qt 退出
 wait $QT_PID
