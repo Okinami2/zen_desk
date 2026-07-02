@@ -40,7 +40,4 @@ void fusion_update_radar(const RadarState *state);
 // 发送融合状态
 int fusion_send_state(const FusionState *state);
 
-// 广播当前状态给UI (用于心跳同步)
-void fusion_service_broadcast_state();
-
 #endif // FUSION_SERVICE_H
