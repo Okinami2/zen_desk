@@ -658,7 +658,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
             switch (currentLayer) {
                 // 【层级 1.1：主界浏览】
                 case LAYER_HOME_BROWSE:
-                    if (key == Qt::Key_Left || key == Qt::Key_Right) {
+                    if (key == Qt::Key_Left) {
+                        if (stack->currentWidget() == homePage) showStats();
+                        else if (stack->currentWidget() == statusPage) showHome();
+                        else showStatus();
+                    } else if (key == Qt::Key_Right) {
                         if (stack->currentWidget() == homePage) showStatus();
                         else if (stack->currentWidget() == statusPage) showStats();
                         else showHome();

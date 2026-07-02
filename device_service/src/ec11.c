@@ -147,9 +147,19 @@ static void* ec11_poll_thread(void* arg) {
     LOG_INFO("[EC11] 引脚 (A:%s, B:%s, SW:%s) 监听中...", GPIO_EC11_A, GPIO_EC11_B, GPIO_EC11_SW);
 
     while (g_ec11_running) {
-        int a = read_gpio_level(g_fd_a);
-        int b = read_gpio_level(g_fd_b);
-        int sw = read_gpio_level(g_fd_sw);
+        int raw_a = read_gpio_level(g_fd_a);
+        int raw_b = read_gpio_level(g_fd_b);
+        int raw_sw = read_gpio_level(g_fd_sw);
+
+        // --- 软件消抖滤波 (应对雷达高频UART串扰) ---
+        static int a = 1, b = 1, sw = 1;
+        static int hist_a = 1, hist_b = 1, hist_sw = 1;
+        static int cnt_a = 0, cnt_b = 0, cnt_sw = 0;
+        const int DEBOUNCE = 3; // 3ms 消抖
+
+        if (raw_a == hist_a) { if (++cnt_a >= DEBOUNCE) a = raw_a; } else { cnt_a = 0; hist_a = raw_a; }
+        if (raw_b == hist_b) { if (++cnt_b >= DEBOUNCE) b = raw_b; } else { cnt_b = 0; hist_b = raw_b; }
+        if (raw_sw == hist_sw) { if (++cnt_sw >= DEBOUNCE) sw = raw_sw; } else { cnt_sw = 0; hist_sw = raw_sw; }
 
         // --- 原始电平抓取与打印 (调试去噪用) ---
         static int last_raw_a = -1, last_raw_b = -1, last_raw_sw = -1;
