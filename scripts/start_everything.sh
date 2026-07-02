@@ -24,26 +24,13 @@ trap cleanup EXIT INT TERM HUP
 echo ">>> [清理] 正在排查并清理上次可能遗留的僵尸进程..."
 "$SCRIPT_DIR/stop_all.sh" > /dev/null 2>&1 || true
 
-# 1. 启动后台服务。vision_service 作为 MPP/NPU owner，屏幕随后附着到它已初始化的 MPP。
-echo ">>> [启动] 正在启动后台服务引擎..."
+# 1. 启动视觉服务。vision_service 作为 MPP/NPU owner，需要先初始化屏幕。
+echo ">>> [启动] 正在启动视觉服务以初始化屏幕..."
 VISION_DISPLAY_ENABLE=1 \
 VISION_DISPLAY_READY_FILE="$VISION_DISPLAY_READY_FILE" \
-"$SCRIPT_DIR/start_all.sh"
+"$SCRIPT_DIR/start_vision.sh"
 
 echo ""
-echo ">>> [启动] 后台服务就绪，准备启动前台显示界面..."
-
-# 2. 检查 Qt 客户端可执行文件是否存在
-QT_BIN="${QT_BIN:-$PROJ_DIR/qt_client/qt_client}"
-if [ ! -x "$QT_BIN" ]; then
-    echo "[ERROR] 找不到编译好的 Qt 客户端可执行文件: $QT_BIN"
-    echo "        由于板子上可能没有交叉编译好的版本，您可以尝试运行："
-    echo "        $SCRIPT_DIR/run_qt_client.sh"
-    echo "        让板子自己进行本地编译。"
-    exit 1
-fi
-
-# 3. 等待 vision_service 初始化屏幕，然后启动 Qt UI 进程。
 echo ">>> [启动] 等待 vision 初始化屏幕..."
 attempt=0
 while [ ! -f "$VISION_DISPLAY_READY_FILE" ]; do
@@ -55,5 +42,27 @@ while [ ! -f "$VISION_DISPLAY_READY_FILE" ]; do
     sleep 0.1
 done
 
+# 2. 检查 Qt 客户端可执行文件是否存在
+QT_BIN="${QT_BIN:-$PROJ_DIR/qt_client/qt_client}"
+if [ ! -x "$QT_BIN" ]; then
+    echo "[ERROR] 找不到编译好的 Qt 客户端可执行文件: $QT_BIN"
+    echo "        由于板子上可能没有交叉编译好的版本，您可以尝试运行："
+    echo "        $SCRIPT_DIR/run_qt_client.sh"
+    echo "        让板子自己进行本地编译。"
+    exit 1
+fi
+
 echo ">>> [启动] 屏幕已就绪，正在启动 UI 客户端..."
-QT_BIN="$QT_BIN" "$SCRIPT_DIR/run_qt_fb.sh" "$@"
+# 放入后台，这样我们可以紧接着去启动雷达和融合服务
+QT_BIN="$QT_BIN" "$SCRIPT_DIR/run_qt_fb.sh" "$@" &
+QT_PID=$!
+
+# 留出 1 秒钟给 Qt 客户端绑定 8889 UDP 端口
+sleep 1
+
+echo ">>> [启动] UI 启动完毕，正在启动融合、雷达、语音等后台服务..."
+# 3. 启动后台服务 (vision 已经启动过了，所以 VISION_ENABLE=0)
+VISION_ENABLE=0 "$SCRIPT_DIR/start_all.sh"
+
+# 4. 等待 Qt 客户端退出 (防止脚本直接结束)
+wait $QT_PID
