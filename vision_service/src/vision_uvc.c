@@ -9,13 +9,6 @@
 #include "vision_media.h"
 #include "sdk_module_init.h"
 
-static volatile td_bool g_uvc_exit = TD_FALSE;
-
-static td_void uvc_lite_exit_signal_handler(td_s32 signal __attribute__((__unused__)))
-{
-    g_uvc_exit = TD_TRUE;
-}
-
 #ifndef V4L2_PIX_FMT_HEVC
 #define V4L2_PIX_FMT_HEVC v4l2_fourcc('H', 'E', 'V', 'C')
 #endif
@@ -208,122 +201,10 @@ static td_void uvc_lite_close(uvc_lite_ctx *ctx)
     }
 }
 
-static td_s32 uvc_lite_loop(uvc_lite_ctx *ctx, const td_char *type_name)
-{
-    struct v4l2_buffer buf;
-    ot_size pic_size;
-    fd_set fds;
-    struct timeval tv;
-    errno_t ret;
-
-    pic_size.width = ctx->width;
-    pic_size.height = ctx->height;
-
-    while (!g_uvc_exit) {
-        FD_ZERO(&fds);
-        FD_SET(ctx->fd, &fds);
-        tv.tv_sec = 2;
-        tv.tv_usec = 0;
-
-        if (select(ctx->fd + 1, &fds, TD_NULL, TD_NULL, &tv) <= 0) {
-            usleep(10000);
-            continue;
-        }
-
-        ret = memset_s(&buf, sizeof(buf), 0, sizeof(buf));
-        if (ret != EOK) {
-            return TD_FAILURE;
-        }
-
-        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = V4L2_MEMORY_MMAP;
-
-        if (uvc_lite_xioctl(ctx->fd, VIDIOC_DQBUF, &buf) < 0) {
-            usleep(10000);
-            continue;
-        }
-
-        if (sample_uvc_media_send_data(ctx->buffers[buf.index].start, buf.bytesused,
-            ctx->stride, &pic_size, type_name) != TD_SUCCESS) {
-            sample_print("sample_uvc_media_send_data failed\n");
-        }
-
-        (td_void)uvc_lite_xioctl(ctx->fd, VIDIOC_QBUF, &buf);
-    }
-
-    return TD_SUCCESS;
-}
-
-/* 最小入口：只做 HDMI 预览 */
-td_s32 sample_uvc_preview_run(const td_char *dev_name, const td_char *type_name,
-    td_u32 width, td_u32 height)
-{
-    uvc_lite_ctx ctx;
-    struct sigaction sig_exit = {0};
-    td_s32 ret;
-    errno_t sret;
-
-    sret = memset_s(&ctx, sizeof(ctx), 0, sizeof(ctx));
-    if (sret != EOK) {
-        return TD_FAILURE;
-    }
-    ctx.fd = -1;
-
-    sig_exit.sa_handler = uvc_lite_exit_signal_handler;
-    sigaction(SIGINT, &sig_exit, TD_NULL);
-    sigaction(SIGTERM, &sig_exit, TD_NULL);
-
-    ret = uvc_lite_open(&ctx, dev_name);
-    if (ret != TD_SUCCESS) {
-        return ret;
-    }
-
-    ret = uvc_lite_set_format(&ctx, type_name, width, height);
-    if (ret != TD_SUCCESS) {
-        uvc_lite_close(&ctx);
-        return ret;
-    }
-
-    ret = uvc_lite_reqbufs(&ctx, 4);
-    if (ret != TD_SUCCESS) {
-        uvc_lite_close(&ctx);
-        return ret;
-    }
-
-    ret = uvc_lite_queue_all(&ctx);
-    if (ret != TD_SUCCESS) {
-        uvc_lite_close(&ctx);
-        return ret;
-    }
-
-    ret = uvc_lite_stream_on(&ctx);
-    if (ret != TD_SUCCESS) {
-        uvc_lite_close(&ctx);
-        return ret;
-    }
-
-    ret = sample_uvc_media_init(type_name, ctx.width, ctx.height);
-    if (ret != TD_SUCCESS) {
-        uvc_lite_stream_off(&ctx);
-        uvc_lite_close(&ctx);
-        return ret;
-    }
-
-    ret = uvc_lite_loop(&ctx, type_name);
-
-    sample_uvc_media_stop_receive_data();
-    sample_uvc_media_exit();
-    uvc_lite_stream_off(&ctx);
-    uvc_lite_close(&ctx);
-
-    return ret;
-}
-
 td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
     const td_char *dev_name, const td_char *type_name, td_u32 width, td_u32 height,
-    td_bool preview_enable)
+    td_bool mpp_attached)
 {
-    sample_uvc_media_set_preview_enable(preview_enable);
     td_s32 ret;
     errno_t sret;
 
@@ -372,7 +253,7 @@ td_s32 sample_uvc_capture_open(sample_uvc_capture_ctx *cap,
         return ret;
     }
 
-    ret = sample_uvc_media_init(type_name, cap->uvc.width, cap->uvc.height);
+    ret = sample_uvc_media_init(type_name, cap->uvc.width, cap->uvc.height, mpp_attached);
     if (ret != TD_SUCCESS) {
         uvc_lite_stream_off(&cap->uvc);
         uvc_lite_close(&cap->uvc);
@@ -421,13 +302,22 @@ td_s32 sample_uvc_capture_read_frame(sample_uvc_capture_ctx *cap,
         return TD_FAILURE;
     }
 
-    sret = sample_uvc_media_send_data(cap->uvc.buffers[buf.index].start, buf.bytesused,
-        cap->uvc.stride, &pic_size, cap->type_name);
+    if (sample_uvc_media_direct_frame_enabled() == TD_TRUE) {
+        sret = sample_uvc_media_build_direct_frame(cap->uvc.buffers[buf.index].start, buf.bytesused,
+            cap->uvc.stride, &pic_size, cap->type_name, frame);
+    } else {
+        sret = sample_uvc_media_send_data(cap->uvc.buffers[buf.index].start, buf.bytesused,
+            cap->uvc.stride, &pic_size, cap->type_name);
+    }
 
     (td_void)uvc_lite_xioctl(cap->uvc.fd, VIDIOC_QBUF, &buf);
 
     if (sret != TD_SUCCESS) {
         return TD_FAILURE;
+    }
+
+    if (sample_uvc_media_direct_frame_enabled() == TD_TRUE) {
+        return TD_SUCCESS;
     }
 
     return sample_uvc_media_get_frame(frame, timeout_ms);

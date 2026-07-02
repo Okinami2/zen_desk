@@ -25,6 +25,10 @@ all: dirs services
 
 dirs:
 	@mkdir -p $(BIN_DIR) $(LIB_DIR) $(OBJ_DIR)
+	@if [ -d "$(REL_LIB)/svp_npu" ]; then \
+		mkdir -p "$(LIB_DIR)/svp_npu"; \
+		cp -P "$(REL_LIB)"/svp_npu/*.so* "$(LIB_DIR)/svp_npu/" 2>/dev/null || true; \
+	fi
 
 services: common $(APPS)
 

@@ -13,12 +13,14 @@ typedef struct {
     td_u32 width;
     td_u32 height;
     td_s32 capture_timeout_ms;
-    td_bool hdmi_preview;
     const td_char *telemetry_host;
     td_u16 telemetry_port;
     const td_char *snapshot_dir;
     td_u32 snapshot_every;
     td_u32 snapshot_limit;
+    td_bool mpp_attached;
+    td_bool display_enable;
+    const td_char *display_ready_file;
 } vision_service_config;
 
 td_s32 vision_service_run(const vision_service_config *config);

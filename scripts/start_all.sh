@@ -6,9 +6,11 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJ_DIR="$(dirname "$SCRIPT_DIR")"
+. "$SCRIPT_DIR/env.sh"
 BIN_DIR="$PROJ_DIR/out/bin"
 LOG_DIR="$PROJ_DIR/out/log"
 PID_DIR="$PROJ_DIR/out/pid"
+VISION_ENABLE="${VISION_ENABLE:-1}"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
@@ -61,13 +63,25 @@ echo "       asr_service started (pid=$(cat $PID_DIR/asr_service.pid))"
 # ---- 4. device_service (EC11旋钮等) ----
 echo "[4/4] Skipping standalone device_service (now embedded in fusion_service)..."
 
+# ---- 5. vision_service (独立 UVC + NPU, 输出 telemetry) ----
+if [ "$VISION_ENABLE" = "1" ]; then
+    echo "[5/5] Starting vision_service..."
+    "$SCRIPT_DIR/start_vision.sh"
+else
+    echo "[5/5] Skipping vision_service (VISION_ENABLE=$VISION_ENABLE)"
+fi
+
 echo ""
 echo "===== All services started ====="
 echo "  fusion:  pid=$(cat $PID_DIR/fusion_service.pid)  log=$LOG_DIR/fusion_service.log"
 echo "  radar:   pid=$(cat $PID_DIR/radar_service.pid)   log=$LOG_DIR/radar_service.log"
 echo "  asr:     pid=$(cat $PID_DIR/asr_service.pid)     log=$LOG_DIR/asr_service.log"
+if [ -f "$PID_DIR/vision_service.pid" ]; then
+echo "  vision:  pid=$(cat $PID_DIR/vision_service.pid)  log=$LOG_DIR/vision_service.log"
+fi
 echo ""
 echo "  Run 'tail -f $LOG_DIR/fusion_service.log' to watch fusion"
 echo "  Run 'tail -f $LOG_DIR/radar_service.log'  to watch radar"
 echo "  Run 'tail -f $LOG_DIR/asr_service.log'    to watch asr"
+echo "  Run 'tail -f $LOG_DIR/vision_service.log' to watch vision"
 echo "  Run 'scripts/stop_all.sh' to stop all services"

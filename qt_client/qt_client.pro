@@ -7,6 +7,7 @@ SOURCES += \
     src/main.cpp \
     src/MainWindow.cpp \
     src/pages/HomePage.cpp \
+    src/pages/StatusPage.cpp \
     src/pages/StatsPage.cpp \
     src/pages/StudyPage.cpp \
     src/services/MockFusionClient.cpp
@@ -14,6 +15,7 @@ SOURCES += \
 HEADERS += \
     src/MainWindow.h \
     src/pages/HomePage.h \
+    src/pages/StatusPage.h \
     src/pages/StatsPage.h \
     src/pages/StudyPage.h \
     src/services/MockFusionClient.h

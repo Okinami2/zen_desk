@@ -26,6 +26,7 @@ enum SliderState {
 };
 
 class HomePage;
+class StatusPage;
 class StatsPage;
 class StudyPage;
 
@@ -72,6 +73,7 @@ protected:
 
 private slots:
     void showHome();
+    void showStatus();
     void showStats();
     void showStudySetupDialog();
     void startStudy(int minutes = -1);
@@ -85,16 +87,20 @@ private:
     QStackedWidget *stack;
 
     HomePage  *homePage;
+    StatusPage *statusPage;
     StatsPage *statsPage;
     StudyPage *studyPage;
 
     NavButton *btnHome;
+    NavButton *btnStatus;
     NavButton *btnStats;
     NavButton *btnConfig;
 
     bool inStudyMode = false;
 
     void setActiveNav(NavButton *active);
+    void handleVisionTelemetry(const QByteArray &data);
+    void handleFusionState(const FusionState &state);
 
     //  状态机核心成员
     InteractionLayer currentLayer = LAYER_HOME_BROWSE;

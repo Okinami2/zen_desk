@@ -1,10 +1,8 @@
 #include "vision_service.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
-#include <sys/file.h>
 #include <sys/stat.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -16,12 +14,12 @@
 #include "ot_common_sys.h"
 #include "sdk_module_init.h"
 #include "vision_debug.h"
+#include "vision_display.h"
 #include "vision_uvc.h"
 
 #define VISION_FRAME_QUEUE_CAPACITY 2
 #define VISION_ERROR_RETRY_US       100000
 #define VISION_WAIT_INTERVAL_NS     100000000L
-#define VISION_MPP_LOCK_PATH        "/tmp/pegasus-mpp.lock"
 
 typedef struct {
     ot_video_frame_info frame;
@@ -54,7 +52,6 @@ typedef struct {
     td_u32 queue_count;
     vision_metrics metrics;
     vision_debug_context debug;
-    td_s32 display_lock_fd;
 } vision_service_context;
 
 static volatile sig_atomic_t g_stop_requested = 0;
@@ -277,37 +274,12 @@ td_void vision_service_request_stop(td_void)
     g_stop_requested = 1;
 }
 
-static td_s32 vision_display_lock_acquire(vision_service_context *ctx)
-{
-    ctx->display_lock_fd = open(VISION_MPP_LOCK_PATH, O_CREAT | O_RDWR, 0666);
-    if (ctx->display_lock_fd < 0) {
-        perror("vision: open MPP lock");
-        return TD_FAILURE;
-    }
-    if (flock(ctx->display_lock_fd, LOCK_EX | LOCK_NB) != 0) {
-        fprintf(stderr,
-            "vision: MPP resources are owned by vo_init/Qt or another vision process\n");
-        close(ctx->display_lock_fd);
-        ctx->display_lock_fd = -1;
-        return TD_FAILURE;
-    }
-    return TD_SUCCESS;
-}
-
-static td_void vision_display_lock_release(vision_service_context *ctx)
-{
-    if (ctx->display_lock_fd >= 0) {
-        (void)flock(ctx->display_lock_fd, LOCK_UN);
-        (void)close(ctx->display_lock_fd);
-        ctx->display_lock_fd = -1;
-    }
-}
-
 td_s32 vision_service_run(const vision_service_config *config)
 {
     vision_service_context ctx;
     td_bool sdk_inited = TD_FALSE;
     td_bool capture_opened = TD_FALSE;
+    td_bool display_started = TD_FALSE;
     td_bool npu_inited = TD_FALSE;
     td_s32 ret = TD_FAILURE;
 
@@ -316,10 +288,13 @@ td_s32 vision_service_run(const vision_service_config *config)
         config->height == 0 || config->capture_timeout_ms <= 0) {
         return TD_FAILURE;
     }
+    if (config->display_enable == TD_TRUE && config->mpp_attached == TD_TRUE) {
+        fprintf(stderr, "vision: --display cannot be combined with --mpp-attached\n");
+        return TD_FAILURE;
+    }
 
     (void)memset(&ctx, 0, sizeof(ctx));
     ctx.config = *config;
-    ctx.display_lock_fd = -1;
     ctx.metrics.window_start = vision_now_seconds();
     g_stop_requested = 0;
 
@@ -331,12 +306,13 @@ td_s32 vision_service_run(const vision_service_config *config)
         return TD_FAILURE;
     }
 
-    if (vision_display_lock_acquire(&ctx) != TD_SUCCESS) {
-        goto cleanup_sync;
-    }
-
     SDK_init();
-    sdk_inited = TD_TRUE;
+    if (config->mpp_attached != TD_TRUE) {
+        sdk_inited = TD_TRUE;
+    } else {
+        printf("vision: attached to existing MPP SYS/VB owner; SDK_exit will be skipped\n");
+    }
+    printf("vision: SDK init stage complete\n");
 
     ret = vision_debug_init(&ctx.debug, config);
     if (ret != TD_SUCCESS) {
@@ -345,14 +321,26 @@ td_s32 vision_service_run(const vision_service_config *config)
     }
 
     ret = sample_uvc_capture_open(&ctx.capture, config->device_path,
-        config->pixel_format, config->width, config->height,
-        config->hdmi_preview);
+        config->pixel_format, config->width, config->height, config->mpp_attached);
     if (ret != TD_SUCCESS) {
         fprintf(stderr, "vision: open capture failed, ret=%d\n", ret);
         goto cleanup;
     }
     capture_opened = TD_TRUE;
+    printf("vision: capture/media initialized\n");
 
+    if (config->display_enable == TD_TRUE) {
+        printf("vision: starting integrated display\n");
+        ret = vision_display_start(config->display_ready_file);
+        if (ret != TD_SUCCESS) {
+            fprintf(stderr, "vision: initialize display failed, ret=%d\n", ret);
+            goto cleanup;
+        }
+        display_started = TD_TRUE;
+        printf("vision: integrated display initialized\n");
+    }
+
+    printf("vision: initializing NPU runtime\n");
     ret = sample_svp_npu_init_runtime();
     if (ret != TD_SUCCESS) {
         fprintf(stderr, "vision: initialize NPU runtime failed, ret=%d\n", ret);
@@ -368,9 +356,8 @@ td_s32 vision_service_run(const vision_service_config *config)
     }
     ctx.producer_started = TD_TRUE;
 
-    printf("vision: running device=%s format=%s size=%ux%u hdmi=%s\n",
-        config->device_path, config->pixel_format, config->width, config->height,
-        config->hdmi_preview == TD_TRUE ? "exclusive" : "off");
+    printf("vision: running device=%s format=%s size=%ux%u\n",
+        config->device_path, config->pixel_format, config->width, config->height);
     ret = vision_process_loop(&ctx);
 
 cleanup:
@@ -382,6 +369,9 @@ cleanup:
     if (npu_inited == TD_TRUE) {
         sample_svp_npu_deinit_runtime();
     }
+    if (display_started == TD_TRUE) {
+        vision_display_stop();
+    }
     if (capture_opened == TD_TRUE) {
         (void)sample_uvc_capture_close(&ctx.capture);
     }
@@ -389,8 +379,6 @@ cleanup:
         SDK_exit();
     }
     vision_debug_deinit(&ctx.debug);
-    vision_display_lock_release(&ctx);
-cleanup_sync:
     (void)pthread_cond_destroy(&ctx.queue_cond);
     (void)pthread_mutex_destroy(&ctx.queue_mutex);
     return ret;

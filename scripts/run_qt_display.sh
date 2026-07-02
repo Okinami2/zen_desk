@@ -4,6 +4,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJ_DIR=$(dirname "$SCRIPT_DIR")
+. "$SCRIPT_DIR/env.sh"
 PINMUX_BIN=${PINMUX_BIN:-"$PROJ_DIR/out/bin/pinmux_init"}
 VO_INIT_BIN=${VO_INIT_BIN:-"$PROJ_DIR/out/bin/vo_init"}
 QT_BIN=${QT_BIN:-"$PROJ_DIR/qt_client/qt_client"}
@@ -14,6 +15,10 @@ VO_PID=
 
 cleanup()
 {
+    if [ -n "${PRE_DISPLAY_CLEANUP_CMD:-}" ]; then
+        sh -c "$PRE_DISPLAY_CLEANUP_CMD" || true
+        PRE_DISPLAY_CLEANUP_CMD=
+    fi
     if [ -n "${VO_PID:-}" ] && kill -0 "$VO_PID" 2>/dev/null; then
         kill "$VO_PID" 2>/dev/null || true
         wait "$VO_PID" 2>/dev/null || true
@@ -84,5 +89,9 @@ else
 fi
 
 echo "display stack ready: vo_init pid=$VO_PID"
+if [ -n "${POST_DISPLAY_READY_CMD:-}" ]; then
+    echo "running post-display hook: $POST_DISPLAY_READY_CMD"
+    sh -c "$POST_DISPLAY_READY_CMD"
+fi
 echo "starting Qt: $QT_BIN"
 "$QT_BIN" "$@"

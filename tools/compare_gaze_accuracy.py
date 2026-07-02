@@ -104,9 +104,10 @@ def _load_input_for_onnx(
         return np.zeros(expected_count, dtype=np.float32).reshape(expected_shape), "missing->zeros"
 
     raw = bin_path.read_bytes()
-    if expected_count is not None and len(raw) == expected_count * 4:
-        arr = np.frombuffer(raw, dtype=np.float32).copy().reshape(expected_shape)
-        return arr, "dump"
+    if expected_count is not None and len(raw) >= expected_count * 4 and len(raw) % 4 == 0:
+        arr = np.frombuffer(raw, dtype=np.float32).copy()[:expected_count].reshape(expected_shape)
+        source = "dump" if len(raw) == expected_count * 4 else f"dump_padded({len(raw)}B)"
+        return arr, source
 
     if expected_count is not None and len(raw) == expected_count:
         arr = np.frombuffer(raw, dtype=np.uint8).astype(np.float32).reshape(expected_shape)

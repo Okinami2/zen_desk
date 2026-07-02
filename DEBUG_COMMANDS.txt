@@ -21,6 +21,16 @@ tail -f out/log/asr_service.log
 1.5 查看雷达的所有原始能量解析数据：
 tail -f out/log/radar_service.log
 
+1.6 单独运行视觉服务并保存关键帧、标注图和 JSON：
+./out/bin/vision_service --device /dev/video0 --format MJPEG --width 1280 --height 720 \
+  --snapshot-dir /root/zen_desk/out/snapshots --snapshot-every 10 --snapshot-limit 100
+
+1.7 查看视觉 JSON 中的注意力方向：
+grep "\"attention\"" /root/zen_desk/out/snapshots/frame_*.json | tail
+
+1.8 第三 gaze 模型调试 dump 对比原 ONNX（在 PC/WSL 上执行）：
+python3 tools/compare_gaze_accuracy.py --dump-dir /path/to/gaze_debug
+
 
 【2. 底层硬件连通性测试脚本】
 -----------------------------------------
