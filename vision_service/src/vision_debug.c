@@ -188,19 +188,22 @@ static const td_char *vision_debug_attention_label(const sample_svp_frame_result
     if (result->state_snapshot.eyes_closed == TD_TRUE) {
         return "eyes_closed";
     }
-    if (result->gaze.pitch_deg > 15.0f) {
-        return "down";
+    td_float abs_yaw = result->gaze.yaw_deg > 0 ? result->gaze.yaw_deg : -result->gaze.yaw_deg;
+    td_float abs_pitch = result->gaze.pitch_deg > 0 ? result->gaze.pitch_deg : -result->gaze.pitch_deg;
+
+    if (abs_yaw < 10.4f && abs_pitch < 10.4f) {
+        return "front";
     }
-    if (result->gaze.pitch_deg < -15.0f) {
-        return "up";
+
+    if (abs_yaw >= abs_pitch) {
+        if (result->gaze.yaw_deg < -10.4f) return "left";
+        if (result->gaze.yaw_deg > 10.4f) return "right";
+        return "front";
+    } else {
+        if (result->gaze.pitch_deg < -10.4f) return "up";
+        if (result->gaze.pitch_deg > 10.4f) return "down";
+        return "front";
     }
-    if (result->gaze.yaw_deg > 12.0f) {
-        return "left";
-    }
-    if (result->gaze.yaw_deg < -12.0f) {
-        return "right";
-    }
-    return "front";
 }
 
 static td_void vision_debug_set_rgb(td_u8 *rgb, td_u32 width, td_u32 height,
