@@ -570,6 +570,7 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     const float roll = static_cast<float>(obj.value("roll").toDouble(0.0));
     const bool yawning = obj.value("yawning").toBool(false);
     const int blink_count = obj.value("blink_count").toInt(0);
+    const bool eyes_closed = obj.value("eyes_closed").toBool(false);
 
     statusPage->setFacePresent(hasFace, score);
     statusPage->setAttention(attention, yaw, pitch, roll);
@@ -580,32 +581,40 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
             lastBlinkCount = blink_count;
             lastBlinkTime = now;
         }
+        
+        if (eyes_closed) {
+            if (lastEyesClosedTime == 0) lastEyesClosedTime = now;
+        } else {
+            lastEyesClosedTime = 0;
+        }
 
         bool currentlyDistracted = false;
-        if (attention == "left" || attention == "right" || attention == "up" || attention == "down") {
+        if (attention == "left" || attention == "right" || attention == "up" || attention == "down" || attention == "eyes_closed") {
             currentlyDistracted = true;
         } else if (attention == "front") {
             if (yawning) {
                 currentlyDistracted = true;
             } else if (lastBlinkTime > 0 && (now - lastBlinkTime) >= 10000) {
                 currentlyDistracted = true;
+            } else if (lastEyesClosedTime > 0 && (now - lastEyesClosedTime) >= 5000) {
+                currentlyDistracted = true;
             }
         }
 
-        if (currentlyDistracted && !isDistracted) {
-            distractedCount++;
-        }
-        isDistracted = currentlyDistracted;
-
-        if (isDistracted) {
-            statusPage->setFusionState(STATE_DISTRACTED, score);
-        } else if (!isAutoPaused) {
-            statusPage->setFusionState(STATE_FOCUSED, score);
+        if (currentlyDistracted != isDistracted) {
+            isDistracted = currentlyDistracted;
+            if (isDistracted) {
+                distractedCount++;
+                sendTcpCommand(ASR_CMD_STUDY_DISTRACTED);
+            } else if (!isAutoPaused) {
+                sendTcpCommand(ASR_CMD_STUDY_FOCUSED);
+            }
         }
     } else {
         isDistracted = false;
         lastBlinkCount = -1;
         lastBlinkTime = 0;
+        lastEyesClosedTime = 0;
     }
 }
 

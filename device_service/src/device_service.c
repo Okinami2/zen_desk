@@ -13,12 +13,13 @@
 #define PWM_PERIOD 1000000
 #define PWM_COLD_CHANNEL BOARD_PWM_LAMP_WARM_CHANNEL
 #define PWM_WARM_CHANNEL BOARD_PWM_LAMP_COLD_CHANNEL
-#define LAMP_TICK_US 30000
+#define LAMP_TICK_US 5000
 #define BREATH_PERIOD_MS 10000
 
 typedef enum {
     LAMP_MODE_STATIC = 0,
-    LAMP_MODE_BREATH = 1
+    LAMP_MODE_BREATH = 1,
+    LAMP_MODE_FLASH = 2
 } LampMode;
 
 typedef struct {
@@ -197,7 +198,7 @@ static void set_lamp_scene(int brightness_percent, float color_ratio,
     g_target_scene.mode = mode;
     g_target_scene.transition_ms = transition_ms;
     g_target_scene.breath_amplitude = (breath_percent * PWM_PERIOD) / 100;
-    if (mode != LAMP_MODE_BREATH) {
+    if (mode != LAMP_MODE_BREATH && mode != LAMP_MODE_FLASH) {
         g_breath_phase_ms = 0;
     }
     pthread_mutex_unlock(&g_lamp_mutex);
@@ -242,6 +243,40 @@ static void* lamp_worker_thread(void *arg) {
             }
             if (output_brightness > PWM_PERIOD) {
                 output_brightness = PWM_PERIOD;
+            }
+        } else if (scene.mode == LAMP_MODE_FLASH) {
+            int macro_period = 2000; // 2 seconds total cycle (1s flash + 1s normal)
+            g_breath_phase_ms = (g_breath_phase_ms + tick_ms) % macro_period;
+            
+            if (g_breath_phase_ms < 1000) {
+                // First 1 second: Flash 4 times (250ms period, 125ms half-period)
+                int flash_period = 250; 
+                int half_period = flash_period / 2; // 125ms
+                int sub_phase = g_breath_phase_ms % flash_period;
+                
+                int b_low = (10 * PWM_PERIOD) / 100;
+                int b_high = PWM_PERIOD;
+                int transition_time = 10; // 10ms transition
+                
+                if (sub_phase < half_period) {
+                    // High phase (0 to 125ms)
+                    if (sub_phase < transition_time) {
+                        output_brightness = b_low + (b_high - b_low) * sub_phase / transition_time;
+                    } else {
+                        output_brightness = b_high;
+                    }
+                } else {
+                    // Low phase (125ms to 250ms)
+                    int low_phase = sub_phase - half_period;
+                    if (low_phase < transition_time) {
+                        output_brightness = b_high - (b_high - b_low) * low_phase / transition_time;
+                    } else {
+                        output_brightness = b_low;
+                    }
+                }
+            } else {
+                // Second 1 second: normal state (60% brightness for study)
+                output_brightness = (60 * PWM_PERIOD) / 100;
             }
         }
 
@@ -358,22 +393,21 @@ void device_handle_fusion_state(const FusionState *state) {
     switch (state->current_state) {
         case STATE_SEATED_IDLE:
             if (g_has_saved_radar_scene) {
-                LOG_INFO("User is seated, restoring previous scene");
+                LOG_INFO("User is seated, restoring previous scene with 1000ms transition");
                 pthread_mutex_lock(&g_lamp_mutex);
                 g_target_scene = g_saved_radar_scene;
-                g_target_scene.transition_ms = 1800;
+                g_target_scene.transition_ms = 1000;
                 pthread_mutex_unlock(&g_lamp_mutex);
                 g_has_saved_radar_scene = 0;
             } else if (g_voice_override) {
-                LOG_INFO("User is seated, restoring voice-configured lamp scene");
+                LOG_INFO("User is seated, restoring voice-configured lamp scene with 1000ms transition");
                 pthread_mutex_lock(&g_lamp_mutex);
                 g_target_scene = g_saved_voice_scene;
-                /* 入座点亮时加入平滑渐变效果 */
-                g_target_scene.transition_ms = 1800;
+                g_target_scene.transition_ms = 1000;
                 pthread_mutex_unlock(&g_lamp_mutex);
             } else {
                 LOG_INFO("User is seated but idle, switching to reading light");
-                set_lamp_scene(70, 0.45f, LAMP_MODE_STATIC, 1800, 0);
+                set_lamp_scene(100, 0.45f, LAMP_MODE_STATIC, 1000, 0);
             }
             break;
 
@@ -383,8 +417,8 @@ void device_handle_fusion_state(const FusionState *state) {
             break;
 
         case STATE_DISTRACTED:
-            LOG_INFO("User is distracted, switching to breathing reminder");
-            set_lamp_scene(40, 0.35f, LAMP_MODE_BREATH, 1200, 8);
+            LOG_INFO("User is distracted, switching to flashing reminder");
+            set_lamp_scene(100, 0.30f, LAMP_MODE_FLASH, 0, 0);
             break;
 
         case STATE_TIRED:

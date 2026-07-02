@@ -146,6 +146,7 @@ private:
     bool isDistracted = false;
     int lastBlinkCount = -1;
     qint64 lastBlinkTime = 0;
+    qint64 lastEyesClosedTime = 0;
 
     QTimer *studyAccumulationTimer = nullptr;
 

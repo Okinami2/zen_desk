@@ -75,6 +75,8 @@ typedef enum {
     ASR_CMD_STUDY_START_25     = 0x25,
     ASR_CMD_STUDY_START_45     = 0x26,
     ASR_CMD_STUDY_START_60     = 0x27,
+    ASR_CMD_STUDY_DISTRACTED   = 0x28,
+    ASR_CMD_STUDY_FOCUSED      = 0x29,
     ASR_CMD_SCREEN_DATA        = 0x31,
     ASR_CMD_SCREEN_HOME        = 0x32
 } AsrCommandType;

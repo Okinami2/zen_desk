@@ -156,12 +156,21 @@ static void* tcp_client_handler(void *arg)
                     LOG_INFO("ASR requested UI SHOW HOME");
                     fusion_send_ui_event(UI_EVENT_SHOW_HOME);
                     break;
+                case ASR_CMD_STUDY_DISTRACTED:
+                    g_fusion_service.current_state = STATE_DISTRACTED;
+                    LOG_INFO("Vision triggered DISTRACTED");
+                    break;
+                case ASR_CMD_STUDY_FOCUSED:
+                    g_fusion_service.current_state = STATE_FOCUSED;
+                    LOG_INFO("Vision triggered FOCUSED");
+                    break;
             }
             fs.current_state = g_fusion_service.current_state;
             pthread_mutex_unlock(&g_fusion_service.mutex);
             
             // 只有状态改变时才向外广播状态，触发后续联动（UI/灯光）
-            if (cmd->command_id >= ASR_CMD_STUDY_START && cmd->command_id <= ASR_CMD_STUDY_START_60) {
+            if ((cmd->command_id >= ASR_CMD_STUDY_START && cmd->command_id <= ASR_CMD_STUDY_START_60) ||
+                cmd->command_id == ASR_CMD_STUDY_DISTRACTED || cmd->command_id == ASR_CMD_STUDY_FOCUSED) {
                 fusion_send_state(&fs);
                 device_handle_fusion_state(&fs);
             }
