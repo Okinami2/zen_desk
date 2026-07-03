@@ -594,7 +594,7 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
         } else if (attention == "front") {
             if (yawning) {
                 currentlyDistracted = true;
-            } else if (lastBlinkTime > 0 && (now - lastBlinkTime) >= 10000) {
+            } else if (lastBlinkTime > 0 && (now - lastBlinkTime) >= 20000) {
                 currentlyDistracted = true;
             } else if (lastEyesClosedTime > 0 && (now - lastEyesClosedTime) >= 5000) {
                 currentlyDistracted = true;

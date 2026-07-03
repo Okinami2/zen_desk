@@ -195,17 +195,17 @@ static const td_char *vision_debug_attention_label(const sample_svp_frame_result
     td_float abs_yaw = result->gaze.yaw_deg > 0 ? result->gaze.yaw_deg : -result->gaze.yaw_deg;
     td_float abs_pitch = result->gaze.pitch_deg > 0 ? result->gaze.pitch_deg : -result->gaze.pitch_deg;
 
-    if (abs_yaw < 15.0f && abs_pitch < 15.0f) {
+    if (abs_yaw < 25.0f && abs_pitch < 25.0f) {
         return "front";
     }
 
     if (abs_yaw >= abs_pitch) {
-        if (result->gaze.yaw_deg < -15.0f) return "left";
-        if (result->gaze.yaw_deg > 15.0f) return "right";
+        if (result->gaze.yaw_deg < -25.0f) return "left";
+        if (result->gaze.yaw_deg > 25.0f) return "right";
         return "front";
     } else {
-        if (result->gaze.pitch_deg < -15.0f) return "up";
-        if (result->gaze.pitch_deg > 15.0f) return "down";
+        if (result->gaze.pitch_deg < -25.0f) return "up";
+        if (result->gaze.pitch_deg > 25.0f) return "down";
         return "front";
     }
 }

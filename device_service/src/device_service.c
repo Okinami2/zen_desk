@@ -256,7 +256,7 @@ static void* lamp_worker_thread(void *arg) {
                 
                 int b_low = (10 * PWM_PERIOD) / 100;
                 int b_high = PWM_PERIOD;
-                int transition_time = 10; // 10ms transition
+                int transition_time = 125; // 125ms transition (smooth triangle wave)
                 
                 if (sub_phase < half_period) {
                     // High phase (0 to 125ms)
