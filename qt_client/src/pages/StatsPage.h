@@ -10,13 +10,14 @@ class LineChartWidget : public QWidget {
     Q_OBJECT
 public:
     explicit LineChartWidget(QWidget *parent = nullptr);
-    void setData(const QVector<double> &focusScores); // 0.0~1.0，每小时一个点
+    void setData(const QVector<double> &focusScores, const QStringList &labels); // 0.0~1.0，每小时一个点
 
 protected:
     void paintEvent(QPaintEvent *) override;
 
 private:
     QVector<double> m_data;
+    QStringList m_labels;
 };
 
 // ── 堆叠柱状图 Widget ────────────────────────────────────────────────────
@@ -41,6 +42,9 @@ class StatsPage : public QWidget {
 public:
     explicit StatsPage(QWidget *parent = nullptr);
     void updateStatsData(int totalSeconds, int absentCount, int distractedCount, int distractedSeconds);
+    void updateTimelineData(const QVector<QVector<int>> &segments,
+                            const QStringList &labels,
+                            const QVector<double> &focusScores);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -50,6 +54,8 @@ private:
     QLabel *absentCountVal;
     QLabel *distractedCountVal;
     QLabel *distractedTimeVal;
+    LineChartWidget *lineChart;
+    StackedBarWidget *barChart;
 };
 
 #endif // STATSPAGE_H

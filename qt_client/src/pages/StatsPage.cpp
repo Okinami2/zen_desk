@@ -15,56 +15,70 @@
 LineChartWidget::LineChartWidget(QWidget *parent) : QWidget(parent)
 {
     setMinimumSize(0, 160);
-    // 模拟 mock 数据（8 个时段）
-    m_data = {0.55, 0.72, 0.88, 0.91, 0.76, 0.62, 0.84, 0.93};
 }
 
-void LineChartWidget::setData(const QVector<double> &d) { m_data = d; update(); }
+void LineChartWidget::setData(const QVector<double> &d, const QStringList &labels)
+{
+    m_data = d;
+    m_labels = labels;
+    update();
+}
 
 void LineChartWidget::paintEvent(QPaintEvent *)
 {
-    if (m_data.size() < 2) return;
-
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
+
+    if (m_data.isEmpty()) {
+        p.setPen(QColor(0x9C, 0xA3, 0xAF));
+        p.setFont(QFont("Inter", 12));
+        p.drawText(rect(), Qt::AlignCenter, "暂无统计数据");
+        return;
+    }
 
     const int pad = 12;
     QRectF area(pad, pad, width() - pad*2, height() - pad*2 - 20);
 
     int n = m_data.size();
-    auto ptX = [&](int i) { return area.left() + area.width() * i / (n - 1); };
-    auto ptY = [&](double v) { return area.bottom() - area.height() * v; };
+    auto ptX = [&](int i) {
+        return n == 1 ? area.center().x() : area.left() + area.width() * i / (n - 1);
+    };
+    auto ptY = [&](double v) { return area.bottom() - area.height() * qBound(0.0, v, 1.0); };
 
     // 构造平滑贝塞尔路径
     QPainterPath linePath;
     linePath.moveTo(ptX(0), ptY(m_data[0]));
-    for (int i = 1; i < n; ++i) {
-        double cpx = (ptX(i) + ptX(i-1)) / 2.0;
-        linePath.cubicTo(
-            cpx, ptY(m_data[i-1]),
-            cpx, ptY(m_data[i]),
-            ptX(i), ptY(m_data[i])
-        );
+    if (n > 1) {
+        for (int i = 1; i < n; ++i) {
+            double cpx = (ptX(i) + ptX(i-1)) / 2.0;
+            linePath.cubicTo(
+                cpx, ptY(m_data[i-1]),
+                cpx, ptY(m_data[i]),
+                ptX(i), ptY(m_data[i])
+            );
+        }
+
+        // 填充区域路径
+        QPainterPath fillPath = linePath;
+        fillPath.lineTo(ptX(n-1), area.bottom());
+        fillPath.lineTo(ptX(0),   area.bottom());
+        fillPath.closeSubpath();
+
+        // 渐变填充
+        QLinearGradient grad(0, area.top(), 0, area.bottom());
+        grad.setColorAt(0, QColor(0x4F, 0x46, 0xE5, 100));
+        grad.setColorAt(1, QColor(0x4F, 0x46, 0xE5, 0));
+        p.setPen(Qt::NoPen);
+        p.setBrush(grad);
+        p.drawPath(fillPath);
     }
-
-    // 填充区域路径
-    QPainterPath fillPath = linePath;
-    fillPath.lineTo(ptX(n-1), area.bottom());
-    fillPath.lineTo(ptX(0),   area.bottom());
-    fillPath.closeSubpath();
-
-    // 渐变填充
-    QLinearGradient grad(0, area.top(), 0, area.bottom());
-    grad.setColorAt(0, QColor(0x4F, 0x46, 0xE5, 100));
-    grad.setColorAt(1, QColor(0x4F, 0x46, 0xE5, 0));
-    p.setPen(Qt::NoPen);
-    p.setBrush(grad);
-    p.drawPath(fillPath);
 
     // 折线本身
     p.setPen(QPen(QColor(0x4F, 0x46, 0xE5), 2.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     p.setBrush(Qt::NoBrush);
-    p.drawPath(linePath);
+    if (n > 1) {
+        p.drawPath(linePath);
+    }
 
     // 数据点小圆
     for (int i = 0; i < n; ++i) {
@@ -74,13 +88,11 @@ void LineChartWidget::paintEvent(QPaintEvent *)
         p.drawEllipse(pt, 4, 4);
     }
 
-    // X 轴标签（时段）
-    QStringList labels = {"08","09","10","11","12","13","14","15"};
     p.setPen(QColor(0x6B, 0x72, 0x80));
     p.setFont(QFont("Inter", 10));
-    for (int i = 0; i < n && i < labels.size(); ++i) {
+    for (int i = 0; i < n && i < m_labels.size(); ++i) {
         p.drawText(QRectF(ptX(i)-20, area.bottom()+4, 40, 18),
-                   Qt::AlignCenter, labels[i]+"时");
+                   Qt::AlignCenter, m_labels[i]+"时");
     }
 }
 
@@ -90,9 +102,6 @@ void LineChartWidget::paintEvent(QPaintEvent *)
 StackedBarWidget::StackedBarWidget(QWidget *parent) : QWidget(parent)
 {
     setMinimumSize(0, 100);
-    // mock: {专注, 走神, 离座} 分钟
-    m_segs  = {{45,8,7},{42,5,13},{55,3,2},{58,2,0},{38,12,10},{30,15,15},{50,5,5},{57,2,1}};
-    m_labels = QStringList{"08","09","10","11","12","13","14","15"};
 }
 
 void StackedBarWidget::setData(const QVector<QVector<int>> &segs, const QStringList &labels)
@@ -102,16 +111,22 @@ void StackedBarWidget::setData(const QVector<QVector<int>> &segs, const QStringL
 
 void StackedBarWidget::paintEvent(QPaintEvent *)
 {
-    if (m_segs.isEmpty()) return;
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
+
+    if (m_segs.isEmpty()) {
+        p.setPen(QColor(0x9C, 0xA3, 0xAF));
+        p.setFont(QFont("Inter", 12));
+        p.drawText(rect(), Qt::AlignCenter, "暂无统计数据");
+        return;
+    }
 
     const int n = m_segs.size();
     const int padX = 12, padTop = 8, padBot = 24;
     const int barW = qMax(8, (width() - padX*2) / n - 6);
     const double totalH = height() - padTop - padBot;
 
-    // 每列最大总分钟
+    // 每列最大总秒数
     int maxTotal = 1;
     for (auto &seg : m_segs) {
         int s = 0; for (int v : seg) s += v;
@@ -212,7 +227,7 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
     QLabel *lineTitle = new QLabel("专注度变化");
     lineTitle->setStyleSheet("font-size: 15px; color: #6B7280; background: transparent;");
     lineLay->addWidget(lineTitle);
-    LineChartWidget *lineChart = new LineChartWidget(lineCard);
+    lineChart = new LineChartWidget(lineCard);
     lineLay->addWidget(lineChart, 1);
     leftLay->addWidget(lineCard, 3);
 
@@ -250,7 +265,7 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
     barHeader->addWidget(makeLegend("离座", QColor(0xCB,0xD5,0xE1)));
     barLay->addLayout(barHeader);
 
-    StackedBarWidget *barChart = new StackedBarWidget(barCard);
+    barChart = new StackedBarWidget(barCard);
     barLay->addWidget(barChart, 1);
     leftLay->addWidget(barCard, 2);
 
@@ -348,10 +363,6 @@ void StatsPage::paintEvent(QPaintEvent *)
 
 void StatsPage::updateStatsData(int totalSeconds, int absentCount, int distractedCount, int distractedSeconds)
 {
-    // Subtract distracted and absent times from total time? The user said "有效学习那里应该会吧走神时间减去".
-    // Currently, distractedSeconds and distractedCount are placeholders (0).
-    // Total seconds represents the time the timer was actively running (which means NOT auto-paused).
-    // So if distracted time is provided later, we subtract it here.
     int effectiveSeconds = totalSeconds - distractedSeconds;
     if (effectiveSeconds < 0) effectiveSeconds = 0;
 
@@ -362,4 +373,16 @@ void StatsPage::updateStatsData(int totalSeconds, int absentCount, int distracte
     absentCountVal->setText(QString("%1 次").arg(absentCount));
     distractedCountVal->setText(QString("%1 次").arg(distractedCount));
     distractedTimeVal->setText(QString("%1 分钟").arg(distractedSeconds / 60));
+}
+
+void StatsPage::updateTimelineData(const QVector<QVector<int>> &segments,
+                                   const QStringList &labels,
+                                   const QVector<double> &focusScores)
+{
+    if (lineChart) {
+        lineChart->setData(focusScores, labels);
+    }
+    if (barChart) {
+        barChart->setData(segments, labels);
+    }
 }

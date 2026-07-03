@@ -219,6 +219,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     }
 
     // 初始化真实数据累计定时器
+    focusBucketSeconds.fill(0, 24);
+    distractedBucketSeconds.fill(0, 24);
+    absentBucketSeconds.fill(0, 24);
+
     studyAccumulationTimer = new QTimer(this);
     connect(studyAccumulationTimer, &QTimer::timeout, this, &MainWindow::onStudyAccumulationTick);
     studyAccumulationTimer->start(1000); // 1秒触发一次
@@ -227,13 +231,57 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 }
 
 void MainWindow::onStudyAccumulationTick() {
-    // 只有在专注模式下，且没有被自动暂停（人在座位上），才进行有效学习时间的累加
-    if (inStudyMode && !isAutoPaused) {
-        effectiveStudySeconds++;
-        if (isDistracted) {
-            distractedSeconds++;
-        }
+    if (!inStudyMode) {
+        return;
     }
+
+    const int hour = QDateTime::currentDateTime().time().hour();
+    if (hour < 0 || hour >= 24) {
+        return;
+    }
+
+    if (isAutoPaused) {
+        absentBucketSeconds[hour]++;
+        return;
+    }
+
+    effectiveStudySeconds++;
+    if (isDistracted) {
+        distractedSeconds++;
+        distractedBucketSeconds[hour]++;
+    } else {
+        focusBucketSeconds[hour]++;
+    }
+}
+
+void MainWindow::updateStatsPageData()
+{
+    QVector<QVector<int>> segments;
+    QVector<double> focusScores;
+    QStringList labels;
+
+    for (int hour = 0; hour < 24; ++hour) {
+        const int focused = focusBucketSeconds.value(hour);
+        const int distracted = distractedBucketSeconds.value(hour);
+        const int absent = absentBucketSeconds.value(hour);
+        const int total = focused + distracted + absent;
+        if (total <= 0) {
+            continue;
+        }
+
+        segments.append(QVector<int>{focused, distracted, absent});
+        labels.append(QString("%1").arg(hour, 2, 10, QLatin1Char('0')));
+        focusScores.append(static_cast<double>(focused) / static_cast<double>(total));
+    }
+
+    while (segments.size() > 8) {
+        segments.removeFirst();
+        labels.removeFirst();
+        focusScores.removeFirst();
+    }
+
+    statsPage->updateStatsData(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
+    statsPage->updateTimelineData(segments, labels, focusScores);
 }
 
 void MainWindow::setActiveNav(NavButton *active)
@@ -254,7 +302,7 @@ void MainWindow::showStats()
     if (inStudyMode) return;
 
     // 在切入统计页面前，先把最新的真实数据灌入
-    statsPage->updateStatsData(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
+    updateStatsPageData();
 
     stack->setCurrentWidget(statsPage);
     setActiveNav(btnStats);

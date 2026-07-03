@@ -588,6 +588,8 @@ moc_MainWindow.cpp: ../qt_client/src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QTimer \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qtimer.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qbasictimer.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QVector \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QStringList \
 		../common/include/protocol.h \
 		moc_predefs.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/bin/moc
@@ -1262,6 +1264,8 @@ main.o: ../qt_client/src/main.cpp ../qt_client/src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QTimer \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qtimer.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qbasictimer.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QVector \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QStringList \
 		../common/include/protocol.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/QApplication \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/qapplication.h \
@@ -1403,12 +1407,13 @@ MainWindow.o: ../qt_client/src/MainWindow.cpp ../qt_client/src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QTimer \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qtimer.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qbasictimer.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QVector \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QStringList \
 		../common/include/protocol.h \
 		../qt_client/src/pages/HomePage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/QWidget \
 		../qt_client/src/pages/StatusPage.h \
 		../qt_client/src/pages/StatsPage.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QVector \
 		../qt_client/src/pages/StudyPage.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QPropertyAnimation \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qpropertyanimation.h \
@@ -1421,12 +1426,22 @@ MainWindow.o: ../qt_client/src/MainWindow.cpp ../qt_client/src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtGui/qpen.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtGui/QPainterPath \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtGui/qpainterpath.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QDateTime \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qdatetime.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/QVBoxLayout \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/qboxlayout.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/qlayout.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/qlayoutitem.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/qgridlayout.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/QHBoxLayout \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtGui/QScreen \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtGui/qscreen.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QList \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QObject \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QRect \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QSize \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QSizeF \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtGui/QTransform \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QFile \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/QDialog \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtWidgets/qdialog.h \
@@ -1453,10 +1468,15 @@ MainWindow.o: ../qt_client/src/MainWindow.cpp ../qt_client/src/MainWindow.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qjsondocument.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qjsonvalue.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qcborvalue.h \
-		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qdatetime.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qcborcommon.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qregularexpression.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/quuid.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtNetwork/QTcpSocket \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtNetwork/qtcpsocket.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QtEndian \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qendian.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qfloat16.h \
+		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtNetwork/QHostAddress \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/QJsonObject \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtCore/qjsonobject.h \
 		/home/okinami/qt/qt-everywhere-src-5.15.16/SS928V100_QT_INSTALL_OPENEULER/include/QtNetwork/QNetworkDatagram \

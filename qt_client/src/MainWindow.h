@@ -9,6 +9,8 @@
 #include <QKeyEvent>  // 补充必需的头文件
 #include <QUdpSocket>
 #include <QTimer>
+#include <QVector>
+#include <QStringList>
 #include "protocol.h"
 
 // 定义四大交互层级
@@ -103,6 +105,7 @@ private:
     void handleVisionTelemetry(const QByteArray &data);
     void handleFusionState(const FusionState &state);
     void sendTcpVisionState(const VisionState &state);
+    void updateStatsPageData();
 
     //  状态机核心成员
     InteractionLayer currentLayer = LAYER_HOME_BROWSE;
@@ -143,6 +146,9 @@ private:
     int distractedCount = 0;
     int distractedSeconds = 0;
     int effectiveStudySeconds = 0;
+    QVector<int> focusBucketSeconds;
+    QVector<int> distractedBucketSeconds;
+    QVector<int> absentBucketSeconds;
 
     bool isDistracted = false;
 
