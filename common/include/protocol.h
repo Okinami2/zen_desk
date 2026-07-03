@@ -22,6 +22,18 @@ typedef enum {
     STATE_ABSENT = 4         // 离座
 } LearningState;
 
+typedef enum {
+    VISION_ATTENTION_UNKNOWN = 0,
+    VISION_ATTENTION_FRONT = 1,
+    VISION_ATTENTION_LEFT = 2,
+    VISION_ATTENTION_RIGHT = 3,
+    VISION_ATTENTION_UP = 4,
+    VISION_ATTENTION_DOWN = 5,
+    VISION_ATTENTION_EYES_CLOSED = 6,
+    VISION_ATTENTION_NO_FACE = 7,
+    VISION_ATTENTION_ERROR = 8
+} VisionAttentionRegion;
+
 // 视觉状态数据
 typedef struct {
     uint8_t face_present;       // 人脸是否存在
@@ -32,6 +44,8 @@ typedef struct {
     uint8_t attention_region;   // 注意力区域
     float face_quality;         // 人脸质量
     uint64_t timestamp;         // 时间戳
+    uint32_t blink_count;        // 眨眼计数
+    uint32_t yawn_count;         // 哈欠计数
 } VisionState;
 
 // 雷达状态数据

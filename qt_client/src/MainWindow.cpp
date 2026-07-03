@@ -27,9 +27,25 @@
 #include <QTcpSocket>
 #include <QtEndian>
 #include <QDateTime>
+#include <QHostAddress>
 #include <QJsonObject>
 #include <QNetworkDatagram>
 #include <cstring>
+
+namespace {
+uint8_t visionAttentionRegion(const QString &attention)
+{
+    if (attention == "front") return VISION_ATTENTION_FRONT;
+    if (attention == "left") return VISION_ATTENTION_LEFT;
+    if (attention == "right") return VISION_ATTENTION_RIGHT;
+    if (attention == "up") return VISION_ATTENTION_UP;
+    if (attention == "down") return VISION_ATTENTION_DOWN;
+    if (attention == "eyes_closed") return VISION_ATTENTION_EYES_CLOSED;
+    if (attention == "no_face") return VISION_ATTENTION_NO_FACE;
+    if (attention == "error") return VISION_ATTENTION_ERROR;
+    return VISION_ATTENTION_UNKNOWN;
+}
+}
 
 // ════════════════════════════════════════════════════════════
 //  NavButton
@@ -476,6 +492,7 @@ void MainWindow::showStudySetupDialog()
 void MainWindow::startStudy(int minutes)
 {
     inStudyMode = true;
+    isDistracted = false;
     studyPage->startTimer(minutes);
     stack->setCurrentWidget(studyPage); 
     btnHome->setActive(false);
@@ -491,6 +508,7 @@ void MainWindow::startStudy(int minutes)
 void MainWindow::stopStudy()
 {
     inStudyMode = false;
+    isDistracted = false;
     studyPage->stopTimer();
     stack->setCurrentWidget(homePage);
     setActiveNav(btnHome);
@@ -545,6 +563,22 @@ void MainWindow::handleFusionState(const FusionState &state)
 {
     statusPage->setFusionState(state.current_state, state.state_score);
     statusPage->setSeatPresent(state.current_state != STATE_ABSENT, 0.0f, state.state_score);
+
+    if (!inStudyMode) {
+        isDistracted = false;
+        return;
+    }
+
+    if (state.current_state == STATE_DISTRACTED) {
+        if (!isDistracted) {
+            distractedCount++;
+        }
+        isDistracted = true;
+    } else if (state.current_state == STATE_FOCUSED ||
+               state.current_state == STATE_SEATED_IDLE ||
+               state.current_state == STATE_ABSENT) {
+        isDistracted = false;
+    }
 }
 
 void MainWindow::handleVisionTelemetry(const QByteArray &data)
@@ -559,6 +593,11 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     if (obj.contains("ok") && !obj.value("ok").toBool(true)) {
         statusPage->setFacePresent(false, 0.0f);
         statusPage->setAttention("error", 0.0f, 0.0f, 0.0f);
+        VisionState state;
+        std::memset(&state, 0, sizeof(state));
+        state.attention_region = VISION_ATTENTION_ERROR;
+        state.timestamp = static_cast<uint64_t>(QDateTime::currentMSecsSinceEpoch());
+        sendTcpVisionState(state);
         return;
     }
 
@@ -570,52 +609,26 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     const float roll = static_cast<float>(obj.value("roll").toDouble(0.0));
     const bool yawning = obj.value("yawning").toBool(false);
     const int blink_count = obj.value("blink_count").toInt(0);
+    const int yawn_count = obj.value("yawn_count").toInt(0);
     const bool eyes_closed = obj.value("eyes_closed").toBool(false);
 
     statusPage->setFacePresent(hasFace, score);
     statusPage->setAttention(attention, yaw, pitch, roll);
 
-    if (inStudyMode) {
-        qint64 now = QDateTime::currentMSecsSinceEpoch();
-        if (lastBlinkCount == -1 || blink_count != lastBlinkCount) {
-            lastBlinkCount = blink_count;
-            lastBlinkTime = now;
-        }
-        
-        if (eyes_closed) {
-            if (lastEyesClosedTime == 0) lastEyesClosedTime = now;
-        } else {
-            lastEyesClosedTime = 0;
-        }
-
-        bool currentlyDistracted = false;
-        if (attention == "left" || attention == "right" || attention == "up" || attention == "down" || attention == "eyes_closed") {
-            currentlyDistracted = true;
-        } else if (attention == "front") {
-            if (yawning) {
-                currentlyDistracted = true;
-            } else if (lastBlinkTime > 0 && (now - lastBlinkTime) >= 20000) {
-                currentlyDistracted = true;
-            } else if (lastEyesClosedTime > 0 && (now - lastEyesClosedTime) >= 5000) {
-                currentlyDistracted = true;
-            }
-        }
-
-        if (currentlyDistracted != isDistracted) {
-            isDistracted = currentlyDistracted;
-            if (isDistracted) {
-                distractedCount++;
-                sendTcpCommand(ASR_CMD_STUDY_DISTRACTED);
-            } else if (!isAutoPaused) {
-                sendTcpCommand(ASR_CMD_STUDY_FOCUSED);
-            }
-        }
-    } else {
-        isDistracted = false;
-        lastBlinkCount = -1;
-        lastBlinkTime = 0;
-        lastEyesClosedTime = 0;
-    }
+    VisionState state;
+    std::memset(&state, 0, sizeof(state));
+    state.face_present = hasFace ? 1 : 0;
+    state.eye_closed_prob = eyes_closed ? 1.0f : 0.0f;
+    state.yawn_prob = yawning ? 1.0f : 0.0f;
+    state.pitch = pitch;
+    state.yaw = yaw;
+    state.attention_region = visionAttentionRegion(attention);
+    state.face_quality = score;
+    state.timestamp = static_cast<uint64_t>(
+        obj.value("timestamp_ms").toDouble(QDateTime::currentMSecsSinceEpoch()));
+    state.blink_count = static_cast<uint32_t>(qMax(0, blink_count));
+    state.yawn_count = static_cast<uint32_t>(qMax(0, yawn_count));
+    sendTcpVisionState(state);
 }
 
 // ==================== UDP 联动槽函数 ====================
@@ -713,6 +726,22 @@ void MainWindow::sendTcpCommand(uint8_t cmd_id) {
         socket.write((const char*)&len, 4);
         socket.write((const char*)&cmd, sizeof(AsrCommand));
         socket.waitForBytesWritten(500);
+        socket.disconnectFromHost();
+    }
+}
+
+void MainWindow::sendTcpVisionState(const VisionState &state)
+{
+    QTcpSocket socket;
+    socket.connectToHost("127.0.0.1", 8888);
+    if (socket.waitForConnected(100)) {
+        uint32_t type = qToBigEndian<uint32_t>(MSG_VISION_STATE);
+        uint32_t len = qToBigEndian<uint32_t>(sizeof(VisionState));
+
+        socket.write(reinterpret_cast<const char*>(&type), 4);
+        socket.write(reinterpret_cast<const char*>(&len), 4);
+        socket.write(reinterpret_cast<const char*>(&state), sizeof(VisionState));
+        socket.waitForBytesWritten(100);
         socket.disconnectFromHost();
     }
 }

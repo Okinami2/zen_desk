@@ -21,6 +21,35 @@ static int g_server_running = 0;
 static int g_udp_fd = -1;
 static struct sockaddr_in g_udp_addr;
 
+#define VISION_FOCUS_WINDOW_SIZE 10
+#define VISION_MIN_VALID_SAMPLES 6
+#define VISION_DISTRACTED_SAMPLE_THRESHOLD 7
+#define VISION_FOCUSED_SAMPLE_THRESHOLD 8
+#define VISION_TRANSITION_COOLDOWN_MS 1500ULL
+#define VISION_NO_BLINK_TIMEOUT_MS 30000ULL
+#define VISION_EYES_CLOSED_TIMEOUT_MS 1500ULL
+
+typedef enum {
+    VISION_VOTE_UNKNOWN = 0,
+    VISION_VOTE_FOCUSED = 1,
+    VISION_VOTE_DISTRACTED = -1
+} VisionFocusVote;
+
+typedef struct {
+    VisionFocusVote votes[VISION_FOCUS_WINDOW_SIZE];
+    int vote_index;
+    int vote_count;
+    int is_distracted;
+    int blink_initialized;
+    uint32_t last_blink_count;
+    uint64_t last_blink_ms;
+    uint64_t last_transition_ms;
+    uint64_t eyes_closed_since_ms;
+    uint8_t last_attention_region;
+} VisionFocusFilter;
+
+static VisionFocusFilter g_vision_filter;
+
 void fusion_send_ui_event(UiEventType type) {
     if (g_udp_fd < 0) return;
     UiEventMessage msg;
@@ -31,6 +60,8 @@ void fusion_send_ui_event(UiEventType type) {
 
 /* ==================== 前置声明 ==================== */
 static void radar_to_fusion_and_dispatch(const RadarState *rs);
+static void vision_to_fusion_and_dispatch(const VisionState *vs);
+static void vision_focus_reset(int is_distracted);
 
 /* ==================== TCP 服务器 ==================== */
 
@@ -52,7 +83,7 @@ static void* tcp_client_handler(void *arg)
     int client_fd = *(int*)arg;
     free(arg);
 
-    LOG_INFO("TCP client thread started (fd=%d)", client_fd);
+    LOG_DEBUG("TCP client thread started (fd=%d)", client_fd);
 
     /* 读取消息循环: [type:4B BE][length:4B BE][payload:N B] */
     while (g_server_running) {
@@ -75,6 +106,9 @@ static void* tcp_client_handler(void *arg)
             LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m",
                      rs->presence, rs->motion_level, rs->distance);
             radar_to_fusion_and_dispatch(rs);
+        } else if (msg_type == MSG_VISION_STATE && msg_len == sizeof(VisionState)) {
+            VisionState *vs = (VisionState *)payload;
+            vision_to_fusion_and_dispatch(vs);
         } else if (msg_type == MSG_ASR_COMMAND && msg_len == sizeof(AsrCommand)) {
             AsrCommand *cmd = (AsrCommand *)payload;
             LOG_INFO("Recv ASR Command: 0x%02X", cmd->command_id);
@@ -93,41 +127,48 @@ static void* tcp_client_handler(void *arg)
                     break;
                 case ASR_CMD_STUDY_START:
                     g_fusion_service.current_state = STATE_FOCUSED;
+                    vision_focus_reset(0);
                     fs.duration_minutes = 0; // 默认正计时
                     LOG_INFO("ASR overridden state to FOCUSED (Free)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_FREE);
                     break;
                 case ASR_CMD_STUDY_RESUME:
                     g_fusion_service.current_state = STATE_FOCUSED;
+                    vision_focus_reset(0);
                     LOG_INFO("ASR overridden state to FOCUSED (Resume)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_RESUME);
                     break;
                 case ASR_CMD_STUDY_START_25:
                     g_fusion_service.current_state = STATE_FOCUSED;
+                    vision_focus_reset(0);
                     fs.duration_minutes = 25;
                     LOG_INFO("ASR overridden state to FOCUSED (25 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_25);
                     break;
                 case ASR_CMD_STUDY_START_45:
                     g_fusion_service.current_state = STATE_FOCUSED;
+                    vision_focus_reset(0);
                     fs.duration_minutes = 45;
                     LOG_INFO("ASR overridden state to FOCUSED (45 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_45);
                     break;
                 case ASR_CMD_STUDY_START_60:
                     g_fusion_service.current_state = STATE_FOCUSED;
+                    vision_focus_reset(0);
                     fs.duration_minutes = 60;
                     LOG_INFO("ASR overridden state to FOCUSED (60 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_60);
                     break;
                 case ASR_CMD_STUDY_PAUSE:
                     g_fusion_service.current_state = STATE_SEATED_IDLE;
+                    vision_focus_reset(0);
                     fs.duration_minutes = 0;
                     LOG_INFO("ASR overridden state to IDLE (Pause)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_PAUSE);
                     break;
                 case ASR_CMD_STUDY_STOP:
                     g_fusion_service.current_state = STATE_SEATED_IDLE;
+                    vision_focus_reset(0);
                     fs.duration_minutes = 0;
                     LOG_INFO("ASR overridden state to IDLE (Stop)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_STOP);
@@ -158,10 +199,12 @@ static void* tcp_client_handler(void *arg)
                     break;
                 case ASR_CMD_STUDY_DISTRACTED:
                     g_fusion_service.current_state = STATE_DISTRACTED;
+                    vision_focus_reset(1);
                     LOG_INFO("Vision triggered DISTRACTED");
                     break;
                 case ASR_CMD_STUDY_FOCUSED:
                     g_fusion_service.current_state = STATE_FOCUSED;
+                    vision_focus_reset(0);
                     LOG_INFO("Vision triggered FOCUSED");
                     break;
             }
@@ -180,7 +223,7 @@ static void* tcp_client_handler(void *arg)
     }
 
     close(client_fd);
-    LOG_INFO("TCP client thread disconnected (fd=%d)", client_fd);
+    LOG_DEBUG("TCP client thread disconnected (fd=%d)", client_fd);
     return NULL;
 }
 
@@ -260,6 +303,227 @@ static void* tcp_server_thread(void *arg)
     return NULL;
 }
 
+static uint64_t fusion_monotonic_ms(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+}
+
+static void vision_focus_reset(int is_distracted)
+{
+    memset(&g_vision_filter, 0, sizeof(g_vision_filter));
+    g_vision_filter.is_distracted = is_distracted;
+}
+
+static void vision_focus_clear_votes(void)
+{
+    memset(g_vision_filter.votes, 0, sizeof(g_vision_filter.votes));
+    g_vision_filter.vote_index = 0;
+    g_vision_filter.vote_count = 0;
+}
+
+static void vision_focus_push_vote(VisionFocusVote vote)
+{
+    if (vote == VISION_VOTE_UNKNOWN) {
+        return;
+    }
+
+    g_vision_filter.votes[g_vision_filter.vote_index] = vote;
+    g_vision_filter.vote_index =
+        (g_vision_filter.vote_index + 1) % VISION_FOCUS_WINDOW_SIZE;
+    if (g_vision_filter.vote_count < VISION_FOCUS_WINDOW_SIZE) {
+        g_vision_filter.vote_count++;
+    }
+}
+
+static void vision_focus_count_votes(int *focused_count, int *distracted_count)
+{
+    int i;
+    int focused = 0;
+    int distracted = 0;
+
+    for (i = 0; i < g_vision_filter.vote_count; ++i) {
+        if (g_vision_filter.votes[i] == VISION_VOTE_FOCUSED) {
+            focused++;
+        } else if (g_vision_filter.votes[i] == VISION_VOTE_DISTRACTED) {
+            distracted++;
+        }
+    }
+
+    *focused_count = focused;
+    *distracted_count = distracted;
+}
+
+static int vision_attention_is_distracting(uint8_t region)
+{
+    return region == VISION_ATTENTION_LEFT ||
+           region == VISION_ATTENTION_RIGHT ||
+           region == VISION_ATTENTION_UP ||
+           region == VISION_ATTENTION_DOWN;
+}
+
+static VisionFocusVote vision_state_to_vote(const VisionState *vs)
+{
+    uint64_t now_ms;
+
+    if (vs == NULL) {
+        return VISION_VOTE_UNKNOWN;
+    }
+
+    now_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
+
+    if (vs->face_present == 0 ||
+        vs->attention_region == VISION_ATTENTION_NO_FACE ||
+        vs->attention_region == VISION_ATTENTION_ERROR ||
+        vs->attention_region == VISION_ATTENTION_UNKNOWN) {
+        g_vision_filter.last_attention_region = vs->attention_region;
+        g_vision_filter.eyes_closed_since_ms = 0;
+        return VISION_VOTE_UNKNOWN;
+    }
+
+    if (g_vision_filter.last_attention_region != vs->attention_region) {
+        g_vision_filter.last_attention_region = vs->attention_region;
+        g_vision_filter.eyes_closed_since_ms = 0;
+        if (vs->attention_region == VISION_ATTENTION_FRONT) {
+            g_vision_filter.blink_initialized = 1;
+            g_vision_filter.last_blink_count = vs->blink_count;
+            g_vision_filter.last_blink_ms = now_ms;
+        }
+    }
+
+    if (vision_attention_is_distracting(vs->attention_region)) {
+        return VISION_VOTE_DISTRACTED;
+    }
+    if (vs->yawn_prob >= 0.5f) {
+        return VISION_VOTE_DISTRACTED;
+    }
+
+    if (!g_vision_filter.blink_initialized ||
+        vs->blink_count != g_vision_filter.last_blink_count) {
+        g_vision_filter.blink_initialized = 1;
+        g_vision_filter.last_blink_count = vs->blink_count;
+        g_vision_filter.last_blink_ms = now_ms;
+    } else if (now_ms >= g_vision_filter.last_blink_ms &&
+               now_ms - g_vision_filter.last_blink_ms >= VISION_NO_BLINK_TIMEOUT_MS) {
+        return VISION_VOTE_DISTRACTED;
+    }
+
+    if (vs->eye_closed_prob >= 0.5f) {
+        if (g_vision_filter.eyes_closed_since_ms == 0) {
+            g_vision_filter.eyes_closed_since_ms = now_ms;
+        } else if (now_ms >= g_vision_filter.eyes_closed_since_ms &&
+                   now_ms - g_vision_filter.eyes_closed_since_ms >= VISION_EYES_CLOSED_TIMEOUT_MS) {
+            return VISION_VOTE_DISTRACTED;
+        }
+    } else {
+        g_vision_filter.eyes_closed_since_ms = 0;
+    }
+
+    return VISION_VOTE_FOCUSED;
+}
+
+static int vision_focus_apply_vote(VisionFocusVote vote, uint64_t now_ms, LearningState *new_state)
+{
+    int focused_count = 0;
+    int distracted_count = 0;
+
+    if (vote == VISION_VOTE_UNKNOWN) {
+        return 0;
+    }
+
+    vision_focus_push_vote(vote);
+
+    if (g_vision_filter.vote_count < VISION_MIN_VALID_SAMPLES) {
+        return 0;
+    }
+
+    if (g_vision_filter.last_transition_ms != 0 &&
+        now_ms >= g_vision_filter.last_transition_ms &&
+        now_ms - g_vision_filter.last_transition_ms < VISION_TRANSITION_COOLDOWN_MS) {
+        return 0;
+    }
+
+    vision_focus_count_votes(&focused_count, &distracted_count);
+
+    if (!g_vision_filter.is_distracted &&
+        distracted_count >= VISION_DISTRACTED_SAMPLE_THRESHOLD) {
+        g_vision_filter.is_distracted = 1;
+        g_vision_filter.last_transition_ms = now_ms;
+        vision_focus_clear_votes();
+        *new_state = STATE_DISTRACTED;
+        LOG_INFO("Vision vote: enter DISTRACTED (good=%d bad=%d)",
+                 focused_count, distracted_count);
+        return 1;
+    }
+
+    if (g_vision_filter.is_distracted &&
+        focused_count >= VISION_FOCUSED_SAMPLE_THRESHOLD) {
+        g_vision_filter.is_distracted = 0;
+        g_vision_filter.last_transition_ms = now_ms;
+        vision_focus_clear_votes();
+        *new_state = STATE_FOCUSED;
+        LOG_INFO("Vision vote: recover FOCUSED (good=%d bad=%d)",
+                 focused_count, distracted_count);
+        return 1;
+    }
+
+    return 0;
+}
+
+static void vision_to_fusion_and_dispatch(const VisionState *vs)
+{
+    FusionState fs;
+    LearningState next_state = STATE_FOCUSED;
+    VisionFocusVote vote;
+    int should_dispatch = 0;
+    uint64_t now_ms;
+
+    if (vs == NULL) {
+        return;
+    }
+
+    memset(&fs, 0, sizeof(fs));
+    fs.state_score = vs->face_quality;
+    fs.intervention_level = 0;
+    fs.duration_minutes = 0;
+    fs.timestamp = time(NULL);
+
+    pthread_mutex_lock(&g_fusion_service.mutex);
+    g_fusion_service.latest_vision = *vs;
+
+    if (g_fusion_service.current_state != STATE_FOCUSED &&
+        g_fusion_service.current_state != STATE_DISTRACTED) {
+        vision_focus_reset(0);
+        pthread_mutex_unlock(&g_fusion_service.mutex);
+        return;
+    }
+
+    if (g_fusion_service.current_state == STATE_DISTRACTED) {
+        g_vision_filter.is_distracted = 1;
+    }
+
+    now_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
+    vote = vision_state_to_vote(vs);
+    if (vision_focus_apply_vote(vote, now_ms, &next_state)) {
+        if (g_fusion_service.current_state != next_state) {
+            g_fusion_service.current_state = next_state;
+            should_dispatch = 1;
+            LOG_INFO("Vision fusion state -> %s",
+                next_state == STATE_DISTRACTED ? "DISTRACTED" : "FOCUSED");
+        }
+    }
+
+    fs.current_state = g_fusion_service.current_state;
+    pthread_mutex_unlock(&g_fusion_service.mutex);
+
+    if (should_dispatch) {
+        fusion_send_state(&fs);
+        device_handle_fusion_state(&fs);
+    }
+}
+
 /* 雷达 → 融合状态: 雷达作为第一优先级
  * presence=1 → 入座, presence=0 → 离座 */
 static void radar_to_fusion_and_dispatch(const RadarState *rs)
@@ -296,6 +560,7 @@ int fusion_service_init(const Config *config) {
     g_fusion_service.config = *config;
     g_fusion_service.running = 0;
     g_fusion_service.current_state = STATE_SEATED_IDLE;
+    vision_focus_reset(0);
     pthread_mutex_init(&g_fusion_service.mutex, NULL);
 
     if (device_service_init(config) != 0) {

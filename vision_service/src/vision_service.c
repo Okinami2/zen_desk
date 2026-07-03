@@ -1,8 +1,12 @@
 #include "vision_service.h"
 
+#include <arpa/inet.h>
 #include <errno.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/select.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,6 +24,7 @@
 #define VISION_FRAME_QUEUE_CAPACITY 2
 #define VISION_ERROR_RETRY_US       100000
 #define VISION_WAIT_INTERVAL_NS     100000000L
+#define VISION_CONTROL_PACKET_MAX   64
 
 typedef struct {
     ot_video_frame_info frame;
@@ -44,17 +49,33 @@ typedef struct {
     vision_service_config config;
     sample_uvc_capture_ctx capture;
     pthread_t producer_thread;
+    pthread_t control_thread;
     td_bool producer_started;
+    td_bool control_started;
     pthread_mutex_t queue_mutex;
     pthread_cond_t queue_cond;
+    pthread_mutex_t monitor_mutex;
+    pthread_cond_t monitor_cond;
     vision_frame_item queue[VISION_FRAME_QUEUE_CAPACITY];
     td_u32 queue_head;
     td_u32 queue_count;
     vision_metrics metrics;
     vision_debug_context debug;
+    td_bool monitoring_enabled;
+    td_bool npu_inited;
+    td_s32 control_fd;
 } vision_service_context;
 
 static volatile sig_atomic_t g_stop_requested = 0;
+
+static td_void vision_add_wait_interval(struct timespec *deadline)
+{
+    deadline->tv_nsec += VISION_WAIT_INTERVAL_NS;
+    if (deadline->tv_nsec >= 1000000000L) {
+        deadline->tv_sec++;
+        deadline->tv_nsec -= 1000000000L;
+    }
+}
 
 static td_double vision_now_seconds(td_void)
 {
@@ -104,11 +125,7 @@ static td_bool vision_queue_pop(vision_service_context *ctx, vision_frame_item *
     (void)pthread_mutex_lock(&ctx->queue_mutex);
     while (ctx->queue_count == 0 && g_stop_requested == 0) {
         (void)clock_gettime(CLOCK_REALTIME, &deadline);
-        deadline.tv_nsec += VISION_WAIT_INTERVAL_NS;
-        if (deadline.tv_nsec >= 1000000000L) {
-            deadline.tv_sec++;
-            deadline.tv_nsec -= 1000000000L;
-        }
+        vision_add_wait_interval(&deadline);
         (void)pthread_cond_timedwait(&ctx->queue_cond, &ctx->queue_mutex, &deadline);
     }
 
@@ -136,6 +153,136 @@ static td_void vision_queue_drain(vision_service_context *ctx)
     (void)pthread_mutex_unlock(&ctx->queue_mutex);
 }
 
+static td_bool vision_monitoring_wait_enabled(vision_service_context *ctx)
+{
+    struct timespec deadline;
+    td_bool enabled;
+
+    (void)pthread_mutex_lock(&ctx->monitor_mutex);
+    while (ctx->monitoring_enabled != TD_TRUE && g_stop_requested == 0) {
+        (void)clock_gettime(CLOCK_REALTIME, &deadline);
+        vision_add_wait_interval(&deadline);
+        (void)pthread_cond_timedwait(&ctx->monitor_cond, &ctx->monitor_mutex, &deadline);
+    }
+    enabled = ctx->monitoring_enabled;
+    (void)pthread_mutex_unlock(&ctx->monitor_mutex);
+    return (enabled == TD_TRUE && g_stop_requested == 0) ? TD_TRUE : TD_FALSE;
+}
+
+static td_bool vision_monitoring_is_enabled(vision_service_context *ctx)
+{
+    td_bool enabled;
+
+    (void)pthread_mutex_lock(&ctx->monitor_mutex);
+    enabled = ctx->monitoring_enabled;
+    (void)pthread_mutex_unlock(&ctx->monitor_mutex);
+    return enabled;
+}
+
+static td_void vision_monitoring_set(vision_service_context *ctx, td_bool enabled)
+{
+    td_bool changed;
+
+    (void)pthread_mutex_lock(&ctx->monitor_mutex);
+    changed = (ctx->monitoring_enabled != enabled) ? TD_TRUE : TD_FALSE;
+    ctx->monitoring_enabled = enabled;
+    (void)pthread_cond_broadcast(&ctx->monitor_cond);
+    (void)pthread_mutex_unlock(&ctx->monitor_mutex);
+
+    if (enabled != TD_TRUE) {
+        vision_queue_drain(ctx);
+    }
+    if (changed == TD_TRUE) {
+        printf("vision: monitoring %s\n", enabled == TD_TRUE ? "enabled" : "disabled");
+    }
+}
+
+static td_s32 vision_control_open(vision_service_context *ctx)
+{
+    struct sockaddr_in addr;
+    int opt = 1;
+
+    ctx->control_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (ctx->control_fd < 0) {
+        perror("vision: control socket");
+        return TD_FAILURE;
+    }
+
+    (void)setsockopt(ctx->control_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    (void)memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(ctx->config.control_port);
+
+    if (bind(ctx->control_fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        perror("vision: control bind");
+        close(ctx->control_fd);
+        ctx->control_fd = -1;
+        return TD_FAILURE;
+    }
+
+    printf("vision: control UDP -> 127.0.0.1:%u\n", ctx->config.control_port);
+    return TD_SUCCESS;
+}
+
+static td_void *vision_control_thread(td_void *arg)
+{
+    vision_service_context *ctx = (vision_service_context *)arg;
+    char buffer[VISION_CONTROL_PACKET_MAX];
+
+    while (g_stop_requested == 0) {
+        fd_set fds;
+        struct timeval timeout = {1, 0};
+        int ret;
+        ssize_t received;
+
+        FD_ZERO(&fds);
+        FD_SET(ctx->control_fd, &fds);
+        ret = select(ctx->control_fd + 1, &fds, TD_NULL, TD_NULL, &timeout);
+        if (ret <= 0) {
+            continue;
+        }
+
+        received = recvfrom(ctx->control_fd, buffer, sizeof(buffer) - 1, 0,
+            TD_NULL, TD_NULL);
+        if (received <= 0) {
+            continue;
+        }
+        buffer[received] = '\0';
+
+        if (strncmp(buffer, "enable", 6) == 0 ||
+            strncmp(buffer, "start", 5) == 0 ||
+            strncmp(buffer, "1", 1) == 0) {
+            vision_monitoring_set(ctx, TD_TRUE);
+        } else if (strncmp(buffer, "disable", 7) == 0 ||
+            strncmp(buffer, "stop", 4) == 0 ||
+            strncmp(buffer, "0", 1) == 0) {
+            vision_monitoring_set(ctx, TD_FALSE);
+        } else {
+            fprintf(stderr, "vision: ignored control command: %s\n", buffer);
+        }
+    }
+    return TD_NULL;
+}
+
+static td_s32 vision_ensure_npu_runtime(vision_service_context *ctx)
+{
+    td_s32 ret;
+
+    if (ctx->npu_inited == TD_TRUE) {
+        return TD_SUCCESS;
+    }
+
+    printf("vision: initializing NPU runtime\n");
+    ret = sample_svp_npu_init_runtime();
+    if (ret != TD_SUCCESS) {
+        fprintf(stderr, "vision: initialize NPU runtime failed, ret=%d\n", ret);
+        return ret;
+    }
+    ctx->npu_inited = TD_TRUE;
+    return TD_SUCCESS;
+}
+
 static td_void *vision_capture_thread(td_void *arg)
 {
     vision_service_context *ctx = (vision_service_context *)arg;
@@ -144,6 +291,10 @@ static td_void *vision_capture_thread(td_void *arg)
         ot_video_frame_info frame = {0};
         td_s32 ret;
 
+        if (vision_monitoring_wait_enabled(ctx) != TD_TRUE) {
+            break;
+        }
+
         ret = sample_uvc_capture_read_frame(&ctx->capture, &frame,
             ctx->config.capture_timeout_ms);
         if (ret != TD_SUCCESS) {
@@ -151,6 +302,10 @@ static td_void *vision_capture_thread(td_void *arg)
                 fprintf(stderr, "vision: capture frame failed, ret=%d\n", ret);
                 (void)usleep(VISION_ERROR_RETRY_US);
             }
+            continue;
+        }
+        if (vision_monitoring_is_enabled(ctx) != TD_TRUE) {
+            vision_release_frame(&frame);
             continue;
         }
         vision_queue_push_latest(ctx, &frame, vision_now_seconds());
@@ -246,7 +401,19 @@ static td_s32 vision_process_loop(vision_service_context *ctx)
         td_s32 ret;
         td_double inference_ms;
 
+        if (vision_monitoring_wait_enabled(ctx) != TD_TRUE) {
+            break;
+        }
+        ret = vision_ensure_npu_runtime(ctx);
+        if (ret != TD_SUCCESS) {
+            return ret;
+        }
+
         if (vision_queue_pop(ctx, &item) != TD_TRUE) {
+            continue;
+        }
+        if (vision_monitoring_is_enabled(ctx) != TD_TRUE) {
+            vision_release_frame(&item.frame);
             continue;
         }
 
@@ -256,7 +423,9 @@ static td_s32 vision_process_loop(vision_service_context *ctx)
             ret = sample_svp_npu_process_frame(&item.frame, virt_addr, &result);
             finished = vision_now_seconds();
             inference_ms = (finished - inference_started) * 1000.0;
-            vision_debug_publish(&ctx->debug, &item.frame, virt_addr, &result, ret, inference_ms);
+            if (vision_monitoring_is_enabled(ctx) == TD_TRUE) {
+                vision_debug_publish(&ctx->debug, &item.frame, virt_addr, &result, ret, inference_ms);
+            }
             (void)ss_mpi_sys_munmap(virt_addr, (td_u32)mapped_size);
         } else {
             fprintf(stderr, "vision: invalid or unmappable video frame\n");
@@ -280,7 +449,6 @@ td_s32 vision_service_run(const vision_service_config *config)
     td_bool sdk_inited = TD_FALSE;
     td_bool capture_opened = TD_FALSE;
     td_bool display_started = TD_FALSE;
-    td_bool npu_inited = TD_FALSE;
     td_s32 ret = TD_FAILURE;
 
     if (config == TD_NULL || config->device_path == TD_NULL ||
@@ -296,6 +464,8 @@ td_s32 vision_service_run(const vision_service_config *config)
     (void)memset(&ctx, 0, sizeof(ctx));
     ctx.config = *config;
     ctx.metrics.window_start = vision_now_seconds();
+    ctx.monitoring_enabled = config->monitoring_default;
+    ctx.control_fd = -1;
     g_stop_requested = 0;
 
     if (pthread_mutex_init(&ctx.queue_mutex, TD_NULL) != 0) {
@@ -305,6 +475,19 @@ td_s32 vision_service_run(const vision_service_config *config)
         (void)pthread_mutex_destroy(&ctx.queue_mutex);
         return TD_FAILURE;
     }
+    if (pthread_mutex_init(&ctx.monitor_mutex, TD_NULL) != 0) {
+        (void)pthread_cond_destroy(&ctx.queue_cond);
+        (void)pthread_mutex_destroy(&ctx.queue_mutex);
+        return TD_FAILURE;
+    }
+    if (pthread_cond_init(&ctx.monitor_cond, TD_NULL) != 0) {
+        (void)pthread_mutex_destroy(&ctx.monitor_mutex);
+        (void)pthread_cond_destroy(&ctx.queue_cond);
+        (void)pthread_mutex_destroy(&ctx.queue_mutex);
+        return TD_FAILURE;
+    }
+    printf("vision: monitoring initially %s\n",
+        ctx.monitoring_enabled == TD_TRUE ? "enabled" : "disabled");
 
     SDK_init();
     if (config->mpp_attached != TD_TRUE) {
@@ -319,6 +502,19 @@ td_s32 vision_service_run(const vision_service_config *config)
         fprintf(stderr, "vision: initialize debug outputs failed\n");
         goto cleanup;
     }
+
+    ret = vision_control_open(&ctx);
+    if (ret != TD_SUCCESS) {
+        fprintf(stderr, "vision: initialize control socket failed\n");
+        goto cleanup;
+    }
+    ret = pthread_create(&ctx.control_thread, TD_NULL, vision_control_thread, &ctx);
+    if (ret != 0) {
+        fprintf(stderr, "vision: create control thread failed: %s\n", strerror(ret));
+        ret = TD_FAILURE;
+        goto cleanup;
+    }
+    ctx.control_started = TD_TRUE;
 
     ret = sample_uvc_capture_open(&ctx.capture, config->device_path,
         config->pixel_format, config->width, config->height, config->mpp_attached);
@@ -340,14 +536,6 @@ td_s32 vision_service_run(const vision_service_config *config)
         printf("vision: integrated display initialized\n");
     }
 
-    printf("vision: initializing NPU runtime\n");
-    ret = sample_svp_npu_init_runtime();
-    if (ret != TD_SUCCESS) {
-        fprintf(stderr, "vision: initialize NPU runtime failed, ret=%d\n", ret);
-        goto cleanup;
-    }
-    npu_inited = TD_TRUE;
-
     ret = pthread_create(&ctx.producer_thread, TD_NULL, vision_capture_thread, &ctx);
     if (ret != 0) {
         fprintf(stderr, "vision: create capture thread failed: %s\n", strerror(ret));
@@ -362,11 +550,20 @@ td_s32 vision_service_run(const vision_service_config *config)
 
 cleanup:
     g_stop_requested = 1;
+    (void)pthread_cond_broadcast(&ctx.monitor_cond);
+    (void)pthread_cond_broadcast(&ctx.queue_cond);
+    if (ctx.control_started == TD_TRUE) {
+        (void)pthread_join(ctx.control_thread, TD_NULL);
+    }
+    if (ctx.control_fd >= 0) {
+        (void)close(ctx.control_fd);
+        ctx.control_fd = -1;
+    }
     if (ctx.producer_started == TD_TRUE) {
         (void)pthread_join(ctx.producer_thread, TD_NULL);
     }
     vision_queue_drain(&ctx);
-    if (npu_inited == TD_TRUE) {
+    if (ctx.npu_inited == TD_TRUE) {
         sample_svp_npu_deinit_runtime();
     }
     if (display_started == TD_TRUE) {
@@ -379,6 +576,8 @@ cleanup:
         SDK_exit();
     }
     vision_debug_deinit(&ctx.debug);
+    (void)pthread_cond_destroy(&ctx.monitor_cond);
+    (void)pthread_mutex_destroy(&ctx.monitor_mutex);
     (void)pthread_cond_destroy(&ctx.queue_cond);
     (void)pthread_mutex_destroy(&ctx.queue_mutex);
     return ret;

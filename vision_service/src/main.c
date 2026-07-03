@@ -14,6 +14,7 @@
 #define VISION_UVC_HEIGHT         720
 #define VISION_UVC_TIMEOUT_MS     2000
 #define VISION_TELEMETRY_PORT     9100
+#define VISION_CONTROL_PORT       9101
 #define VISION_SNAPSHOT_EVERY     30
 #define VISION_SNAPSHOT_LIMIT     100
 
@@ -84,10 +85,14 @@ static void vision_print_usage(const td_char *program)
         "  --snapshot-limit N        maximum saved frames, 0=unlimited (default: %u)\n"
         "  --mpp-attached            use existing MPP SYS/VB owned by vo_init\n"
         "  --display                 initialize HDMI VO/GFBG in this process\n"
-        "  --display-ready-file PATH write file after display is ready\n",
+        "  --display-ready-file PATH write file after display is ready\n"
+        "  --control-port N          listen for enable/disable monitoring commands (default: %u)\n"
+        "  --monitoring-start-disabled wait for a control command before inference\n"
+        "  --monitoring-start-enabled  run inference immediately\n",
         program, VISION_UVC_DEV_PATH, VISION_UVC_PIX_FMT,
         VISION_UVC_WIDTH, VISION_UVC_HEIGHT,
-        VISION_SNAPSHOT_EVERY, VISION_SNAPSHOT_LIMIT);
+        VISION_SNAPSHOT_EVERY, VISION_SNAPSHOT_LIMIT,
+        VISION_CONTROL_PORT);
 }
 
 int main(int argc, char *argv[])
@@ -106,6 +111,8 @@ int main(int argc, char *argv[])
         .mpp_attached = TD_FALSE,
         .display_enable = TD_FALSE,
         .display_ready_file = TD_NULL,
+        .monitoring_default = TD_TRUE,
+        .control_port = VISION_CONTROL_PORT,
     };
     static const struct option options[] = {
         {"device", required_argument, TD_NULL, 'd'},
@@ -119,6 +126,9 @@ int main(int argc, char *argv[])
         {"mpp-attached", no_argument, TD_NULL, 'a'},
         {"display", no_argument, TD_NULL, 'p'},
         {"display-ready-file", required_argument, TD_NULL, 'r'},
+        {"control-port", required_argument, TD_NULL, 'c'},
+        {"monitoring-start-disabled", no_argument, TD_NULL, 1000},
+        {"monitoring-start-enabled", no_argument, TD_NULL, 1001},
         {"help", no_argument, TD_NULL, '?'},
         {TD_NULL, 0, TD_NULL, 0}
     };
@@ -128,7 +138,7 @@ int main(int argc, char *argv[])
     setvbuf(stdout, TD_NULL, _IONBF, 0);
     setvbuf(stderr, TD_NULL, _IONBF, 0);
 
-    while ((option = getopt_long(argc, argv, "d:f:w:h:t:s:e:l:apr:?", options, TD_NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "d:f:w:h:t:s:e:l:apr:c:?", options, TD_NULL)) != -1) {
         switch (option) {
             case 'd':
                 config.device_path = optarg;
@@ -180,6 +190,22 @@ int main(int argc, char *argv[])
                 break;
             case 'r':
                 config.display_ready_file = optarg;
+                break;
+            case 'c': {
+                td_u32 port;
+                if (vision_parse_u32(optarg, &port) != TD_TRUE ||
+                    port == 0 || port > UINT16_MAX) {
+                    fprintf(stderr, "invalid control port: %s\n", optarg);
+                    return 2;
+                }
+                config.control_port = (td_u16)port;
+                break;
+            }
+            case 1000:
+                config.monitoring_default = TD_FALSE;
+                break;
+            case 1001:
+                config.monitoring_default = TD_TRUE;
                 break;
             default:
                 vision_print_usage(argv[0]);

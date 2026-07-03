@@ -21,6 +21,8 @@ typedef struct {
     td_bool mpp_attached;
     td_bool display_enable;
     const td_char *display_ready_file;
+    td_bool monitoring_default;
+    td_u16 control_port;
 } vision_service_config;
 
 td_s32 vision_service_run(const vision_service_config *config);

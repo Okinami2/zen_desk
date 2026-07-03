@@ -102,6 +102,7 @@ private:
     void setActiveNav(NavButton *active);
     void handleVisionTelemetry(const QByteArray &data);
     void handleFusionState(const FusionState &state);
+    void sendTcpVisionState(const VisionState &state);
 
     //  状态机核心成员
     InteractionLayer currentLayer = LAYER_HOME_BROWSE;
@@ -144,9 +145,6 @@ private:
     int effectiveStudySeconds = 0;
 
     bool isDistracted = false;
-    int lastBlinkCount = -1;
-    qint64 lastBlinkTime = 0;
-    qint64 lastEyesClosedTime = 0;
 
     QTimer *studyAccumulationTimer = nullptr;
 

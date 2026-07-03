@@ -21,9 +21,12 @@ VISION_SNAPSHOT_LIMIT="${VISION_SNAPSHOT_LIMIT:-100}"
 VISION_MPP_ATTACHED="${VISION_MPP_ATTACHED:-0}"
 VISION_DISPLAY_ENABLE="${VISION_DISPLAY_ENABLE:-0}"
 VISION_DISPLAY_READY_FILE="${VISION_DISPLAY_READY_FILE:-}"
+VISION_MONITORING_ENABLE="${VISION_MONITORING_ENABLE:-1}"
+VISION_CONTROL_PORT="${VISION_CONTROL_PORT:-9101}"
 VISION_EXTRA_SAFE_ARGS=
 VISION_MPP_ARGS=
 VISION_DISPLAY_ARGS=
+VISION_MONITOR_ARGS="--control-port $VISION_CONTROL_PORT"
 
 if [ "${VISION_ALLOW_EXTRA_ARGS:-0}" = "1" ]; then
     VISION_EXTRA_SAFE_ARGS="${VISION_EXTRA_ARGS:-}"
@@ -40,6 +43,12 @@ if [ "$VISION_DISPLAY_ENABLE" = "1" ]; then
         rm -f "$VISION_DISPLAY_READY_FILE"
         VISION_DISPLAY_ARGS="$VISION_DISPLAY_ARGS --display-ready-file $VISION_DISPLAY_READY_FILE"
     fi
+fi
+
+if [ "$VISION_MONITORING_ENABLE" = "1" ]; then
+    VISION_MONITOR_ARGS="$VISION_MONITOR_ARGS --monitoring-start-enabled"
+else
+    VISION_MONITOR_ARGS="$VISION_MONITOR_ARGS --monitoring-start-disabled"
 fi
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -71,6 +80,7 @@ if [ "$VISION_SNAPSHOT_ENABLE" = "1" ]; then
         --snapshot-limit "$VISION_SNAPSHOT_LIMIT" \
         $VISION_MPP_ARGS \
         $VISION_DISPLAY_ARGS \
+        $VISION_MONITOR_ARGS \
         $VISION_EXTRA_SAFE_ARGS \
         >"$LOG_DIR/vision_service.log" 2>&1 &
 else
@@ -82,6 +92,7 @@ else
         --telemetry "$VISION_TELEMETRY" \
         $VISION_MPP_ARGS \
         $VISION_DISPLAY_ARGS \
+        $VISION_MONITOR_ARGS \
         $VISION_EXTRA_SAFE_ARGS \
         >"$LOG_DIR/vision_service.log" 2>&1 &
 fi
@@ -97,7 +108,7 @@ fi
 
 echo "       vision_service started (pid=$(cat "$PID_DIR/vision_service.pid"))"
 if [ "$VISION_SNAPSHOT_ENABLE" = "1" ]; then
-    echo "       snapshots=$SNAPSHOT_DIR telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE"
+    echo "       snapshots=$SNAPSHOT_DIR telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE monitoring=$VISION_MONITORING_ENABLE control=$VISION_CONTROL_PORT"
 else
-    echo "       snapshots=disabled telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE"
+    echo "       snapshots=disabled telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE monitoring=$VISION_MONITORING_ENABLE control=$VISION_CONTROL_PORT"
 fi
