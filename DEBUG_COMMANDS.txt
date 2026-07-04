@@ -28,8 +28,6 @@ tail -f out/log/radar_service.log
 1.7 查看视觉 JSON 中的注意力方向：
 grep "\"attention\"" /root/zen_desk/out/snapshots/frame_*.json | tail
 
-1.8 第三 gaze 模型调试 dump 对比原 ONNX（在 PC/WSL 上执行）：
-python3 tools/compare_gaze_accuracy.py --dump-dir /path/to/gaze_debug
 
 
 【2. 底层硬件连通性测试脚本】

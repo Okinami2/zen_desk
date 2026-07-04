@@ -45,7 +45,7 @@ typedef struct {
     td_float yaw_deg;
     td_float pitch_deg;
     td_float roll_deg;
-} sample_svp_gaze_result;
+} sample_svp_attention_result;
 
 typedef struct {
     td_u32 blink_count;
@@ -67,7 +67,7 @@ typedef struct {
     td_bool has_face;
     sample_svp_face_box face;
     sample_svp_landmark106_result landmark;
-    sample_svp_gaze_result gaze;
+    sample_svp_attention_result attention;
     sample_svp_face_state state_snapshot;
 } sample_svp_frame_result;
 
@@ -78,7 +78,7 @@ td_void sample_svp_npu_acl_handle_sig(td_void);
 td_void sample_svp_npu_acl_offline_pipeline(td_void);
 td_void sample_svp_npu_acl_offline_smoke_test(td_void);
 
-/* 新增：对一帧 RGB888 执行最小三模型 pipeline */
+/* 对一帧 RGB888 执行两模型 pipeline */
 td_s32 sample_svp_npu_run_frame_pipeline_rgb888(
     const td_u8 *rgb,
     td_u32 width,

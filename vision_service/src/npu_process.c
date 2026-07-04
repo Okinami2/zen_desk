@@ -30,17 +30,10 @@
 #include "sample_common_svp_npu.h"
 #include "sample_common_svp_npu_model.h"
 
-#define SAMPLE_SVP_NPU_OFFLINE_TASK_NUM      3
+#define SAMPLE_SVP_NPU_OFFLINE_TASK_NUM      2
 #define SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX    0
 #define SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX    1
-#define SAMPLE_SVP_NPU_GAZE_MODEL_IDX        2
-#define SAMPLE_SVP_ENABLE_GAZE_MODEL         0
-
-#if SAMPLE_SVP_ENABLE_GAZE_MODEL
-#define SAMPLE_SVP_NPU_ACTIVE_TASK_NUM       3
-#else
 #define SAMPLE_SVP_NPU_ACTIVE_TASK_NUM       2
-#endif
 
 #define SAMPLE_SVP_NPU_INPUT_FILE_NUM_ONE    1
 #define SAMPLE_SVP_NPU_PATH_LEN              256
@@ -48,10 +41,8 @@
 
 #define SAMPLE_SVP_NPU_FACE_DET_MODEL_PATH   "./data/model/face_detection.om"
 #define SAMPLE_SVP_NPU_LANDMARK_MODEL_PATH   "./data/model/landmark106.om"
-#define SAMPLE_SVP_NPU_GAZE_MODEL_PATH       "./data/model/gaze.om"
 
 #define SAMPLE_SVP_LANDMARK_INPUT_BIN_PATH   "./data/input/landmark_input.bin"
-#define SAMPLE_SVP_GAZE_INPUT_BIN_PATH       "./data/input/gaze_input.bin"
 
 #define SAMPLE_SVP_EYE_CLOSED_TH      0.19f
 #define SAMPLE_SVP_MOUTH_OPEN_TH      0.28f
@@ -61,12 +52,8 @@
 
 #define SAMPLE_SVP_LANDMARK_IN_W      192
 #define SAMPLE_SVP_LANDMARK_IN_H      192
-#define SAMPLE_SVP_GAZE_IN_W          448
-#define SAMPLE_SVP_GAZE_IN_H          448
-
 #define SAMPLE_SVP_LANDMARK_NUM       106
 
-#define SAMPLE_SVP_GAZE_CROP_SCALE    1.25f
 #define SAMPLE_SVP_LANDMARK_CROP_SCALE 1.50f
 #define SAMPLE_SVP_HEAD_YAW_LIMIT_DEG  45.0f
 #define SAMPLE_SVP_HEAD_PITCH_LIMIT_DEG 45.0f
@@ -83,8 +70,6 @@ typedef struct {
 } sample_svp_landmark_affine;
 
 #define SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX   30
-#define SAMPLE_SVP_GAZE_DEBUG_DUMP_MAX         30
-#define SAMPLE_SVP_GAZE_DEBUG_PREVIEW_NUM      8
 #define SAMPLE_SVP_FACE_DET_SCORE_TH          0.50f
 #define SAMPLE_SVP_FACE_DET_NMS_TH            0.40f
 #define SAMPLE_SVP_SCRFD_LEVEL_NUM            3
@@ -115,12 +100,6 @@ static td_u32 g_landmark_expect_h = 0;
 static td_u32 g_landmark_expect_size = 0;
 static td_u32 g_landmark_expect_stride = 0;
 static td_u8 *g_landmark_model_input_virt = TD_NULL;
-static td_u32 g_gaze_expect_w = 0;
-static td_u32 g_gaze_expect_h = 0;
-static td_u32 g_gaze_expect_size = 0;
-static td_u32 g_gaze_expect_stride = 0;
-static td_u8 *g_gaze_model_input_virt = TD_NULL;
-static td_u32 g_gaze_debug_frame_idx = 0;
 
 typedef struct {
     td_u64 frame_cnt;
@@ -131,13 +110,9 @@ typedef struct {
     td_double sum_lm_prep;
     td_double sum_lm_infer;
     td_double sum_lm_parse_map;
-    td_double sum_gaze_prep;
-    td_double sum_gaze_infer;
-    td_double sum_gaze_parse;
     td_double max_total;
     td_double max_face_det;
     td_double max_lm_infer;
-    td_double max_gaze_infer;
 } sample_svp_pipeline_profile;
 
 static sample_svp_pipeline_profile g_pipe_prof = {0};
@@ -879,55 +854,6 @@ static td_float sample_svp_max_f32(td_float a, td_float b)
     return (a > b) ? a : b;
 }
 
-static td_float sample_svp_min_f32(td_float a, td_float b)
-{
-    return (a < b) ? a : b;
-}
-
-static td_void sample_svp_expand_square_bbox(sample_svp_face_box *box, td_u32 width, td_u32 height,
-    td_float scale)
-{
-    td_float cx, cy, side;
-
-    if (box == TD_NULL) {
-        return;
-    }
-
-    cx = (box->x1 + box->x2) * 0.5f;
-    cy = (box->y1 + box->y2) * 0.5f;
-    side = sample_svp_max_f32(box->x2 - box->x1, box->y2 - box->y1) * scale;
-    side = sample_svp_max_f32(side, 2.0f);
-
-    box->x1 = cx - side * 0.5f;
-    box->y1 = cy - side * 0.5f;
-    box->x2 = cx + side * 0.5f;
-    box->y2 = cy + side * 0.5f;
-
-    if (box->x1 < 0.0f) {
-        box->x2 -= box->x1;
-        box->x1 = 0.0f;
-    }
-    if (box->y1 < 0.0f) {
-        box->y2 -= box->y1;
-        box->y1 = 0.0f;
-    }
-    if (box->x2 > (td_float)width) {
-        td_float diff = box->x2 - (td_float)width;
-        box->x1 -= diff;
-        box->x2 = (td_float)width;
-    }
-    if (box->y2 > (td_float)height) {
-        td_float diff = box->y2 - (td_float)height;
-        box->y1 -= diff;
-        box->y2 = (td_float)height;
-    }
-
-    box->x1 = sample_svp_max_f32(0.0f, box->x1);
-    box->y1 = sample_svp_max_f32(0.0f, box->y1);
-    box->x2 = sample_svp_min_f32((td_float)width, box->x2);
-    box->y2 = sample_svp_min_f32((td_float)height, box->y2);
-}
-
 static td_void sample_svp_nv21_get_rgb_or_black(const td_u8 *src_y, const td_u8 *src_vu,
     td_u32 src_w, td_u32 src_h, td_u32 stride_y, td_u32 stride_uv,
     td_s32 x, td_s32 y, td_float *r, td_float *g, td_float *b)
@@ -971,308 +897,6 @@ static td_void sample_svp_nv21_sample_rgb_bilinear(const td_u8 *src_y, const td_
     *r = r00 * w00 + r01 * w01 + r10 * w10 + r11 * w11;
     *g = g00 * w00 + g01 * w01 + g10 * w10 + g11 * w11;
     *b = b00 * w00 + b01 * w01 + b10 * w10 + b11 * w11;
-}
-
-static td_s32 sample_svp_crop_resize_rgb888_to_fp32_nchw(const td_u8 *rgb, td_u32 width, td_u32 height,
-    const sample_svp_face_box *crop_box, td_u32 target_w, td_u32 target_h,
-    td_u8 *dst_input_virt, td_u32 dst_input_size, td_float pixel_scale, td_bool bilinear)
-{
-    const td_u8 *src_nv21 = g_svp_npu_face_det_frame_virt;
-    const td_u8 *src_y = TD_NULL;
-    const td_u8 *src_vu = TD_NULL;
-    td_u32 src_w;
-    td_u32 src_h;
-    td_u32 src_stride_y;
-    td_u32 src_stride_uv;
-    td_float *dst = TD_NULL;
-    td_u32 y, x;
-    td_float crop_w;
-    td_float crop_h;
-
-    sample_svp_check_exps_return(src_nv21 == TD_NULL || crop_box == TD_NULL || dst_input_virt == TD_NULL,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid crop args\n");
-
-    src_w = g_svp_npu_face_det_frame.video_frame.width;
-    src_h = g_svp_npu_face_det_frame.video_frame.height;
-    src_stride_y = g_svp_npu_face_det_frame.video_frame.stride[0];
-    src_stride_uv = g_svp_npu_face_det_frame.video_frame.stride[1];
-    sample_svp_check_exps_return(src_w == 0 || src_h == 0 || src_stride_y == 0 || src_stride_uv == 0,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid source frame meta for crop\n");
-
-    src_y = src_nv21;
-    src_vu = src_nv21 + (size_t)src_stride_y * src_h;
-    sample_svp_check_exps_return(dst_input_size < target_w * target_h * 3 * (td_u32)sizeof(td_float),
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "input buffer too small for crop\n");
-    dst = (td_float *)dst_input_virt;
-
-    crop_w = sample_svp_max_f32(1.0f, crop_box->x2 - crop_box->x1);
-    crop_h = sample_svp_max_f32(1.0f, crop_box->y2 - crop_box->y1);
-
-    for (y = 0; y < target_h; y++) {
-        td_float sy = crop_box->y1 + (td_float)y * crop_h / (td_float)target_h;
-        for (x = 0; x < target_w; x++) {
-            td_float sx = crop_box->x1 + (td_float)x * crop_w / (td_float)target_w;
-            td_float r;
-            td_float g;
-            td_float b;
-
-            if (bilinear == TD_TRUE) {
-                sample_svp_nv21_sample_rgb_bilinear(src_y, src_vu, src_w, src_h,
-                    src_stride_y, src_stride_uv, sx, sy, &r, &g, &b);
-            } else {
-                sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h,
-                    src_stride_y, src_stride_uv, (td_s32)floorf(sx), (td_s32)floorf(sy),
-                    &r, &g, &b);
-            }
-
-            dst[0 * target_h * target_w + y * target_w + x] = (td_float)r * pixel_scale;
-            dst[1 * target_h * target_w + y * target_w + x] = (td_float)g * pixel_scale;
-            dst[2 * target_h * target_w + y * target_w + x] = (td_float)b * pixel_scale;
-        }
-    }
-
-    return TD_SUCCESS;
-}
-
-static td_bool sample_svp_buffer_is_f32_nchw_image(size_t size, td_u32 w, td_u32 h)
-{
-    return (w != 0 && h != 0 && size >= (size_t)w * h * 3 * sizeof(td_float));
-}
-
-static td_u8 sample_svp_float_to_u8(td_float value)
-{
-    td_float scaled = value;
-
-    if (scaled <= 1.5f) {
-        scaled *= 255.0f;
-    }
-    if (scaled < 0.0f) {
-        scaled = 0.0f;
-    } else if (scaled > 255.0f) {
-        scaled = 255.0f;
-    }
-    return (td_u8)(scaled + 0.5f);
-}
-
-static td_void sample_svp_dump_f32_nchw_rgb_ppm(const td_char *path, const td_float *data,
-    td_u32 w, td_u32 h)
-{
-    FILE *fp;
-    td_u32 x;
-    td_u32 y;
-    size_t plane = (size_t)w * h;
-
-    if (path == TD_NULL || data == TD_NULL || w == 0 || h == 0) {
-        return;
-    }
-
-    fp = fopen(path, "wb");
-    if (fp == TD_NULL) {
-        return;
-    }
-
-    (td_void)fprintf(fp, "P6\n%u %u\n255\n", w, h);
-    for (y = 0; y < h; y++) {
-        for (x = 0; x < w; x++) {
-            size_t idx = (size_t)y * w + x;
-            td_u8 rgb8[3];
-            rgb8[0] = sample_svp_float_to_u8(data[idx]);
-            rgb8[1] = sample_svp_float_to_u8(data[plane + idx]);
-            rgb8[2] = sample_svp_float_to_u8(data[plane * 2 + idx]);
-            (td_void)fwrite(rgb8, 1, sizeof(rgb8), fp);
-        }
-    }
-    (td_void)fclose(fp);
-}
-
-static td_void sample_svp_dump_bytes(const td_char *path, const td_void *data, size_t size)
-{
-    FILE *fp;
-
-    if (path == TD_NULL || data == TD_NULL || size == 0) {
-        return;
-    }
-
-    fp = fopen(path, "wb");
-    if (fp == TD_NULL) {
-        return;
-    }
-    (td_void)fwrite(data, 1, size, fp);
-    (td_void)fclose(fp);
-}
-
-static td_void sample_svp_dump_f32_values_txt(const td_char *path, const td_float *data,
-    td_u32 num)
-{
-    FILE *fp;
-    td_u32 i;
-
-    if (path == TD_NULL || data == TD_NULL || num == 0) {
-        return;
-    }
-
-    fp = fopen(path, "w");
-    if (fp == TD_NULL) {
-        return;
-    }
-    for (i = 0; i < num; i++) {
-        (td_void)fprintf(fp, "%u %.9g\n", i, data[i]);
-    }
-    (td_void)fclose(fp);
-}
-
-static td_void sample_svp_zero_unused_gaze_inputs(sample_svp_npu_task_info *task)
-{
-    svp_acl_mdl_dataset *input;
-    td_u32 input_num;
-    td_u32 idx;
-
-    if (task == TD_NULL || task->input_dataset == TD_NULL) {
-        return;
-    }
-
-    input = task->input_dataset;
-    input_num = svp_acl_mdl_get_dataset_num_buffers(input);
-    for (idx = 1; idx < input_num; idx++) {
-        svp_acl_data_buffer *buf = svp_acl_mdl_get_dataset_buffer(input, idx);
-        td_void *addr;
-        size_t size;
-
-        if (buf == TD_NULL) {
-            continue;
-        }
-        addr = svp_acl_get_data_buffer_addr(buf);
-        size = svp_acl_get_data_buffer_size(buf);
-        if (addr == TD_NULL || size == 0) {
-            continue;
-        }
-        (td_void)memset_s(addr, size, 0, size);
-        (td_void)svp_acl_rt_mem_flush(addr, size);
-    }
-}
-
-static td_void sample_svp_dump_gaze_inputs(const sample_svp_npu_task_info *task,
-    td_u32 frame_idx)
-{
-    svp_acl_mdl_dataset *input;
-    td_u32 input_num;
-    td_u32 idx;
-
-    if (task == TD_NULL || task->input_dataset == TD_NULL ||
-        frame_idx >= SAMPLE_SVP_GAZE_DEBUG_DUMP_MAX) {
-        return;
-    }
-
-    input = task->input_dataset;
-    input_num = svp_acl_mdl_get_dataset_num_buffers(input);
-    sample_svp_trace_info("gaze input dump[%u]: input_num=%u primary=%ux%u size=%u stride=%u\n",
-        frame_idx, input_num, g_gaze_expect_w, g_gaze_expect_h,
-        g_gaze_expect_size, g_gaze_expect_stride);
-
-    for (idx = 0; idx < input_num; idx++) {
-        svp_acl_data_buffer *buf = svp_acl_mdl_get_dataset_buffer(input, idx);
-        td_void *addr;
-        size_t size;
-        td_char path[128];
-
-        if (buf == TD_NULL) {
-            continue;
-        }
-        addr = svp_acl_get_data_buffer_addr(buf);
-        size = svp_acl_get_data_buffer_size(buf);
-        if (addr == TD_NULL || size == 0) {
-            continue;
-        }
-
-        sample_svp_trace_info("gaze input dump[%u][%u]: size=%u stride=%u\n",
-            frame_idx, idx, (td_u32)size, (td_u32)svp_acl_get_data_buffer_stride(buf));
-
-        (td_void)snprintf(path, sizeof(path), "/tmp/gaze_input_%02u_%u.bin", frame_idx, idx);
-        sample_svp_dump_bytes(path, addr, size);
-
-        if (idx == 0 && sample_svp_buffer_is_f32_nchw_image(size,
-            g_gaze_expect_w, g_gaze_expect_h) == TD_TRUE) {
-            size_t image_size = (size_t)g_gaze_expect_w * g_gaze_expect_h * 3 * sizeof(td_float);
-
-            (td_void)snprintf(path, sizeof(path), "/tmp/gaze_input_%02u_%u.nchw.f32",
-                frame_idx, idx);
-            sample_svp_dump_bytes(path, addr, image_size);
-            (td_void)snprintf(path, sizeof(path), "/tmp/gaze_input_%02u_%u.ppm",
-                frame_idx, idx);
-            sample_svp_dump_f32_nchw_rgb_ppm(path, (const td_float *)addr,
-                g_gaze_expect_w, g_gaze_expect_h);
-        }
-
-        if (size % sizeof(td_float) == 0 &&
-            size <= SAMPLE_SVP_GAZE_DEBUG_PREVIEW_NUM * sizeof(td_float)) {
-            (td_void)snprintf(path, sizeof(path), "/tmp/gaze_input_%02u_%u.txt",
-                frame_idx, idx);
-            sample_svp_dump_f32_values_txt(path, (const td_float *)addr,
-                (td_u32)(size / sizeof(td_float)));
-        }
-    }
-}
-
-static td_void sample_svp_dump_gaze_outputs(const sample_svp_npu_task_info *task,
-    td_u32 frame_idx)
-{
-    svp_acl_mdl_dataset *output;
-    td_u32 output_num;
-    td_u32 idx;
-
-    if (task == TD_NULL || task->output_dataset == TD_NULL ||
-        frame_idx >= SAMPLE_SVP_GAZE_DEBUG_DUMP_MAX) {
-        return;
-    }
-
-    output = task->output_dataset;
-    output_num = svp_acl_mdl_get_dataset_num_buffers(output);
-    sample_svp_trace_info("gaze output dump[%u]: output_num=%u\n", frame_idx, output_num);
-
-    for (idx = 0; idx < output_num; idx++) {
-        svp_acl_data_buffer *buf = svp_acl_mdl_get_dataset_buffer(output, idx);
-        td_void *addr;
-        size_t size;
-        td_char path[128];
-
-        if (buf == TD_NULL) {
-            continue;
-        }
-        addr = svp_acl_get_data_buffer_addr(buf);
-        size = svp_acl_get_data_buffer_size(buf);
-        if (addr == TD_NULL || size == 0) {
-            continue;
-        }
-
-        (td_void)snprintf(path, sizeof(path), "/tmp/gaze_raw_%02u_%u.bin",
-            frame_idx, idx);
-        sample_svp_dump_bytes(path, addr, size);
-
-        if (size % sizeof(td_float) == 0) {
-            td_u32 float_num = (td_u32)(size / sizeof(td_float));
-            td_u32 preview_num = (float_num < SAMPLE_SVP_GAZE_DEBUG_PREVIEW_NUM) ?
-                float_num : SAMPLE_SVP_GAZE_DEBUG_PREVIEW_NUM;
-            const td_float *data = (const td_float *)addr;
-
-            (td_void)snprintf(path, sizeof(path), "/tmp/gaze_raw_%02u_%u.txt",
-                frame_idx, idx);
-            sample_svp_dump_f32_values_txt(path, data, float_num);
-            sample_svp_trace_info("gaze output dump[%u][%u]: size=%u floats=%u first=(%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f) preview=%u\n",
-                frame_idx, idx, (td_u32)size, float_num,
-                preview_num > 0 ? data[0] : 0.0f,
-                preview_num > 1 ? data[1] : 0.0f,
-                preview_num > 2 ? data[2] : 0.0f,
-                preview_num > 3 ? data[3] : 0.0f,
-                preview_num > 4 ? data[4] : 0.0f,
-                preview_num > 5 ? data[5] : 0.0f,
-                preview_num > 6 ? data[6] : 0.0f,
-                preview_num > 7 ? data[7] : 0.0f,
-                preview_num);
-        } else {
-            sample_svp_trace_info("gaze output dump[%u][%u]: size=%u non-f32\n",
-                frame_idx, idx, (td_u32)size);
-        }
-    }
 }
 
 /* ----------------------------- 基础控制函数 ----------------------------- */
@@ -1455,29 +1079,13 @@ static td_s32 sample_svp_npu_pipeline_load_models(td_void)
         return TD_FAILURE;
     }
     sample_svp_trace_info("Landmark model loaded, id=%u\n", SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX);
-
-#if SAMPLE_SVP_ENABLE_GAZE_MODEL
-    ret = sample_common_svp_npu_load_model(SAMPLE_SVP_NPU_GAZE_MODEL_PATH,
-        SAMPLE_SVP_NPU_GAZE_MODEL_IDX, TD_TRUE);
-    if (ret != TD_SUCCESS) {
-        sample_svp_trace_err("load gaze model failed!\n");
-        (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX);
-        (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX);
-        return TD_FAILURE;
-    }
-    sample_svp_trace_info("Gaze model loaded, id=%u\n", SAMPLE_SVP_NPU_GAZE_MODEL_IDX);
-#else
-    sample_svp_trace_info("Gaze model disabled; using 106-point head direction heuristic\n");
-#endif
+    sample_svp_trace_info("attention direction source: landmark106 head heuristic\n");
 
     return TD_SUCCESS;
 }
 
 static td_void sample_svp_npu_pipeline_unload_models(td_void)
 {
-#if SAMPLE_SVP_ENABLE_GAZE_MODEL
-    (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_GAZE_MODEL_IDX);
-#endif
     (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX);
     (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX);
 }
@@ -1488,19 +1096,14 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     const td_char *acl_config_path = "";
     ot_size det_input_size = {0};
     ot_size landmark_input_size = {0};
-    ot_size gaze_input_size = {0};
     td_u8 *det_input_virt = TD_NULL;
     td_u8 *landmark_input_virt = TD_NULL;
-    td_u8 *gaze_input_virt = TD_NULL;
     td_u32 det_input_size_bytes = 0;
     td_u32 landmark_input_size_bytes = 0;
-    td_u32 gaze_input_size_bytes = 0;
     td_u32 det_input_stride = 0;
     td_u32 landmark_input_stride = 0;
-    td_u32 gaze_input_stride = 0;
 
     g_svp_npu_terminate_signal = TD_FALSE;
-    g_gaze_debug_frame_idx = 0;
 
     ret = sample_svp_npu_acl_init(acl_config_path);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
@@ -1514,9 +1117,6 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
 
     sample_svp_npu_acl_set_task_info(0, SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX, TD_TRUE);
     sample_svp_npu_acl_set_task_info(1, SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX, TD_TRUE);
-#if SAMPLE_SVP_ENABLE_GAZE_MODEL
-    sample_svp_npu_acl_set_task_info(2, SAMPLE_SVP_NPU_GAZE_MODEL_IDX, TD_TRUE);
-#endif
 
     ret = sample_svp_npu_acl_init_task(SAMPLE_SVP_NPU_ACTIVE_TASK_NUM);
     if (ret != TD_SUCCESS) {
@@ -1564,34 +1164,6 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     g_landmark_expect_stride = landmark_input_stride;
     g_landmark_model_input_virt = landmark_input_virt;
 
-#if SAMPLE_SVP_ENABLE_GAZE_MODEL
-    ret = sample_common_svp_npu_get_input_resolution(SAMPLE_SVP_NPU_GAZE_MODEL_IDX, 0, &gaze_input_size);
-    if (ret != TD_SUCCESS) {
-        sample_svp_trace_err("get gaze input resolution failed\n");
-        goto init_fail;
-    }
-
-    ret = sample_common_svp_npu_get_input_data_buffer_info(&g_svp_npu_task[2], 0,
-        &gaze_input_virt, &gaze_input_size_bytes, &gaze_input_stride);
-    if (ret != TD_SUCCESS) {
-        sample_svp_trace_err("get gaze input data buffer info failed\n");
-        goto init_fail;
-    }
-
-    g_gaze_expect_w = gaze_input_size.width;
-    g_gaze_expect_h = gaze_input_size.height;
-    g_gaze_expect_size = gaze_input_size_bytes;
-    g_gaze_expect_stride = gaze_input_stride;
-    g_gaze_model_input_virt = gaze_input_virt;
-#else
-    (td_void)memset_s(&gaze_input_size, sizeof(gaze_input_size), 0, sizeof(gaze_input_size));
-    g_gaze_expect_w = 0;
-    g_gaze_expect_h = 0;
-    g_gaze_expect_size = 0;
-    g_gaze_expect_stride = 0;
-    g_gaze_model_input_virt = TD_NULL;
-#endif
-
     if (g_face_det_resized_buf != TD_NULL) {
         free(g_face_det_resized_buf);
         g_face_det_resized_buf = TD_NULL;
@@ -1612,15 +1184,6 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     sample_svp_trace_info("landmark model input: %ux%u size=%u stride=%u\n",
         landmark_input_size.width, landmark_input_size.height,
         landmark_input_size_bytes, landmark_input_stride);
-#if SAMPLE_SVP_ENABLE_GAZE_MODEL
-    sample_svp_trace_info("gaze model input: %ux%u size=%u stride=%u inputs=%u outputs=%u\n",
-        gaze_input_size.width, gaze_input_size.height, gaze_input_size_bytes,
-        gaze_input_stride,
-        (td_u32)svp_acl_mdl_get_dataset_num_buffers(g_svp_npu_task[2].input_dataset),
-        (td_u32)svp_acl_mdl_get_dataset_num_buffers(g_svp_npu_task[2].output_dataset));
-#else
-    sample_svp_trace_info("attention direction source: landmark106 head heuristic\n");
-#endif
 
     return TD_SUCCESS;
 
@@ -1631,11 +1194,14 @@ init_fail:
     }
     g_face_det_model_input_virt = TD_NULL;
     g_landmark_model_input_virt = TD_NULL;
-    g_gaze_model_input_virt = TD_NULL;
     g_face_det_expect_w = 0;
     g_face_det_expect_h = 0;
     g_face_det_expect_size = 0;
     g_face_det_expect_stride = 0;
+    g_landmark_expect_w = 0;
+    g_landmark_expect_h = 0;
+    g_landmark_expect_size = 0;
+    g_landmark_expect_stride = 0;
     sample_svp_npu_acl_deinit_task(SAMPLE_SVP_NPU_ACTIVE_TASK_NUM);
     sample_svp_npu_pipeline_unload_models();
     sample_svp_npu_acl_deinit();
@@ -1656,7 +1222,6 @@ static td_void sample_svp_npu_pipeline_deinit(td_void)
 
     g_face_det_model_input_virt = TD_NULL;
     g_landmark_model_input_virt = TD_NULL;
-    g_gaze_model_input_virt = TD_NULL;
     g_face_det_expect_w = 0;
     g_face_det_expect_h = 0;
     g_face_det_expect_size = 0;
@@ -1665,11 +1230,6 @@ static td_void sample_svp_npu_pipeline_deinit(td_void)
     g_landmark_expect_h = 0;
     g_landmark_expect_size = 0;
     g_landmark_expect_stride = 0;
-    g_gaze_expect_w = 0;
-    g_gaze_expect_h = 0;
-    g_gaze_expect_size = 0;
-    g_gaze_expect_stride = 0;
-    g_gaze_debug_frame_idx = 0;
 }
 
 /* ----------------------------- 单模型执行辅助 ----------------------------- */
@@ -1764,123 +1324,6 @@ static td_void sample_svp_landmark_map_to_full_image(sample_svp_landmark106_resu
     }
 }
 
-static td_s32 sample_svp_argmax_f32(const td_float *data, td_u32 num)
-{
-    td_u32 i, best_idx = 0;
-    td_float best_val = data ? data[0] : 0.0f;
-
-    for (i = 1; i < num; i++) {
-        if (data[i] > best_val) {
-            best_val = data[i];
-            best_idx = i;
-        }
-    }
-    return (td_s32)best_idx;
-}
-
-static td_s32 sample_svp_npu_parse_gaze_output(const sample_svp_npu_task_info *task,
-    sample_svp_gaze_result *gaze)
-{
-    svp_acl_mdl_dataset *output = TD_NULL;
-    svp_acl_data_buffer *buf_yaw = TD_NULL, *buf_pitch = TD_NULL;
-    td_void *addr_yaw = TD_NULL, *addr_pitch = TD_NULL;
-    td_float *yaw_data = TD_NULL, *pitch_data = TD_NULL;
-    size_t yaw_size, pitch_size;
-    td_s32 yaw_idx, pitch_idx;
-    td_u32 gaze_num_outputs;
-
-    sample_svp_check_exps_return(task == TD_NULL || gaze == TD_NULL, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "invalid param\n");
-
-    (td_void)memset_s(gaze, sizeof(*gaze), 0, sizeof(*gaze));
-
-    output = task->output_dataset;
-    sample_svp_check_exps_return(output == TD_NULL, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "gaze output dataset is null!\n");
-
-    sample_svp_dump_gaze_outputs(task, g_gaze_debug_frame_idx);
-
-    gaze_num_outputs = svp_acl_mdl_get_dataset_num_buffers(output);
-    if (gaze_num_outputs == 1) {
-        svp_acl_data_buffer *buf = svp_acl_mdl_get_dataset_buffer(output, 0);
-        td_void *addr;
-        size_t size;
-        td_float *data;
-        td_u32 float_num;
-
-        sample_svp_check_exps_return(buf == TD_NULL, TD_FAILURE,
-            SAMPLE_SVP_ERR_LEVEL_ERROR, "gaze output buffer null\n");
-        addr = svp_acl_get_data_buffer_addr(buf);
-        size = svp_acl_get_data_buffer_size(buf);
-        sample_svp_check_exps_return(addr == TD_NULL || size < sizeof(td_float) ||
-            size % sizeof(td_float) != 0,
-            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-            "gaze single output size invalid, size=%u\n", (td_u32)size);
-
-        data = (td_float *)addr;
-        float_num = (td_u32)(size / sizeof(td_float));
-
-        if (float_num >= 180) {
-            yaw_idx = sample_svp_argmax_f32(data, 90);
-            pitch_idx = sample_svp_argmax_f32(data + 90, 90);
-            gaze->yaw_deg = (td_float)(yaw_idx - 45);
-            gaze->pitch_deg = (td_float)(pitch_idx - 45);
-        } else if (float_num == 3 || float_num == 4) {
-            td_float x = data[0];
-            td_float y = data[1];
-            td_float z = data[2];
-            td_float xz = sqrtf(x * x + z * z);
-            gaze->yaw_deg = atan2f(x, z) * 57.2957795f;
-            gaze->pitch_deg = atan2f(-y, xz) * 57.2957795f;
-        } else if (float_num >= 2) {
-            gaze->yaw_deg = data[0];
-            gaze->pitch_deg = data[1];
-        } else {
-            sample_svp_trace_err("gaze single output has too few floats: %u\n", float_num);
-            return TD_FAILURE;
-        }
-
-        sample_svp_trace_info("gaze parsed[%u]: outputs=1 floats=%u yaw=%.3f pitch=%.3f\n",
-            g_gaze_debug_frame_idx, float_num, gaze->yaw_deg, gaze->pitch_deg);
-        g_gaze_debug_frame_idx++;
-        return TD_SUCCESS;
-    }
-
-    if (gaze_num_outputs < 2) {
-        sample_svp_trace_err("gaze output num < 2, got %u\n", gaze_num_outputs);
-        return TD_FAILURE;
-    }
-
-    buf_yaw = svp_acl_mdl_get_dataset_buffer(output, 0);
-    buf_pitch = svp_acl_mdl_get_dataset_buffer(output, 1);
-    sample_svp_check_exps_return(buf_yaw == TD_NULL || buf_pitch == TD_NULL, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "gaze output buffer null\n");
-
-    addr_yaw = svp_acl_get_data_buffer_addr(buf_yaw);
-    addr_pitch = svp_acl_get_data_buffer_addr(buf_pitch);
-    yaw_size = svp_acl_get_data_buffer_size(buf_yaw);
-    pitch_size = svp_acl_get_data_buffer_size(buf_pitch);
-
-    sample_svp_check_exps_return(addr_yaw == TD_NULL || addr_pitch == TD_NULL ||
-        yaw_size < 90 * sizeof(td_float) || pitch_size < 90 * sizeof(td_float),
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "gaze output size invalid\n");
-
-    yaw_data = (td_float *)addr_yaw;
-    pitch_data = (td_float *)addr_pitch;
-
-    yaw_idx = sample_svp_argmax_f32(yaw_data, 90);
-    pitch_idx = sample_svp_argmax_f32(pitch_data, 90);
-
-    gaze->yaw_deg = (td_float)(yaw_idx - 45);
-    gaze->pitch_deg = (td_float)(pitch_idx - 45);
-    sample_svp_trace_info("gaze parsed[%u]: outputs=%u yaw_idx=%d pitch_idx=%d yaw=%.3f pitch=%.3f\n",
-        g_gaze_debug_frame_idx, gaze_num_outputs, yaw_idx, pitch_idx,
-        gaze->yaw_deg, gaze->pitch_deg);
-    g_gaze_debug_frame_idx++;
-
-    return TD_SUCCESS;
-}
-
 /* ----------------------------- 其他工具函数 ----------------------------- */
 
 static td_double sample_svp_now_seconds(td_void)
@@ -1892,7 +1335,6 @@ static td_double sample_svp_now_seconds(td_void)
 
 static td_void sample_svp_pipeline_profile_commit(td_double t_total, td_double t_face_det,
     td_double t_lm_prep, td_double t_lm_infer, td_double t_lm_parse_map,
-    td_double t_gaze_prep, td_double t_gaze_infer, td_double t_gaze_parse,
     td_bool has_face)
 {
     td_double now;
@@ -1915,9 +1357,6 @@ static td_void sample_svp_pipeline_profile_commit(td_double t_total, td_double t
     g_pipe_prof.sum_lm_prep += t_lm_prep;
     g_pipe_prof.sum_lm_infer += t_lm_infer;
     g_pipe_prof.sum_lm_parse_map += t_lm_parse_map;
-    g_pipe_prof.sum_gaze_prep += t_gaze_prep;
-    g_pipe_prof.sum_gaze_infer += t_gaze_infer;
-    g_pipe_prof.sum_gaze_parse += t_gaze_parse;
 
     if (t_total > g_pipe_prof.max_total) {
         g_pipe_prof.max_total = t_total;
@@ -1928,9 +1367,6 @@ static td_void sample_svp_pipeline_profile_commit(td_double t_total, td_double t
     if (t_lm_infer > g_pipe_prof.max_lm_infer) {
         g_pipe_prof.max_lm_infer = t_lm_infer;
     }
-    if (t_gaze_infer > g_pipe_prof.max_gaze_infer) {
-        g_pipe_prof.max_gaze_infer = t_gaze_infer;
-    }
 
     dt = now - g_pipe_prof.win_start;
     if (dt < 1.0 || g_pipe_prof.frame_cnt == 0) {
@@ -1940,19 +1376,15 @@ static td_void sample_svp_pipeline_profile_commit(td_double t_total, td_double t
     inv_frame = 1.0 / (td_double)g_pipe_prof.frame_cnt;
     inv_face = (g_pipe_prof.face_cnt > 0) ? (1.0 / (td_double)g_pipe_prof.face_cnt) : 0.0;
 
-    sample_svp_trace_info("[NPU-PROF] avg_ms total=%.2f face_det=%.2f lm_prep=%.2f lm_infer=%.2f lm_parse_map=%.2f gaze_prep=%.2f gaze_infer=%.2f gaze_parse=%.2f | max_ms total=%.2f face_det=%.2f lm_infer=%.2f gaze_infer=%.2f | face_ratio=%.1f%% window=%.2fs\n",
+    sample_svp_trace_info("[NPU-PROF] avg_ms total=%.2f face_det=%.2f lm_prep=%.2f lm_infer=%.2f lm_parse_map=%.2f | max_ms total=%.2f face_det=%.2f lm_infer=%.2f | face_ratio=%.1f%% window=%.2fs\n",
         g_pipe_prof.sum_total * 1000.0 * inv_frame,
         g_pipe_prof.sum_face_det * 1000.0 * inv_frame,
         g_pipe_prof.sum_lm_prep * 1000.0 * inv_face,
         g_pipe_prof.sum_lm_infer * 1000.0 * inv_face,
         g_pipe_prof.sum_lm_parse_map * 1000.0 * inv_face,
-        g_pipe_prof.sum_gaze_prep * 1000.0 * inv_face,
-        g_pipe_prof.sum_gaze_infer * 1000.0 * inv_face,
-        g_pipe_prof.sum_gaze_parse * 1000.0 * inv_face,
         g_pipe_prof.max_total * 1000.0,
         g_pipe_prof.max_face_det * 1000.0,
         g_pipe_prof.max_lm_infer * 1000.0,
-        g_pipe_prof.max_gaze_infer * 1000.0,
         (td_double)g_pipe_prof.face_cnt * 100.0 * inv_frame,
         dt);
 
@@ -2075,7 +1507,7 @@ static td_float sample_svp_clamp_f32(td_float value, td_float min_value, td_floa
 }
 
 static td_s32 sample_svp_estimate_head_from_landmarks(const sample_svp_landmark106_result *lm,
-    sample_svp_gaze_result *pose)
+    sample_svp_attention_result *pose)
 {
     td_float left_eye_x, left_eye_y;
     td_float right_eye_x, right_eye_y;
@@ -2123,7 +1555,7 @@ static td_s32 sample_svp_estimate_head_from_landmarks(const sample_svp_landmark1
 }
 
 static td_void sample_svp_update_face_state(const sample_svp_landmark106_result *lm,
-    const sample_svp_gaze_result *gaze, sample_svp_face_state *state)
+    const sample_svp_attention_result *attention, sample_svp_face_state *state)
 {
     td_float left = sample_svp_eye_aspect_ratio(lm, TD_TRUE);
     td_float right = sample_svp_eye_aspect_ratio(lm, TD_FALSE);
@@ -2133,11 +1565,11 @@ static td_void sample_svp_update_face_state(const sample_svp_landmark106_result 
     td_double now = sample_svp_now_seconds();
 
     if (state->smooth_yaw == 0.0f && state->smooth_pitch == 0.0f) {
-        state->smooth_yaw = gaze->yaw_deg;
-        state->smooth_pitch = gaze->pitch_deg;
+        state->smooth_yaw = attention->yaw_deg;
+        state->smooth_pitch = attention->pitch_deg;
     } else {
-        state->smooth_yaw = (1.0f - alpha) * state->smooth_yaw + alpha * gaze->yaw_deg;
-        state->smooth_pitch = (1.0f - alpha) * state->smooth_pitch + alpha * gaze->pitch_deg;
+        state->smooth_yaw = (1.0f - alpha) * state->smooth_yaw + alpha * attention->yaw_deg;
+        state->smooth_pitch = (1.0f - alpha) * state->smooth_pitch + alpha * attention->pitch_deg;
     }
 
     state->smooth_eye_open = (state->smooth_eye_open == 0.0f) ? eye_open : ((1.0f - beta) * state->smooth_eye_open + beta * eye_open);
@@ -2302,48 +1734,6 @@ static td_s32 sample_svp_prepare_landmark_input_rgb888(const td_u8 *rgb, td_u32 
     return TD_SUCCESS;
 }
 
-static td_s32 sample_svp_prepare_gaze_input_rgb888(const td_u8 *rgb, td_u32 width, td_u32 height,
-    const sample_svp_face_box *face)
-{
-    sample_svp_face_box crop_box;
-    svp_acl_error acl_ret;
-
-    (void)rgb;
-    (void)width;
-    (void)height;
-
-    sample_svp_check_exps_return(face == TD_NULL, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "gaze face is null\n");
-    sample_svp_check_exps_return(g_gaze_model_input_virt == TD_NULL || g_gaze_expect_w == 0 || g_gaze_expect_h == 0,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "gaze input buffer is invalid\n");
-
-    crop_box = *face;
-    sample_svp_expand_square_bbox(&crop_box,
-        g_svp_npu_face_det_frame.video_frame.width,
-        g_svp_npu_face_det_frame.video_frame.height,
-        SAMPLE_SVP_GAZE_CROP_SCALE);
-    if (g_gaze_debug_frame_idx < SAMPLE_SVP_GAZE_DEBUG_DUMP_MAX) {
-        sample_svp_trace_info("gaze prep[%u]: face=(%.1f,%.1f,%.1f,%.1f) crop=(%.1f,%.1f,%.1f,%.1f) input=%ux%u size=%u stride=%u\n",
-            g_gaze_debug_frame_idx, face->x1, face->y1, face->x2, face->y2,
-            crop_box.x1, crop_box.y1, crop_box.x2, crop_box.y2,
-            g_gaze_expect_w, g_gaze_expect_h, g_gaze_expect_size,
-            g_gaze_expect_stride);
-    }
-    sample_svp_check_exps_return(sample_svp_crop_resize_rgb888_to_fp32_nchw(TD_NULL, 0, 0, &crop_box,
-        g_gaze_expect_w, g_gaze_expect_h, g_gaze_model_input_virt,
-        g_gaze_expect_size, 1.0f / 255.0f, TD_FALSE) != TD_SUCCESS,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare gaze input from nv21 failed\n");
-
-    sample_svp_zero_unused_gaze_inputs(&g_svp_npu_task[SAMPLE_SVP_NPU_GAZE_MODEL_IDX]);
-    sample_svp_dump_gaze_inputs(&g_svp_npu_task[SAMPLE_SVP_NPU_GAZE_MODEL_IDX],
-        g_gaze_debug_frame_idx);
-
-    acl_ret = svp_acl_rt_mem_flush(g_gaze_model_input_virt, g_gaze_expect_size);
-    sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-        "flush gaze input failed, ret=%d\n", acl_ret);
-    return TD_SUCCESS;
-}
-
 const sample_svp_face_state *sample_svp_npu_get_face_state(td_void)
 {
     return &g_face_state;
@@ -2360,9 +1750,6 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
     td_double t2;
     td_double t3;
     td_double t4;
-    td_double t5;
-    td_double t6;
-    td_double t7;
     td_double t8;
 
     td_u32 width = g_svp_npu_face_det_frame.video_frame.width;
@@ -2387,7 +1774,6 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
         result->has_face = TD_FALSE;
         sample_svp_npu_clear_face_det_frame();
         sample_svp_pipeline_profile_commit(t1 - t0, t1 - t0,
-            0.0, 0.0, 0.0,
             0.0, 0.0, 0.0,
             TD_FALSE);
         return TD_SUCCESS;
@@ -2421,29 +1807,11 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
     t4 = sample_svp_now_seconds();
 
     /* 3. attention direction */
-#if SAMPLE_SVP_ENABLE_GAZE_MODEL
-    ret = sample_svp_prepare_gaze_input_rgb888(TD_NULL, width, height, &best_face);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare gaze failed\n");
-    t5 = sample_svp_now_seconds();
-
-    ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[2]);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "run gaze failed\n");
-    t6 = sample_svp_now_seconds();
-
-    ret = sample_svp_npu_parse_gaze_output(&g_svp_npu_task[2], &result->gaze);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "parse gaze failed\n");
-    t7 = sample_svp_now_seconds();
-#else
-    ret = sample_svp_estimate_head_from_landmarks(&result->landmark, &result->gaze);
+    ret = sample_svp_estimate_head_from_landmarks(&result->landmark, &result->attention);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
         SAMPLE_SVP_ERR_LEVEL_ERROR, "estimate head direction failed\n");
-    t5 = sample_svp_now_seconds();
-    t6 = t5;
-    t7 = t5;
-#endif
-
     if (result->landmark.point_num == SAMPLE_SVP_LANDMARK_NUM) {
-        sample_svp_update_face_state(&result->landmark, &result->gaze, &g_face_state);
+        sample_svp_update_face_state(&result->landmark, &result->attention, &g_face_state);
     }
 
     result->state_snapshot = g_face_state;
@@ -2452,7 +1820,6 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
     t8 = sample_svp_now_seconds();
     sample_svp_pipeline_profile_commit(t8 - t0, t1 - t0,
         t2 - t1, t3 - t2, t4 - t3,
-        t5 - t4, t6 - t5, t7 - t6,
         TD_TRUE);
 
     return TD_SUCCESS;

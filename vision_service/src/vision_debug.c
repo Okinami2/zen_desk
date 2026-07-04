@@ -150,8 +150,8 @@ static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
         infer_ret == TD_SUCCESS ? "true" : "false",
         result->has_face == TD_TRUE ? "true" : "false",
         result->face.x1, result->face.y1, result->face.x2, result->face.y2,
-        result->face.score, result->gaze.yaw_deg, result->gaze.pitch_deg,
-        result->gaze.roll_deg,
+        result->face.score, result->attention.yaw_deg, result->attention.pitch_deg,
+        result->attention.roll_deg,
         vision_debug_attention_label(result, infer_ret),
         result->state_snapshot.eyes_closed == TD_TRUE ? "true" : "false",
         result->state_snapshot.yawning == TD_TRUE ? "true" : "false",
@@ -192,20 +192,20 @@ static const td_char *vision_debug_attention_label(const sample_svp_frame_result
     if (result->state_snapshot.eyes_closed == TD_TRUE) {
         return "eyes_closed";
     }
-    td_float abs_yaw = result->gaze.yaw_deg > 0 ? result->gaze.yaw_deg : -result->gaze.yaw_deg;
-    td_float abs_pitch = result->gaze.pitch_deg > 0 ? result->gaze.pitch_deg : -result->gaze.pitch_deg;
+    td_float abs_yaw = result->attention.yaw_deg > 0 ? result->attention.yaw_deg : -result->attention.yaw_deg;
+    td_float abs_pitch = result->attention.pitch_deg > 0 ? result->attention.pitch_deg : -result->attention.pitch_deg;
 
     if (abs_yaw < 15.0f && abs_pitch < 25.0f) {
         return "front";
     }
 
     if (abs_yaw >= abs_pitch) {
-        if (result->gaze.yaw_deg < -15.0f) return "left";
-        if (result->gaze.yaw_deg > 15.0f) return "right";
+        if (result->attention.yaw_deg < -15.0f) return "left";
+        if (result->attention.yaw_deg > 15.0f) return "right";
         return "front";
     } else {
-        if (result->gaze.pitch_deg < -25.0f) return "up";
-        if (result->gaze.pitch_deg > 25.0f) return "down";
+        if (result->attention.pitch_deg < -25.0f) return "up";
+        if (result->attention.pitch_deg > 25.0f) return "down";
         return "front";
     }
 }

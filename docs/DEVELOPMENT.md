@@ -58,9 +58,8 @@ typedef enum {
 **当前实现状态**:
 
 - 稳定主流程使用两级 NPU：`face_detection.om` + `landmark106.om`。
-- 注意力方向暂时由 106 点规则估计，不依赖第三个 gaze 模型。
+- 注意力方向由 106 点规则估计。
 - telemetry/snapshot JSON 输出 `attention`，取值为 `front/left/right/up/down/eyes_closed/no_face/error`。
-- 第三个 gaze 模型仍保留调试代码，但默认不参与主流程；重新启用前必须先通过 `tools/compare_gaze_accuracy.py` 与原 ONNX 做一致性验证。
 
 ### 3.2 雷达服务
 
@@ -111,7 +110,6 @@ typedef enum {
 2. 优化状态平滑逻辑
 3. 完善联动策略
 4. 开发Qt可视化界面
-5. 修复或替换第三个 gaze 模型，增强眼球方向判断
 
 ## 5. 测试方案
 

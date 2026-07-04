@@ -9,7 +9,7 @@ Zen Desk 是面向 SS928 开发板的多模态学习状态感知项目，当前�
 1. `face_detection.om`: SCRFD 人脸检测。
 2. `landmark106.om`: 106 点人脸关键点。
 
-第三个 gaze 模型暂时不参与主流程。当前的注意力方向由 106 点规则估计得到：
+当前的注意力方向由 106 点规则估计得到：
 
 - 左右眼中心：landmark `33-42`、`87-96`
 - 鼻尖/鼻下部：landmark `80-85`
@@ -27,7 +27,7 @@ Zen Desk 是面向 SS928 开发板的多模态学习状态感知项目，当前�
 - `no_face`: 未检测到人脸
 - `error`: 推理失败
 
-这版目标是稳定判断“是否注意前方/是否低头/是否闭眼/是否打哈欠”，不是精确眼球 gaze。
+这版目标是稳定判断“是否注意前方/是否低头/是否闭眼/是否打哈欠”。
 
 ## 目录结构
 
@@ -127,35 +127,12 @@ JSON 中重点字段：
 - `blink_count`
 - `yawn_count`
 
-## 第三模型现状
-
-当前 `gaze_v2.om` 验证结果不可接受。用板端 dump 和原 ONNX 对比后：
-
-- OM 输出 30 帧几乎恒定为 `[-0.3623, 0, 0, 0]`
-- 原 ONNX 输出约为 `[0.186, -0.093, -0.904]`
-- 平均向量夹角误差约 `101.6 deg`
-
-因此主流程默认关闭第三模型：
-
-```c
-#define SAMPLE_SVP_ENABLE_GAZE_MODEL 0
-```
-
-相关调试工具保留：
-
-```sh
-python3 tools/compare_gaze_accuracy.py --dump-dir <gaze_debug_dir>
-```
-
-后续如果重新转换出可用 gaze OM，可先打开 `SAMPLE_SVP_ENABLE_GAZE_MODEL` 验证，不要直接替换稳定版判断。
 
 ## 下一步工作
 
 1. 稳定版调参：根据实际坐姿采样调整 `attention` 的 yaw/pitch 阈值。
 2. 接入融合：将 `attention/eyes_closed/yawning` 映射到 fusion_service 的学习状态。
-3. 修第三模型：按原 ONNX 逻辑裁左眼、右眼并喂 head pose，再重新转换 OM。
-4. 若第三模型仍不稳定，考虑轻量 iris/pupil 检测，用虹膜中心增强左右视线判断。
-5. 清理调试 dump 开关，区分比赛演示模式和模型调试模式。
+3. 清理调试 dump 开关，区分比赛演示模式和模型调试模式。
 
 ## 常见问题
 
