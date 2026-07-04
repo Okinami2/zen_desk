@@ -96,7 +96,12 @@ typedef enum {
     ASR_CMD_STUDY_DISTRACTED   = 0x28,
     ASR_CMD_STUDY_FOCUSED      = 0x29,
     ASR_CMD_SCREEN_DATA        = 0x31,
-    ASR_CMD_SCREEN_HOME        = 0x32
+    ASR_CMD_SCREEN_HOME        = 0x32,
+    
+    // 自下而上反向播报指令 (Fusion -> ASR)
+    ASR_CMD_PLAY_BREAK_40M     = 0xF1, // 正计时每40分钟播报
+    ASR_CMD_PLAY_END_REST      = 0xF2, // 倒计时结束播报
+    ASR_CMD_PLAY_DISTRACTED    = 0xF3  // 走神播报
 } AsrCommandType;
 
 typedef struct {

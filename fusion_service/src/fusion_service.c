@@ -22,6 +22,33 @@ static int g_server_running = 0;
 static int g_udp_fd = -1;
 static struct sockaddr_in g_udp_addr;
 
+static int g_asr_socket_fd = -1;
+static pthread_mutex_t g_asr_socket_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void fusion_send_asr_command(uint8_t cmd_id) {
+    pthread_mutex_lock(&g_asr_socket_mutex);
+    if (g_asr_socket_fd >= 0) {
+        Message msg;
+        memset(&msg, 0, sizeof(Message));
+        AsrCommand asr_cmd;
+        asr_cmd.command_id = cmd_id;
+        asr_cmd.timestamp = time(NULL);
+
+        msg.type = MSG_ASR_COMMAND;
+        msg.length = sizeof(AsrCommand);
+        memcpy(msg.data, &asr_cmd, msg.length);
+
+        uint32_t type_be = htonl(msg.type);
+        uint32_t len_be = htonl(msg.length);
+
+        send(g_asr_socket_fd, &type_be, 4, MSG_NOSIGNAL);
+        send(g_asr_socket_fd, &len_be, 4, MSG_NOSIGNAL);
+        send(g_asr_socket_fd, msg.data, msg.length, MSG_NOSIGNAL);
+        LOG_INFO("Fusion sent ASR Command 0x%02X down to ASR service", cmd_id);
+    }
+    pthread_mutex_unlock(&g_asr_socket_mutex);
+}
+
 #define VISION_FOCUS_WINDOW_SIZE 10
 #define VISION_MIN_VALID_SAMPLES 6
 #define VISION_DISTRACTED_SAMPLE_THRESHOLD 7
@@ -130,6 +157,11 @@ static void* tcp_client_handler(void *arg)
             LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m",
                      rs->presence, rs->motion_level, rs->distance);
             radar_to_fusion_and_dispatch(rs);
+        } else if (msg_type == MSG_HEARTBEAT) {
+            pthread_mutex_lock(&g_asr_socket_mutex);
+            g_asr_socket_fd = client_fd;
+            pthread_mutex_unlock(&g_asr_socket_mutex);
+            LOG_INFO("Registered ASR socket fd = %d", client_fd);
         } else if (msg_type == MSG_VISION_STATE && msg_len == sizeof(VisionState)) {
             VisionState *vs = (VisionState *)payload;
             vision_to_fusion_and_dispatch(vs);
@@ -153,12 +185,18 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 0; // 默认正计时
+                    g_fusion_service.config_duration_minutes = 0;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (Free)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_FREE);
                     break;
                 case ASR_CMD_STUDY_RESUME:
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
+                    g_fusion_service.last_tick_ms = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (Resume)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_RESUME);
                     break;
@@ -166,6 +204,11 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 25;
+                    g_fusion_service.config_duration_minutes = 25;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (25 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_25);
                     break;
@@ -173,6 +216,11 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 45;
+                    g_fusion_service.config_duration_minutes = 45;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (45 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_45);
                     break;
@@ -180,6 +228,11 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 60;
+                    g_fusion_service.config_duration_minutes = 60;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (60 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_60);
                     break;
@@ -187,6 +240,7 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_SEATED_IDLE;
                     vision_focus_reset(0);
                     fs.duration_minutes = 0;
+                    g_fusion_service.last_tick_ms = 0;
                     LOG_INFO("ASR overridden state to IDLE (Pause)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_PAUSE);
                     break;
@@ -194,6 +248,8 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_SEATED_IDLE;
                     vision_focus_reset(0);
                     fs.duration_minutes = 0;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
                     LOG_INFO("ASR overridden state to IDLE (Stop)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_STOP);
                     break;
@@ -246,6 +302,11 @@ static void* tcp_client_handler(void *arg)
         }
     }
 
+    pthread_mutex_lock(&g_asr_socket_mutex);
+    if (client_fd == g_asr_socket_fd) {
+        g_asr_socket_fd = -1;
+    }
+    pthread_mutex_unlock(&g_asr_socket_mutex);
     close(client_fd);
     LOG_DEBUG("TCP client thread disconnected (fd=%d)", client_fd);
     return NULL;
@@ -718,6 +779,43 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     }
 
     fs.current_state = g_fusion_service.current_state;
+    
+    // ==========================================
+    // Timer Logic for voice prompts
+    // ==========================================
+    if (g_fusion_service.current_state == STATE_FOCUSED || g_fusion_service.current_state == STATE_DISTRACTED) {
+        if (g_fusion_service.last_tick_ms > 0) {
+            g_fusion_service.session_accumulated_ms += (now_ms - g_fusion_service.last_tick_ms);
+        }
+        g_fusion_service.last_tick_ms = now_ms;
+        
+        // Positive timer (config_duration_minutes == 0)
+        if (g_fusion_service.config_duration_minutes == 0) {
+            uint32_t current_40m_count = g_fusion_service.session_accumulated_ms / (40ULL * 60ULL * 1000ULL);
+            if (current_40m_count > g_fusion_service.played_40m_count) {
+                g_fusion_service.played_40m_count = current_40m_count;
+                fusion_send_asr_command(ASR_CMD_PLAY_BREAK_40M);
+            }
+        } 
+        // Countdown timer
+        else {
+            if (g_fusion_service.session_accumulated_ms >= g_fusion_service.config_duration_minutes * 60ULL * 1000ULL) {
+                if (!g_fusion_service.has_played_end) {
+                    g_fusion_service.has_played_end = 1;
+                    fusion_send_asr_command(ASR_CMD_PLAY_END_REST);
+                }
+            }
+        }
+    } else {
+        g_fusion_service.last_tick_ms = 0; // reset tick if not focused
+    }
+
+    if (g_fusion_service.current_state == STATE_DISTRACTED && next_state == STATE_DISTRACTED && should_dispatch) {
+        // Just entered distracted state
+        fusion_send_asr_command(ASR_CMD_PLAY_DISTRACTED);
+    }
+    // ==========================================
+    
     pthread_mutex_unlock(&g_fusion_service.mutex);
 
     if (should_dispatch) {

@@ -85,3 +85,14 @@ int serial_read_byte(uint8_t *out_byte) {
     
     return -1; // 错误
 }
+
+int serial_write_byte(uint8_t byte) {
+    if (serial_fd == -1) {
+        return -1;
+    }
+    ssize_t n = write(serial_fd, &byte, 1);
+    if (n == 1) {
+        return 0;
+    }
+    return -1;
+}
