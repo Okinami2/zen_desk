@@ -18,7 +18,9 @@ enum InteractionLayer {
     LAYER_HOME_BROWSE,  // 浏览模式
     LAYER_HOME_FOCUS,   // 聚焦模式
     LAYER_DIALOG,       // 弹窗设置模式
-    LAYER_STUDYING      // 专注计时模式
+    LAYER_STUDYING,     // 专注计时模式
+    LAYER_CONTROL_BROWSE,
+    LAYER_CONTROL_FOCUS
 };
 
 // 定义滑块专属状态
@@ -31,6 +33,7 @@ class HomePage;
 class StatusPage;
 class StatsPage;
 class StudyPage;
+class ControlPage;
 
 // ── 侧边栏导航按钮（带活跃态指示条） ─────────────────────────────────────
 class NavButton : public QPushButton {
@@ -77,6 +80,7 @@ private slots:
     void showHome();
     void showStatus();
     void showStats();
+    void showControl();
     void showStudySetupDialog();
     void startStudy(int minutes = -1);
     void stopStudy();
@@ -93,11 +97,13 @@ private:
     StatusPage *statusPage;
     StatsPage *statsPage;
     StudyPage *studyPage;
+    ControlPage *controlPage;
 
     NavButton *btnHome;
     NavButton *btnStatus;
     NavButton *btnStats;
     NavButton *btnConfig;
+    NavButton *btnControl;
 
     bool inStudyMode = false;
 
@@ -105,6 +111,7 @@ private:
     void handleVisionTelemetry(const QByteArray &data);
     void handleFusionState(const FusionState &state);
     void sendTcpVisionState(const VisionState &state);
+    void sendTcpDeviceControl(uint8_t action, uint8_t brightness, uint16_t color_temp);
     void updateStatsPageData();
 
     //  状态机核心成员

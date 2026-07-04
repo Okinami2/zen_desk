@@ -10,6 +10,7 @@ SOURCES += \
     src/pages/StatusPage.cpp \
     src/pages/StatsPage.cpp \
     src/pages/StudyPage.cpp \
+    src/pages/ControlPage.cpp \
     src/services/MockFusionClient.cpp
 
 HEADERS += \
@@ -18,6 +19,7 @@ HEADERS += \
     src/pages/StatusPage.h \
     src/pages/StatsPage.h \
     src/pages/StudyPage.h \
+    src/pages/ControlPage.h \
     src/services/MockFusionClient.h
 
 INCLUDEPATH += \

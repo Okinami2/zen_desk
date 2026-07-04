@@ -3,6 +3,7 @@
 #include "pages/StatusPage.h"
 #include "pages/StatsPage.h"
 #include "pages/StudyPage.h"
+#include "pages/ControlPage.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -90,6 +91,33 @@ void NavButton::paintEvent(QPaintEvent *)
     p.drawText(rect(), Qt::AlignCenter, m_icon);
 }
 
+void MainWindow::sendTcpDeviceControl(uint8_t action, uint8_t brightness, uint16_t color_temp)
+{
+    QTcpSocket socket;
+    socket.connectToHost(QHostAddress("127.0.0.1"), 8888);
+    
+    DeviceControl dc;
+    memset(&dc, 0, sizeof(dc));
+    dc.device_id = 1;
+    dc.action = action;
+    dc.brightness = brightness;
+    dc.color_temp = color_temp;
+    dc.timestamp = QDateTime::currentSecsSinceEpoch();
+
+    char header[8];
+    uint32_t type_be = qToBigEndian((uint32_t)MSG_DEVICE_CONTROL);
+    uint32_t len_be  = qToBigEndian((uint32_t)sizeof(dc));
+
+    memcpy(header, &type_be, 4);
+    memcpy(header + 4, &len_be, 4);
+
+    if (socket.waitForConnected(100)) {
+        socket.write(header, 8);
+        socket.write((const char*)&dc, sizeof(dc));
+        socket.flush();
+    }
+}
+
 // ════════════════════════════════════════════════════════════
 //  Overlay
 // ════════════════════════════════════════════════════════════
@@ -153,10 +181,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     btnHome   = new NavButton("○",  sidebar);
     btnStatus = new NavButton("◉",  sidebar);
     btnStats  = new NavButton("▦",  sidebar);
+    btnControl = new NavButton("⚙",  sidebar);
 
     sideLay->addWidget(btnHome);
     sideLay->addWidget(btnStatus);
     sideLay->addWidget(btnStats);
+    sideLay->addWidget(btnControl);
     sideLay->addStretch();
 
     // ── 内容区 ────────────────────────────────────────────────────────────
@@ -166,11 +196,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     statusPage = new StatusPage(this);
     statsPage  = new StatsPage(this);
     studyPage  = new StudyPage(this);
+    controlPage = new ControlPage(this);
 
     stack->addWidget(homePage);
     stack->addWidget(statusPage);
     stack->addWidget(statsPage);
     stack->addWidget(studyPage);
+    stack->addWidget(controlPage);
 
     rootLay->addWidget(sidebar);
     rootLay->addWidget(stack);
@@ -180,6 +212,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(btnHome,   &QPushButton::clicked, this, &MainWindow::showHome);
     connect(btnStatus, &QPushButton::clicked, this, &MainWindow::showStatus);
     connect(btnStats,  &QPushButton::clicked, this, &MainWindow::showStats);
+    connect(btnControl, &QPushButton::clicked, this, &MainWindow::showControl);
+
+    // 控制中心信号
+    connect(controlPage, &ControlPage::brightnessChanged, this, [this](int v) {
+        sendTcpDeviceControl(4, v, 0); // 绝对亮度设置 (Action 4)
+    });
+    connect(controlPage, &ControlPage::toggleColorTempRequested, this, [this]() {
+        sendTcpDeviceControl(3, 0, 0); // 色温切换 (Action 3)
+    });
 
     // HomePage 中的"进入专注"按钮
     connect(homePage, &HomePage::enterStudyRequested, this, &MainWindow::showStudySetupDialog);
@@ -287,7 +328,7 @@ void MainWindow::updateStatsPageData()
 
 void MainWindow::setActiveNav(NavButton *active)
 {
-    for (NavButton *b : {btnHome, btnStatus, btnStats})
+    for (NavButton *b : {btnHome, btnStatus, btnStats, btnControl})
         b->setActive(b == active);
 }
 
@@ -314,8 +355,17 @@ void MainWindow::showStats()
 void MainWindow::showStatus()
 {
     if (inStudyMode) return;
-    stack->setCurrentWidget(statusPage);
     setActiveNav(btnStatus);
+    stack->setCurrentWidget(statusPage);
+    currentLayer = LAYER_HOME_BROWSE;
+}
+
+void MainWindow::showControl()
+{
+    if (inStudyMode) return;
+    setActiveNav(btnControl);
+    stack->setCurrentWidget(controlPage);
+    currentLayer = LAYER_CONTROL_BROWSE;
 }
 
 // ── 专注设置弹窗（精心设计版） ────────────────────────────────────────────
@@ -513,6 +563,9 @@ void MainWindow::showStudySetupDialog()
         if (min == 25) cmd = ASR_CMD_STUDY_START_25;
         else if (min == 45) cmd = ASR_CMD_STUDY_START_45;
         else if (min == 60) cmd = ASR_CMD_STUDY_START_60;
+        else if (min > 0 && min <= 120 && (min % 5 == 0)) {
+            cmd = ASR_CMD_STUDY_START_CUSTOM_BASE + (min / 5);
+        }
         
         sendTcpCommand(cmd);
     });
@@ -738,6 +791,9 @@ void MainWindow::onUdpReadyRead() {
             } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_60) {
                 closeActiveDialog();
                 startStudy(60);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_CUSTOM) {
+                closeActiveDialog();
+                startStudy(msg.state.duration_minutes);
             } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_FREE) {
                 closeActiveDialog();
                 startStudy(-1);
@@ -818,19 +874,45 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
             switch (currentLayer) {
                 // 【层级 1.1：主界浏览】
                 case LAYER_HOME_BROWSE:
+                case LAYER_CONTROL_BROWSE:
                     if (key == Qt::Key_Left) {
-                        if (stack->currentWidget() == homePage) showStats();
+                        if (stack->currentWidget() == homePage) showControl();
                         else if (stack->currentWidget() == statusPage) showHome();
-                        else showStatus();
+                        else if (stack->currentWidget() == statsPage) showStatus();
+                        else showStats();
                     } else if (key == Qt::Key_Right) {
                         if (stack->currentWidget() == homePage) showStatus();
                         else if (stack->currentWidget() == statusPage) showStats();
+                        else if (stack->currentWidget() == statsPage) showControl();
                         else showHome();
                     } else if (key == Qt::Key_Space) {
                         if (stack->currentWidget() == homePage) {
                             currentLayer = LAYER_HOME_FOCUS;
                             updateWidgetFocusStyle(homePage->getEnterBtn(), true);
+                        } else if (stack->currentWidget() == controlPage) {
+                            currentLayer = LAYER_CONTROL_FOCUS;
+                            controlPage->getBrightnessSlider()->setProperty("zenFocus", true);
+                            controlPage->getBrightnessSlider()->style()->unpolish(controlPage->getBrightnessSlider());
+                            controlPage->getBrightnessSlider()->style()->polish(controlPage->getBrightnessSlider());
                         }
+                    }
+                    return true;
+                    
+                // 【层级 1.1.5：控制中心操作态】
+                case LAYER_CONTROL_FOCUS:
+                    if (key == Qt::Key_Left) {
+                        int v = controlPage->getBrightnessSlider()->value();
+                        controlPage->getBrightnessSlider()->setValue(v - 5);
+                    } else if (key == Qt::Key_Right) {
+                        int v = controlPage->getBrightnessSlider()->value();
+                        controlPage->getBrightnessSlider()->setValue(v + 5);
+                    } else if (key == Qt::Key_Space) {
+                        controlPage->getToggleColorBtn()->click();
+                    } else if (key == Qt::Key_Escape) {
+                        currentLayer = LAYER_CONTROL_BROWSE;
+                        controlPage->getBrightnessSlider()->setProperty("zenFocus", false);
+                        controlPage->getBrightnessSlider()->style()->unpolish(controlPage->getBrightnessSlider());
+                        controlPage->getBrightnessSlider()->style()->polish(controlPage->getBrightnessSlider());
                     }
                     return true;
                     

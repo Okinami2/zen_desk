@@ -2,6 +2,7 @@
 extern "C"{ void * __dso_handle = 0 ;}
 #include "setup.h"
 #include "HardwareSerial.h"
+#include "myLib/asr_event.h"
 
 uint32_t snid;
 uint8_t VOL = 4;
@@ -9,9 +10,11 @@ void ASR_CODE();
 void app();
 
 //{speak:小蝶-清新女声,vol:1,speed:10,platform:haohaodada}
+//{playid:10002,voice:}
 //{playid:10601,voice:你已经学习四十分钟啦，该休息了。}
 //{playid:10602,voice:专注模式已结束，请休息，喝点水吧。}
-//{playid:10603,voice:滴滴，滴滴，请认真学习。}
+//{playid:10603,voice:检测到长时间分神，请认真学习。}
+// 魔术指令配置区
 /*
  * Zen Desk ASRPRO 离线语音识别固件代码
  * 这里利用了“同义词泛化”策略，为每个动作设定了足足 20 个极度口语化的语义别名
@@ -61,6 +64,14 @@ void ASR_CODE() {
     case 80: case 81: case 82: case 83: case 84:
     case 85: case 86: case 87: case 88: case 89:
       Serial.write(0x14);
+      break;
+
+    // 切换色温系列 (0x15)
+    case 290: case 291: case 292: case 293: case 294: 
+    case 295: case 296: case 297: case 298: case 299: 
+    case 300: case 301: case 302: case 303: case 304:
+    case 305: case 306: case 307: case 308: case 309:
+      Serial.write(0x15);
       break;
 
     // ============ 2. 专注与学习系列 ============
@@ -179,6 +190,12 @@ void ASR_CODE() {
       break;
   }
 }
+
+//{ID:290,keyword:"命令词",ASR:"切换色温",ASRTO:"已切换色温"}
+//{ID:291,keyword:"命令词",ASR:"换个光",ASRTO:"已切换色温"}
+//{ID:292,keyword:"命令词",ASR:"调节色温",ASRTO:"已切换色温"}
+//{ID:293,keyword:"命令词",ASR:"改变色温",ASRTO:"已切换色温"}
+//{ID:294,keyword:"命令词",ASR:"台灯换色",ASRTO:"已切换色温"}
 
 void app() {
   // 主循环，处理后台任务
@@ -522,3 +539,5 @@ void setup() {
   pinMode(4, output);
   digitalWrite(4, 0);
 }
+
+

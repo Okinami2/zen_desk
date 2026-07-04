@@ -86,6 +86,7 @@ typedef enum {
     ASR_CMD_LAMP_OFF           = 0x12,
     ASR_CMD_LAMP_BRIGHT_UP     = 0x13,
     ASR_CMD_LAMP_BRIGHT_DOWN   = 0x14,
+    ASR_CMD_LAMP_TOGGLE_COLOR_TEMP = 0x15,
     ASR_CMD_STUDY_START        = 0x21,
     ASR_CMD_STUDY_STOP         = 0x22,
     ASR_CMD_STUDY_PAUSE        = 0x23,
@@ -97,6 +98,7 @@ typedef enum {
     ASR_CMD_STUDY_FOCUSED      = 0x29,
     ASR_CMD_SCREEN_DATA        = 0x31,
     ASR_CMD_SCREEN_HOME        = 0x32,
+    ASR_CMD_STUDY_START_CUSTOM_BASE = 0x40, // 0x41(5m) to 0x58(120m)
     
     // 自下而上反向播报指令 (Fusion -> ASR)
     ASR_CMD_PLAY_BREAK_40M     = 0xF1, // 正计时每40分钟播报
@@ -130,7 +132,8 @@ typedef enum {
     UI_EVENT_ACTION_STUDY_START_FREE = 0x14,
     UI_EVENT_ACTION_STUDY_PAUSE = 0x15,
     UI_EVENT_ACTION_STUDY_RESUME = 0x16,
-    UI_EVENT_ACTION_STUDY_STOP = 0x17
+    UI_EVENT_ACTION_STUDY_STOP = 0x17,
+    UI_EVENT_ACTION_STUDY_START_CUSTOM = 0x18
 } UiEventType;
 
 typedef struct {

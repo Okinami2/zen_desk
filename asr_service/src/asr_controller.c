@@ -220,7 +220,7 @@ static void action_lamp_on(void) { LOG_INFO("[动作] 打开台灯"); send_asr_c
 static void action_lamp_off(void) { LOG_INFO("[动作] 关闭台灯"); send_asr_command_to_fusion(ASR_CMD_LAMP_OFF); }
 static void action_lamp_brightness_up(void) { LOG_INFO("[动作] 提高亮度"); send_asr_command_to_fusion(ASR_CMD_LAMP_BRIGHT_UP); }
 static void action_lamp_brightness_down(void) { LOG_INFO("[动作] 降低亮度"); send_asr_command_to_fusion(ASR_CMD_LAMP_BRIGHT_DOWN); }
-static void action_lamp_toggle_color_temp(void) { LOG_INFO("[动作] 切换色温"); /* 预留 */ }
+static void action_lamp_toggle_color_temp(void) { LOG_INFO("[动作] 切换色温"); send_asr_command_to_fusion(ASR_CMD_LAMP_TOGGLE_COLOR_TEMP); }
 static void action_screen_show_data(void) { LOG_INFO("[动作] 查看学习数据"); send_asr_command_to_fusion(ASR_CMD_SCREEN_DATA); }
 static void action_screen_show_home(void) { LOG_INFO("[动作] 回到主页"); send_asr_command_to_fusion(ASR_CMD_SCREEN_HOME); }
 
