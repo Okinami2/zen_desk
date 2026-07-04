@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
+#include <math.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -28,6 +29,18 @@ static struct sockaddr_in g_udp_addr;
 #define VISION_TRANSITION_COOLDOWN_MS 1500ULL
 #define VISION_NO_BLINK_TIMEOUT_MS 30000ULL
 #define VISION_EYES_CLOSED_TIMEOUT_MS 1500ULL
+#define VISION_SEAT_ENTER_DIAG 165.0f
+#define VISION_SEAT_EXIT_DIAG 160.0f
+#define VISION_SEAT_ENTER_SAMPLES 2
+#define VISION_SEAT_EXIT_SAMPLES 6
+#define VISION_FRAME_WIDTH 1280.0f
+#define VISION_FRAME_HEIGHT 720.0f
+#define VISION_SEAT_CENTER_MIN_X_RATIO 0.25f
+#define VISION_SEAT_CENTER_MAX_X_RATIO 0.75f
+#define VISION_SEAT_CENTER_MIN_Y_RATIO 0.15f
+#define VISION_SEAT_CENTER_MAX_Y_RATIO 0.85f
+#define VISION_SEAT_DEBUG_INTERVAL_MS 2000ULL
+#define FUSION_STATE_HEARTBEAT_MS 1000ULL
 
 typedef enum {
     VISION_VOTE_UNKNOWN = 0,
@@ -48,7 +61,16 @@ typedef struct {
     uint8_t last_attention_region;
 } VisionFocusFilter;
 
+typedef struct {
+    int seated;
+    int enter_count;
+    int exit_count;
+    LearningState state_before_absent;
+    uint64_t last_debug_ms;
+} VisionSeatFilter;
+
 static VisionFocusFilter g_vision_filter;
+static VisionSeatFilter g_vision_seat_filter;
 
 void fusion_send_ui_event(UiEventType type) {
     if (g_udp_fd < 0) return;
@@ -62,6 +84,8 @@ void fusion_send_ui_event(UiEventType type) {
 static void radar_to_fusion_and_dispatch(const RadarState *rs);
 static void vision_to_fusion_and_dispatch(const VisionState *vs);
 static void vision_focus_reset(int is_distracted);
+static uint64_t fusion_monotonic_ms(void);
+static void fusion_send_current_state_snapshot(void);
 
 /* ==================== TCP 服务器 ==================== */
 
@@ -231,6 +255,7 @@ static void* tcp_server_thread(void *arg)
 {
     struct sockaddr_in addr;
     int listen_fd, opt = 1;
+    uint64_t last_state_heartbeat_ms = 0;
 
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd < 0) {
@@ -271,6 +296,12 @@ static void* tcp_server_thread(void *arg)
         FD_SET(listen_fd, &fds);
 
         int ret = select(listen_fd + 1, &fds, NULL, NULL, &tv);
+        uint64_t now_ms = fusion_monotonic_ms();
+        if (last_state_heartbeat_ms == 0 ||
+            now_ms - last_state_heartbeat_ms >= FUSION_STATE_HEARTBEAT_MS) {
+            fusion_send_current_state_snapshot();
+            last_state_heartbeat_ms = now_ms;
+        }
         if (ret <= 0) continue;
 
         int client_fd = accept(listen_fd, NULL, NULL);
@@ -311,10 +342,137 @@ static uint64_t fusion_monotonic_ms(void)
     return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
 }
 
+static void fusion_send_current_state_snapshot(void)
+{
+    UiEventMessage msg;
+
+    if (g_udp_fd < 0) {
+        return;
+    }
+
+    memset(&msg, 0, sizeof(msg));
+    msg.event_type = UI_EVENT_STATE_UPDATE;
+
+    pthread_mutex_lock(&g_fusion_service.mutex);
+    msg.state.current_state = g_fusion_service.current_state;
+    msg.state.state_score = g_fusion_service.latest_vision.face_quality;
+    msg.state.intervention_level = 0;
+    msg.state.duration_minutes = 0;
+    msg.state.timestamp = time(NULL);
+    pthread_mutex_unlock(&g_fusion_service.mutex);
+
+    sendto(g_udp_fd, &msg, sizeof(msg), 0,
+        (struct sockaddr *)&g_udp_addr, sizeof(g_udp_addr));
+}
+
 static void vision_focus_reset(int is_distracted)
 {
     memset(&g_vision_filter, 0, sizeof(g_vision_filter));
     g_vision_filter.is_distracted = is_distracted;
+}
+
+static float vision_face_diag_sq(const VisionState *vs)
+{
+    float dx;
+    float dy;
+
+    if (vs == NULL || vs->face_present == 0) {
+        return 0.0f;
+    }
+
+    dx = vs->face_x2 - vs->face_x1;
+    dy = vs->face_y2 - vs->face_y1;
+    if (dx <= 0.0f || dy <= 0.0f) {
+        return 0.0f;
+    }
+
+    return dx * dx + dy * dy;
+}
+
+static int vision_face_center_in_seat_region(const VisionState *vs, float *cx_out, float *cy_out)
+{
+    const float min_x = VISION_FRAME_WIDTH * VISION_SEAT_CENTER_MIN_X_RATIO;
+    const float max_x = VISION_FRAME_WIDTH * VISION_SEAT_CENTER_MAX_X_RATIO;
+    const float min_y = VISION_FRAME_HEIGHT * VISION_SEAT_CENTER_MIN_Y_RATIO;
+    const float max_y = VISION_FRAME_HEIGHT * VISION_SEAT_CENTER_MAX_Y_RATIO;
+    float cx = 0.0f;
+    float cy = 0.0f;
+
+    if (vs != NULL && vs->face_present != 0 &&
+        vs->face_x2 > vs->face_x1 && vs->face_y2 > vs->face_y1) {
+        cx = (vs->face_x1 + vs->face_x2) * 0.5f;
+        cy = (vs->face_y1 + vs->face_y2) * 0.5f;
+    }
+
+    if (cx_out != NULL) {
+        *cx_out = cx;
+    }
+    if (cy_out != NULL) {
+        *cy_out = cy;
+    }
+
+    return cx >= min_x && cx <= max_x && cy >= min_y && cy <= max_y;
+}
+
+static int vision_seat_update(const VisionState *vs, float *diag_sq_out,
+    float *face_cx_out, float *face_cy_out, int *center_ok_out)
+{
+    const float enter_sq = VISION_SEAT_ENTER_DIAG * VISION_SEAT_ENTER_DIAG;
+    const float exit_sq = VISION_SEAT_EXIT_DIAG * VISION_SEAT_EXIT_DIAG;
+    float diag_sq = vision_face_diag_sq(vs);
+    float face_cx = 0.0f;
+    float face_cy = 0.0f;
+    int center_ok = vision_face_center_in_seat_region(vs, &face_cx, &face_cy);
+    int seen_as_seated_enter = (vs != NULL && vs->face_present != 0 &&
+        center_ok && diag_sq >= enter_sq);
+    int seen_as_seated_keep = (vs != NULL && vs->face_present != 0 &&
+        center_ok && diag_sq >= exit_sq);
+    uint64_t now_ms = fusion_monotonic_ms();
+
+    if (diag_sq_out != NULL) {
+        *diag_sq_out = diag_sq;
+    }
+    if (face_cx_out != NULL) {
+        *face_cx_out = face_cx;
+    }
+    if (face_cy_out != NULL) {
+        *face_cy_out = face_cy;
+    }
+    if (center_ok_out != NULL) {
+        *center_ok_out = center_ok;
+    }
+
+    if (g_vision_seat_filter.seated) {
+        if (seen_as_seated_keep) {
+            g_vision_seat_filter.exit_count = 0;
+        } else if (++g_vision_seat_filter.exit_count >= VISION_SEAT_EXIT_SAMPLES) {
+            g_vision_seat_filter.seated = 0;
+            g_vision_seat_filter.enter_count = 0;
+            g_vision_seat_filter.exit_count = 0;
+        }
+    } else {
+        if (seen_as_seated_enter) {
+            if (++g_vision_seat_filter.enter_count >= VISION_SEAT_ENTER_SAMPLES) {
+                g_vision_seat_filter.seated = 1;
+                g_vision_seat_filter.enter_count = 0;
+                g_vision_seat_filter.exit_count = 0;
+            }
+        } else {
+            g_vision_seat_filter.enter_count = 0;
+        }
+    }
+
+    if (g_vision_seat_filter.last_debug_ms == 0 ||
+        now_ms - g_vision_seat_filter.last_debug_ms >= VISION_SEAT_DEBUG_INTERVAL_MS) {
+        LOG_INFO("Vision seat sample: face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d seated=%d enter_count=%d exit_count=%d",
+                 vs != NULL ? vs->face_present : 0,
+                 diag_sq > 0.0f ? sqrtf(diag_sq) : 0.0f,
+                 face_cx, face_cy, center_ok, g_vision_seat_filter.seated,
+                 g_vision_seat_filter.enter_count, g_vision_seat_filter.exit_count);
+        g_vision_seat_filter.last_debug_ms = now_ms;
+    }
+
+    return g_vision_seat_filter.seated;
 }
 
 static void vision_focus_clear_votes(void)
@@ -479,6 +637,11 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     VisionFocusVote vote;
     int should_dispatch = 0;
     uint64_t now_ms;
+    int seated;
+    float face_diag_sq = 0.0f;
+    float face_cx = 0.0f;
+    float face_cy = 0.0f;
+    int center_ok = 0;
 
     if (vs == NULL) {
         return;
@@ -492,11 +655,50 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
 
     pthread_mutex_lock(&g_fusion_service.mutex);
     g_fusion_service.latest_vision = *vs;
+    seated = vision_seat_update(vs, &face_diag_sq, &face_cx, &face_cy, &center_ok);
+
+    if (!seated) {
+        if (g_fusion_service.current_state != STATE_ABSENT) {
+            g_vision_seat_filter.state_before_absent = g_fusion_service.current_state;
+            g_fusion_service.current_state = STATE_ABSENT;
+            should_dispatch = 1;
+            vision_focus_reset(0);
+            LOG_INFO("Vision seat -> ABSENT (face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d)",
+                     vs->face_present, face_diag_sq > 0.0f ? sqrtf(face_diag_sq) : 0.0f,
+                     face_cx, face_cy, center_ok);
+        }
+        fs.current_state = g_fusion_service.current_state;
+        pthread_mutex_unlock(&g_fusion_service.mutex);
+
+        if (should_dispatch) {
+            fusion_send_state(&fs);
+            device_handle_fusion_state(&fs);
+        }
+        return;
+    }
+
+    if (g_fusion_service.current_state == STATE_ABSENT) {
+        LearningState restore_state = g_vision_seat_filter.state_before_absent;
+        if (restore_state == STATE_ABSENT || restore_state == STATE_DISTRACTED) {
+            restore_state = STATE_FOCUSED;
+        }
+        g_fusion_service.current_state = restore_state;
+        vision_focus_reset(restore_state == STATE_DISTRACTED);
+        should_dispatch = 1;
+        LOG_INFO("Vision seat -> PRESENT (face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d restore=%d)",
+                 vs->face_present, face_diag_sq > 0.0f ? sqrtf(face_diag_sq) : 0.0f,
+                 face_cx, face_cy, center_ok, restore_state);
+    }
 
     if (g_fusion_service.current_state != STATE_FOCUSED &&
         g_fusion_service.current_state != STATE_DISTRACTED) {
         vision_focus_reset(0);
         pthread_mutex_unlock(&g_fusion_service.mutex);
+        if (should_dispatch) {
+            fs.current_state = g_fusion_service.current_state;
+            fusion_send_state(&fs);
+            device_handle_fusion_state(&fs);
+        }
         return;
     }
 
@@ -524,33 +726,10 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     }
 }
 
-/* 雷达 → 融合状态: 雷达作为第一优先级
- * presence=1 → 入座, presence=0 → 离座 */
+/* 雷达已不再参与入座/离座判断。摄像头的人脸框大小是当前唯一在座依据。 */
 static void radar_to_fusion_and_dispatch(const RadarState *rs)
 {
-    FusionState fs;
-
-    fs.state_score       = rs->radar_quality;
-    fs.intervention_level = 0;
-    fs.duration_minutes  = 0;
-    fs.timestamp         = time(NULL);
-
-    pthread_mutex_lock(&g_fusion_service.mutex);
-    if (rs->presence) {
-        // 如果雷达探测到有人，且当前是“无人”状态，则切换为“闲置”
-        // 如果当前已经是专注状态，则保持不变，修复被雷达强制覆盖的Bug
-        if (g_fusion_service.current_state == STATE_ABSENT) {
-            g_fusion_service.current_state = STATE_SEATED_IDLE;
-        }
-    } else {
-        // 雷达探测不到人，直接切到无人态
-        g_fusion_service.current_state = STATE_ABSENT;
-    }
-    fs.current_state = g_fusion_service.current_state;
-    pthread_mutex_unlock(&g_fusion_service.mutex);
-
-    fusion_send_state(&fs);
-    device_handle_fusion_state(&fs);
+    (void)rs;
 }
 
 int fusion_service_init(const Config *config) {
@@ -561,6 +740,9 @@ int fusion_service_init(const Config *config) {
     g_fusion_service.running = 0;
     g_fusion_service.current_state = STATE_SEATED_IDLE;
     vision_focus_reset(0);
+    memset(&g_vision_seat_filter, 0, sizeof(g_vision_seat_filter));
+    g_vision_seat_filter.seated = 1;
+    g_vision_seat_filter.state_before_absent = STATE_SEATED_IDLE;
     pthread_mutex_init(&g_fusion_service.mutex, NULL);
 
     if (device_service_init(config) != 0) {

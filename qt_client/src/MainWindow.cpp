@@ -23,6 +23,7 @@
 #include <QApplication>
 #include <QStyle>
 #include <QDebug>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QTcpSocket>
 #include <QtEndian>
@@ -659,6 +660,7 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     const int blink_count = obj.value("blink_count").toInt(0);
     const int yawn_count = obj.value("yawn_count").toInt(0);
     const bool eyes_closed = obj.value("eyes_closed").toBool(false);
+    const QJsonArray faceBox = obj.value("face").toArray();
 
     statusPage->setFacePresent(hasFace, score);
     statusPage->setAttention(attention, yaw, pitch, roll);
@@ -672,6 +674,12 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     state.yaw = yaw;
     state.attention_region = visionAttentionRegion(attention);
     state.face_quality = score;
+    if (faceBox.size() >= 4) {
+        state.face_x1 = static_cast<float>(faceBox.at(0).toDouble(0.0));
+        state.face_y1 = static_cast<float>(faceBox.at(1).toDouble(0.0));
+        state.face_x2 = static_cast<float>(faceBox.at(2).toDouble(0.0));
+        state.face_y2 = static_cast<float>(faceBox.at(3).toDouble(0.0));
+    }
     state.timestamp = static_cast<uint64_t>(
         obj.value("timestamp_ms").toDouble(QDateTime::currentMSecsSinceEpoch()));
     state.blink_count = static_cast<uint32_t>(qMax(0, blink_count));

@@ -43,6 +43,10 @@ typedef struct {
     float yaw;                  // 偏航角
     uint8_t attention_region;   // 注意力区域
     float face_quality;         // 人脸质量
+    float face_x1;              // 人脸框左上角 x
+    float face_y1;              // 人脸框左上角 y
+    float face_x2;              // 人脸框右下角 x
+    float face_y2;              // 人脸框右下角 y
     uint64_t timestamp;         // 时间戳
     uint32_t blink_count;        // 眨眼计数
     uint32_t yawn_count;         // 哈欠计数
