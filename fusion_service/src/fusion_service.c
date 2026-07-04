@@ -301,6 +301,14 @@ static void* tcp_client_handler(void *arg)
                     LOG_INFO("ASR requested Lamp Toggle Color Temp");
                     device_toggle_lamp_color_temp();
                     break;
+                case ASR_CMD_LAMP_SET_BRIGHTNESS:
+                    LOG_INFO("Qt Client requested Lamp Brightness Set to %d", cmd->arg1);
+                    device_set_lamp_brightness_absolute(cmd->arg1);
+                    break;
+                case ASR_CMD_LAMP_SET_COLOR_TEMP:
+                    LOG_INFO("Qt Client requested Lamp Color Temp Set to %.2f", cmd->arg2_float);
+                    device_set_lamp_color_temp_absolute(cmd->arg2_float);
+                    break;
                 case ASR_CMD_LAMP_BRIGHT_UP:
                     LOG_INFO("ASR requested Lamp Brightness UP");
                     device_adjust_lamp_brightness(20);
@@ -461,6 +469,13 @@ static void fusion_send_current_state_snapshot(void)
     msg.state.intervention_level = 0;
     msg.state.duration_minutes = 0;
     msg.state.timestamp = time(NULL);
+    
+    int bright;
+    float color_ratio;
+    device_get_lamp_state(&bright, &color_ratio);
+    msg.state.lamp_brightness = (uint8_t)bright;
+    msg.state.lamp_color_ratio = color_ratio;
+    
     pthread_mutex_unlock(&g_fusion_service.mutex);
 
     sendto(g_udp_fd, &msg, sizeof(msg), 0,
@@ -990,6 +1005,13 @@ int fusion_send_state(const FusionState *state) {
         memset(&msg, 0, sizeof(msg));
         msg.event_type = UI_EVENT_STATE_UPDATE;
         msg.state = *state;
+        
+        int bright;
+        float color_ratio;
+        device_get_lamp_state(&bright, &color_ratio);
+        msg.state.lamp_brightness = (uint8_t)bright;
+        msg.state.lamp_color_ratio = color_ratio;
+        
         sendto(g_udp_fd, &msg, sizeof(msg), 0, (struct sockaddr*)&g_udp_addr, sizeof(g_udp_addr));
     }
     return 0;

@@ -548,3 +548,32 @@ void device_set_lamp_brightness_absolute(int percent) {
     
     pthread_mutex_unlock(&g_lamp_mutex);
 }
+
+void device_set_lamp_color_temp_absolute(float ratio) {
+    pthread_mutex_lock(&g_lamp_mutex);
+    
+    if (ratio < 0.0f) ratio = 0.0f;
+    if (ratio > 1.0f) ratio = 1.0f;
+    
+    g_target_scene.color_ratio = ratio;
+    g_target_scene.mode = LAMP_MODE_STATIC;
+    g_target_scene.transition_ms = 200; // 交互响应要快
+    
+    g_voice_override = 1;
+    g_saved_voice_scene = g_target_scene;
+    
+    LOG_INFO("Lamp color temp absolutely set to ratio %.2f", ratio);
+    
+    pthread_mutex_unlock(&g_lamp_mutex);
+}
+
+void device_get_lamp_state(int *brightness, float *color_ratio) {
+    pthread_mutex_lock(&g_lamp_mutex);
+    if (brightness) {
+        *brightness = (g_current_brightness * 100) / PWM_PERIOD;
+    }
+    if (color_ratio) {
+        *color_ratio = g_current_color_ratio;
+    }
+    pthread_mutex_unlock(&g_lamp_mutex);
+}

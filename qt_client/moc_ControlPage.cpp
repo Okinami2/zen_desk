@@ -22,8 +22,8 @@ QT_BEGIN_MOC_NAMESPACE
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 struct qt_meta_stringdata_ControlPage_t {
-    QByteArrayData data[5];
-    char stringdata0[64];
+    QByteArrayData data[6];
+    char stringdata0[62];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -36,11 +36,12 @@ QT_MOC_LITERAL(0, 0, 11), // "ControlPage"
 QT_MOC_LITERAL(1, 12, 17), // "brightnessChanged"
 QT_MOC_LITERAL(2, 30, 0), // ""
 QT_MOC_LITERAL(3, 31, 7), // "percent"
-QT_MOC_LITERAL(4, 39, 24) // "toggleColorTempRequested"
+QT_MOC_LITERAL(4, 39, 16), // "colorTempChanged"
+QT_MOC_LITERAL(5, 56, 5) // "ratio"
 
     },
     "ControlPage\0brightnessChanged\0\0percent\0"
-    "toggleColorTempRequested"
+    "colorTempChanged\0ratio"
 };
 #undef QT_MOC_LITERAL
 
@@ -59,11 +60,11 @@ static const uint qt_meta_data_ControlPage[] = {
 
  // signals: name, argc, parameters, tag, flags
        1,    1,   24,    2, 0x06 /* Public */,
-       4,    0,   27,    2, 0x06 /* Public */,
+       4,    1,   27,    2, 0x06 /* Public */,
 
  // signals: parameters
     QMetaType::Void, QMetaType::Int,    3,
-    QMetaType::Void,
+    QMetaType::Void, QMetaType::Float,    5,
 
        0        // eod
 };
@@ -75,7 +76,7 @@ void ControlPage::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id,
         (void)_t;
         switch (_id) {
         case 0: _t->brightnessChanged((*reinterpret_cast< int(*)>(_a[1]))); break;
-        case 1: _t->toggleColorTempRequested(); break;
+        case 1: _t->colorTempChanged((*reinterpret_cast< float(*)>(_a[1]))); break;
         default: ;
         }
     } else if (_c == QMetaObject::IndexOfMethod) {
@@ -88,8 +89,8 @@ void ControlPage::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id,
             }
         }
         {
-            using _t = void (ControlPage::*)();
-            if (*reinterpret_cast<_t *>(_a[1]) == static_cast<_t>(&ControlPage::toggleColorTempRequested)) {
+            using _t = void (ControlPage::*)(float );
+            if (*reinterpret_cast<_t *>(_a[1]) == static_cast<_t>(&ControlPage::colorTempChanged)) {
                 *result = 1;
                 return;
             }
@@ -145,9 +146,10 @@ void ControlPage::brightnessChanged(int _t1)
 }
 
 // SIGNAL 1
-void ControlPage::toggleColorTempRequested()
+void ControlPage::colorTempChanged(float _t1)
 {
-    QMetaObject::activate(this, &staticMetaObject, 1, nullptr);
+    void *_a[] = { nullptr, const_cast<void*>(reinterpret_cast<const void*>(std::addressof(_t1))) };
+    QMetaObject::activate(this, &staticMetaObject, 1, _a);
 }
 QT_WARNING_POP
 QT_END_MOC_NAMESPACE

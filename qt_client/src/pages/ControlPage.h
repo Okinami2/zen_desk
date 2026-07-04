@@ -13,18 +13,36 @@ public:
     explicit ControlPage(QWidget *parent = nullptr);
 
     QSlider* getBrightnessSlider() const { return brightnessSlider; }
-    QPushButton* getToggleColorBtn() const { return toggleColorBtn; }
+    QSlider* getColorTempSlider() const { return colorTempSlider; }
 
-    void setBrightness(int percent);
+    void setLampState(int brightness, float colorRatio);
+
+    // 旋钮交互接口
+    void handleKnobLeft();
+    void handleKnobRight();
+    void handleKnobPress();
+    
+    // 强制复位状态，当切出该页面时调用
+    void resetFocusState();
+    void enterFocusMode();
 
 signals:
     void brightnessChanged(int percent);
-    void toggleColorTempRequested();
+    void colorTempChanged(float ratio);
 
 private:
+    void updateFocusStyle();
+
+    QWidget *brightnessCard;
     QSlider *brightnessSlider;
     QLabel *brightnessValLabel;
-    QPushButton *toggleColorBtn;
+    
+    QWidget *colorTempCard;
+    QSlider *colorTempSlider;
+    QLabel *colorTempValLabel;
+
+    int focusIndex; // 0 for brightness, 1 for color temp
+    bool inEditMode;
 };
 
 #endif // CONTROLPAGE_H

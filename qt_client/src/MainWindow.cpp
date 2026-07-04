@@ -216,10 +216,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
     // 控制中心信号
     connect(controlPage, &ControlPage::brightnessChanged, this, [this](int v) {
-        sendTcpDeviceControl(4, v, 0); // 绝对亮度设置 (Action 4)
+        sendTcpCommandWithArgs(ASR_CMD_LAMP_SET_BRIGHTNESS, v, 0.0f);
     });
-    connect(controlPage, &ControlPage::toggleColorTempRequested, this, [this]() {
-        sendTcpDeviceControl(3, 0, 0); // 色温切换 (Action 3)
+    connect(controlPage, &ControlPage::colorTempChanged, this, [this](float ratio) {
+        sendTcpCommandWithArgs(ASR_CMD_LAMP_SET_COLOR_TEMP, 0, ratio);
     });
 
     // HomePage 中的"进入专注"按钮
@@ -757,6 +757,7 @@ void MainWindow::onUdpReadyRead() {
                 hideMicIcon();
             } else if (msg.event_type == UI_EVENT_STATE_UPDATE) {
                 handleFusionState(msg.state);
+                controlPage->setLampState(msg.state.lamp_brightness, msg.state.lamp_color_ratio);
                 // 如果是被动状态更新（如雷达侦测离座），则进行相应处理
                 // 注意：由于引入了主动 ACTION，我们将专注于雷达被动退出，不再用 STATE_FOCUSED 触发开始，防止冲突
                 if (inStudyMode) {
@@ -842,6 +843,27 @@ void MainWindow::sendTcpCommand(uint8_t cmd_id) {
     }
 }
 
+void MainWindow::sendTcpCommandWithArgs(uint8_t cmd_id, uint8_t arg1, float arg2) {
+    QTcpSocket socket;
+    socket.connectToHost("127.0.0.1", 8888);
+    if (socket.waitForConnected(500)) {
+        uint32_t type = qToBigEndian<uint32_t>(MSG_ASR_COMMAND);
+        uint32_t len = qToBigEndian<uint32_t>(sizeof(AsrCommand));
+        AsrCommand cmd;
+        memset(&cmd, 0, sizeof(AsrCommand));
+        cmd.command_id = cmd_id;
+        cmd.timestamp = QDateTime::currentMSecsSinceEpoch();
+        cmd.arg1 = arg1;
+        cmd.arg2_float = arg2;
+        
+        socket.write((const char*)&type, 4);
+        socket.write((const char*)&len, 4);
+        socket.write((const char*)&cmd, sizeof(AsrCommand));
+        socket.waitForBytesWritten(500);
+        socket.disconnectFromHost();
+    }
+}
+
 void MainWindow::sendTcpVisionState(const VisionState &state)
 {
     QTcpSocket socket;
@@ -891,9 +913,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
                             updateWidgetFocusStyle(homePage->getEnterBtn(), true);
                         } else if (stack->currentWidget() == controlPage) {
                             currentLayer = LAYER_CONTROL_FOCUS;
-                            controlPage->getBrightnessSlider()->setProperty("zenFocus", true);
-                            controlPage->getBrightnessSlider()->style()->unpolish(controlPage->getBrightnessSlider());
-                            controlPage->getBrightnessSlider()->style()->polish(controlPage->getBrightnessSlider());
+                            controlPage->enterFocusMode();
                         }
                     }
                     return true;
@@ -901,18 +921,14 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
                 // 【层级 1.1.5：控制中心操作态】
                 case LAYER_CONTROL_FOCUS:
                     if (key == Qt::Key_Left) {
-                        int v = controlPage->getBrightnessSlider()->value();
-                        controlPage->getBrightnessSlider()->setValue(v - 5);
+                        controlPage->handleKnobLeft();
                     } else if (key == Qt::Key_Right) {
-                        int v = controlPage->getBrightnessSlider()->value();
-                        controlPage->getBrightnessSlider()->setValue(v + 5);
+                        controlPage->handleKnobRight();
                     } else if (key == Qt::Key_Space) {
-                        controlPage->getToggleColorBtn()->click();
+                        controlPage->handleKnobPress();
                     } else if (key == Qt::Key_Escape) {
                         currentLayer = LAYER_CONTROL_BROWSE;
-                        controlPage->getBrightnessSlider()->setProperty("zenFocus", false);
-                        controlPage->getBrightnessSlider()->style()->unpolish(controlPage->getBrightnessSlider());
-                        controlPage->getBrightnessSlider()->style()->polish(controlPage->getBrightnessSlider());
+                        controlPage->resetFocusState();
                     }
                     return true;
                     
