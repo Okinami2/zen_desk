@@ -305,7 +305,8 @@ void StudyPage::tick()
             ring->setProgress(0.0);
             statusLabel->setText("休息一下吧 ☕");
             showTip("☕", "休息 5 分钟");
-            emit studyFinished();
+            // Do NOT emit studyFinished() here. Wait for fusion_service to send UI_EVENT_ACTION_STUDY_STOP
+            // which will trigger stopStudy() and gracefully exit the page.
             return;
         }
         seconds--;

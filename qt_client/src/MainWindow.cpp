@@ -3,10 +3,12 @@
 #include "pages/StatusPage.h"
 #include "pages/StatsPage.h"
 #include "pages/StudyPage.h"
+#include "pages/ControlPage.h"
 
 #include <QPainter>
 #include <QPainterPath>
 #include <QDateTime>
+#include "services/DatabaseManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScreen>
@@ -90,6 +92,33 @@ void NavButton::paintEvent(QPaintEvent *)
     p.drawText(rect(), Qt::AlignCenter, m_icon);
 }
 
+void MainWindow::sendTcpDeviceControl(uint8_t action, uint8_t brightness, uint16_t color_temp)
+{
+    QTcpSocket socket;
+    socket.connectToHost(QHostAddress("127.0.0.1"), 8888);
+    
+    DeviceControl dc;
+    memset(&dc, 0, sizeof(dc));
+    dc.device_id = 1;
+    dc.action = action;
+    dc.brightness = brightness;
+    dc.color_temp = color_temp;
+    dc.timestamp = QDateTime::currentSecsSinceEpoch();
+
+    char header[8];
+    uint32_t type_be = qToBigEndian((uint32_t)MSG_DEVICE_CONTROL);
+    uint32_t len_be  = qToBigEndian((uint32_t)sizeof(dc));
+
+    memcpy(header, &type_be, 4);
+    memcpy(header + 4, &len_be, 4);
+
+    if (socket.waitForConnected(100)) {
+        socket.write(header, 8);
+        socket.write((const char*)&dc, sizeof(dc));
+        socket.flush();
+    }
+}
+
 // ════════════════════════════════════════════════════════════
 //  Overlay
 // ════════════════════════════════════════════════════════════
@@ -120,6 +149,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     setWindowTitle("Pegasus Desk");
     resize(1024, 600);
     // showFullScreen();  // 端侧打开
+
+    DatabaseManager::instance().initDb();
+    DatabaseManager::instance().loadTodayStats(
+        effectiveStudySeconds, absentCount, distractedCount, distractedSeconds
+    );
+    
+    focusBucketSeconds.fill(0, 24);
+    distractedBucketSeconds.fill(0, 24);
+    absentBucketSeconds.fill(0, 24);
+    
+    DatabaseManager::instance().loadHourlyStats(
+        focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds
+    );
 
     QFile file(":/style.qss");
     if (file.open(QFile::ReadOnly)) {
@@ -153,10 +195,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     btnHome   = new NavButton("○",  sidebar);
     btnStatus = new NavButton("◉",  sidebar);
     btnStats  = new NavButton("▦",  sidebar);
+    btnControl = new NavButton("⚙",  sidebar);
 
     sideLay->addWidget(btnHome);
     sideLay->addWidget(btnStatus);
     sideLay->addWidget(btnStats);
+    sideLay->addWidget(btnControl);
     sideLay->addStretch();
 
     // ── 内容区 ────────────────────────────────────────────────────────────
@@ -166,11 +210,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     statusPage = new StatusPage(this);
     statsPage  = new StatsPage(this);
     studyPage  = new StudyPage(this);
+    controlPage = new ControlPage(this);
 
     stack->addWidget(homePage);
     stack->addWidget(statusPage);
     stack->addWidget(statsPage);
     stack->addWidget(studyPage);
+    stack->addWidget(controlPage);
 
     rootLay->addWidget(sidebar);
     rootLay->addWidget(stack);
@@ -180,6 +226,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(btnHome,   &QPushButton::clicked, this, &MainWindow::showHome);
     connect(btnStatus, &QPushButton::clicked, this, &MainWindow::showStatus);
     connect(btnStats,  &QPushButton::clicked, this, &MainWindow::showStats);
+    connect(btnControl, &QPushButton::clicked, this, &MainWindow::showControl);
+
+    // 控制中心信号
+    connect(controlPage, &ControlPage::brightnessChanged, this, [this](int v) {
+        sendTcpCommandWithArgs(ASR_CMD_LAMP_SET_BRIGHTNESS, v, 0.0f);
+    });
+    connect(controlPage, &ControlPage::colorTempChanged, this, [this](float ratio) {
+        sendTcpCommandWithArgs(ASR_CMD_LAMP_SET_COLOR_TEMP, 0, ratio);
+    });
 
     // HomePage 中的"进入专注"按钮
     connect(homePage, &HomePage::enterStudyRequested, this, &MainWindow::showStudySetupDialog);
@@ -201,11 +256,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     micIconLabel->move((screenRect.width() - 160) / 2, screenRect.height() - 120); // 绝对居中靠下
     micIconLabel->hide();
 
-    // 左下角常驻 test 字样
-    QLabel *testLabel = new QLabel("test", this);
-    testLabel->setStyleSheet("color: rgba(255,255,255,100); font-size: 24px; font-weight: bold; background: transparent;");
-    testLabel->move(20, height() - 50); // 左下角
-    testLabel->show();
 
     micTimer = new QTimer(this);
     micTimer->setSingleShot(true);
@@ -220,9 +270,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     }
 
     // 初始化真实数据累计定时器
-    focusBucketSeconds.fill(0, 24);
-    distractedBucketSeconds.fill(0, 24);
-    absentBucketSeconds.fill(0, 24);
 
     studyAccumulationTimer = new QTimer(this);
     connect(studyAccumulationTimer, &QTimer::timeout, this, &MainWindow::onStudyAccumulationTick);
@@ -252,6 +299,11 @@ void MainWindow::onStudyAccumulationTick() {
         distractedBucketSeconds[hour]++;
     } else {
         focusBucketSeconds[hour]++;
+    }
+
+    if (effectiveStudySeconds % 60 == 0) {
+        DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
+        DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds);
     }
 }
 
@@ -287,7 +339,7 @@ void MainWindow::updateStatsPageData()
 
 void MainWindow::setActiveNav(NavButton *active)
 {
-    for (NavButton *b : {btnHome, btnStatus, btnStats})
+    for (NavButton *b : {btnHome, btnStatus, btnStats, btnControl})
         b->setActive(b == active);
 }
 
@@ -314,8 +366,17 @@ void MainWindow::showStats()
 void MainWindow::showStatus()
 {
     if (inStudyMode) return;
-    stack->setCurrentWidget(statusPage);
     setActiveNav(btnStatus);
+    stack->setCurrentWidget(statusPage);
+    currentLayer = LAYER_HOME_BROWSE;
+}
+
+void MainWindow::showControl()
+{
+    if (inStudyMode) return;
+    setActiveNav(btnControl);
+    stack->setCurrentWidget(controlPage);
+    currentLayer = LAYER_CONTROL_BROWSE;
 }
 
 // ── 专注设置弹窗（精心设计版） ────────────────────────────────────────────
@@ -513,6 +574,9 @@ void MainWindow::showStudySetupDialog()
         if (min == 25) cmd = ASR_CMD_STUDY_START_25;
         else if (min == 45) cmd = ASR_CMD_STUDY_START_45;
         else if (min == 60) cmd = ASR_CMD_STUDY_START_60;
+        else if (min > 0 && min <= 120 && (min % 5 == 0)) {
+            cmd = ASR_CMD_STUDY_START_CUSTOM_BASE + (min / 5);
+        }
         
         sendTcpCommand(cmd);
     });
@@ -559,6 +623,10 @@ void MainWindow::stopStudy()
     inStudyMode = false;
     isDistracted = false;
     studyPage->stopTimer();
+    
+    DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
+    DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds);
+
     stack->setCurrentWidget(homePage);
     setActiveNav(btnHome);
     
@@ -704,6 +772,7 @@ void MainWindow::onUdpReadyRead() {
                 hideMicIcon();
             } else if (msg.event_type == UI_EVENT_STATE_UPDATE) {
                 handleFusionState(msg.state);
+                controlPage->setLampState(msg.state.lamp_brightness, msg.state.lamp_color_ratio);
                 // 如果是被动状态更新（如雷达侦测离座），则进行相应处理
                 // 注意：由于引入了主动 ACTION，我们将专注于雷达被动退出，不再用 STATE_FOCUSED 触发开始，防止冲突
                 if (inStudyMode) {
@@ -738,6 +807,9 @@ void MainWindow::onUdpReadyRead() {
             } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_60) {
                 closeActiveDialog();
                 startStudy(60);
+            } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_CUSTOM) {
+                closeActiveDialog();
+                startStudy(msg.state.duration_minutes);
             } else if (msg.event_type == UI_EVENT_ACTION_STUDY_START_FREE) {
                 closeActiveDialog();
                 startStudy(-1);
@@ -786,6 +858,27 @@ void MainWindow::sendTcpCommand(uint8_t cmd_id) {
     }
 }
 
+void MainWindow::sendTcpCommandWithArgs(uint8_t cmd_id, uint8_t arg1, float arg2) {
+    QTcpSocket socket;
+    socket.connectToHost("127.0.0.1", 8888);
+    if (socket.waitForConnected(500)) {
+        uint32_t type = qToBigEndian<uint32_t>(MSG_ASR_COMMAND);
+        uint32_t len = qToBigEndian<uint32_t>(sizeof(AsrCommand));
+        AsrCommand cmd;
+        memset(&cmd, 0, sizeof(AsrCommand));
+        cmd.command_id = cmd_id;
+        cmd.timestamp = QDateTime::currentMSecsSinceEpoch();
+        cmd.arg1 = arg1;
+        cmd.arg2_float = arg2;
+        
+        socket.write((const char*)&type, 4);
+        socket.write((const char*)&len, 4);
+        socket.write((const char*)&cmd, sizeof(AsrCommand));
+        socket.waitForBytesWritten(500);
+        socket.disconnectFromHost();
+    }
+}
+
 void MainWindow::sendTcpVisionState(const VisionState &state)
 {
     QTcpSocket socket;
@@ -818,19 +911,39 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
             switch (currentLayer) {
                 // 【层级 1.1：主界浏览】
                 case LAYER_HOME_BROWSE:
+                case LAYER_CONTROL_BROWSE:
                     if (key == Qt::Key_Left) {
-                        if (stack->currentWidget() == homePage) showStats();
+                        if (stack->currentWidget() == homePage) showControl();
                         else if (stack->currentWidget() == statusPage) showHome();
-                        else showStatus();
+                        else if (stack->currentWidget() == statsPage) showStatus();
+                        else showStats();
                     } else if (key == Qt::Key_Right) {
                         if (stack->currentWidget() == homePage) showStatus();
                         else if (stack->currentWidget() == statusPage) showStats();
+                        else if (stack->currentWidget() == statsPage) showControl();
                         else showHome();
                     } else if (key == Qt::Key_Space) {
                         if (stack->currentWidget() == homePage) {
                             currentLayer = LAYER_HOME_FOCUS;
                             updateWidgetFocusStyle(homePage->getEnterBtn(), true);
+                        } else if (stack->currentWidget() == controlPage) {
+                            currentLayer = LAYER_CONTROL_FOCUS;
+                            controlPage->enterFocusMode();
                         }
+                    }
+                    return true;
+                    
+                // 【层级 1.1.5：控制中心操作态】
+                case LAYER_CONTROL_FOCUS:
+                    if (key == Qt::Key_Left) {
+                        controlPage->handleKnobLeft();
+                    } else if (key == Qt::Key_Right) {
+                        controlPage->handleKnobRight();
+                    } else if (key == Qt::Key_Space) {
+                        controlPage->handleKnobPress();
+                    } else if (key == Qt::Key_Escape) {
+                        currentLayer = LAYER_CONTROL_BROWSE;
+                        controlPage->resetFocusState();
                     }
                     return true;
                     

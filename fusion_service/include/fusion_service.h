@@ -15,6 +15,13 @@ typedef struct {
 
     LearningState current_state;
     int state_counter;
+    
+    // Timer tracking
+    uint64_t session_accumulated_ms;
+    uint64_t last_tick_ms;
+    uint16_t config_duration_minutes;
+    uint32_t played_40m_count;
+    uint8_t has_played_end;
 
     pthread_mutex_t mutex;
 } FusionService;

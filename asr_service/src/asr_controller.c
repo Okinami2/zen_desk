@@ -9,9 +9,71 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <errno.h>
+#include <pthread.h>
+#include "serial_setup.h"
+#include "../../common/include/protocol.h"
 
 static int g_socket_fd = -1;
 static struct sockaddr_in g_fusion_addr;
+
+static int asr_recv_all(int fd, void *buf, size_t len) {
+    size_t remain = len;
+    char *p = (char *)buf;
+    while (remain > 0) {
+        ssize_t n = recv(fd, p, remain, 0);
+        if (n <= 0) return -1;
+        remain -= n;
+        p += n;
+    }
+    return 0;
+}
+
+static void* asr_recv_thread(void *arg) {
+    while (1) {
+        if (g_socket_fd < 0) {
+            sleep(1);
+            continue;
+        }
+
+        uint32_t type_be, len_be;
+        if (asr_recv_all(g_socket_fd, &type_be, 4) != 0) {
+            close(g_socket_fd);
+            g_socket_fd = -1;
+            continue;
+        }
+        if (asr_recv_all(g_socket_fd, &len_be, 4) != 0) {
+            close(g_socket_fd);
+            g_socket_fd = -1;
+            continue;
+        }
+
+        uint32_t msg_type = ntohl(type_be);
+        uint32_t msg_len  = ntohl(len_be);
+
+        if (msg_len > 256) {
+            close(g_socket_fd);
+            g_socket_fd = -1;
+            continue;
+        }
+
+        uint8_t payload[256];
+        if (msg_len > 0) {
+            if (asr_recv_all(g_socket_fd, payload, msg_len) != 0) {
+                close(g_socket_fd);
+                g_socket_fd = -1;
+                continue;
+            }
+        }
+
+        if (msg_type == MSG_ASR_COMMAND && msg_len == sizeof(AsrCommand)) {
+            AsrCommand *cmd = (AsrCommand *)payload;
+            LOG_INFO("ASR service received downstream command 0x%02X from fusion", cmd->command_id);
+            // 写入串口给语音模块播报
+            serial_write_byte(cmd->command_id);
+        }
+    }
+    return NULL;
+}
 
 int asr_controller_init(const Config *config) {
     g_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -38,7 +100,16 @@ int asr_controller_init(const Config *config) {
         // 不返回错误，因为 fusion_service 可能稍后启动，我们可以在发送时重连
     } else {
         LOG_INFO("Connected to fusion_service at %s:%d", host, port);
+        // Send heartbeat to register
+        uint32_t type_be = htonl(MSG_HEARTBEAT);
+        uint32_t len_be = htonl(0);
+        send(g_socket_fd, &type_be, 4, MSG_NOSIGNAL);
+        send(g_socket_fd, &len_be, 4, MSG_NOSIGNAL);
     }
+    
+    pthread_t tid;
+    pthread_create(&tid, NULL, asr_recv_thread, NULL);
+    pthread_detach(tid);
     
     return 0;
 }
@@ -65,6 +136,11 @@ static void send_asr_command_to_fusion(uint8_t cmd) {
                 return;
             }
             LOG_INFO("Reconnected to fusion_service.");
+            // Send heartbeat to register
+            uint32_t hb_type_be = htonl(MSG_HEARTBEAT);
+            uint32_t hb_len_be = htonl(0);
+            send(g_socket_fd, &hb_type_be, 4, MSG_NOSIGNAL);
+            send(g_socket_fd, &hb_len_be, 4, MSG_NOSIGNAL);
         } else {
             return;
         }
@@ -86,9 +162,9 @@ static void send_asr_command_to_fusion(uint8_t cmd) {
     uint32_t len_be = htonl(msg.length);
 
     // 发送
-    if (send(g_socket_fd, &type_be, 4, 0) < 0 ||
-        send(g_socket_fd, &len_be, 4, 0) < 0 ||
-        send(g_socket_fd, msg.data, msg.length, 0) < 0) {
+    if (send(g_socket_fd, &type_be, 4, MSG_NOSIGNAL) < 0 ||
+        send(g_socket_fd, &len_be, 4, MSG_NOSIGNAL) < 0 ||
+        send(g_socket_fd, msg.data, msg.length, MSG_NOSIGNAL) < 0) {
         LOG_ERROR("Failed to send ASR command 0x%02X to fusion_service: %s", cmd, strerror(errno));
         close(g_socket_fd);
         g_socket_fd = -1; // 下次重连
@@ -144,7 +220,7 @@ static void action_lamp_on(void) { LOG_INFO("[动作] 打开台灯"); send_asr_c
 static void action_lamp_off(void) { LOG_INFO("[动作] 关闭台灯"); send_asr_command_to_fusion(ASR_CMD_LAMP_OFF); }
 static void action_lamp_brightness_up(void) { LOG_INFO("[动作] 提高亮度"); send_asr_command_to_fusion(ASR_CMD_LAMP_BRIGHT_UP); }
 static void action_lamp_brightness_down(void) { LOG_INFO("[动作] 降低亮度"); send_asr_command_to_fusion(ASR_CMD_LAMP_BRIGHT_DOWN); }
-static void action_lamp_toggle_color_temp(void) { LOG_INFO("[动作] 切换色温"); /* 预留 */ }
+static void action_lamp_toggle_color_temp(void) { LOG_INFO("[动作] 切换色温"); send_asr_command_to_fusion(ASR_CMD_LAMP_TOGGLE_COLOR_TEMP); }
 static void action_screen_show_data(void) { LOG_INFO("[动作] 查看学习数据"); send_asr_command_to_fusion(ASR_CMD_SCREEN_DATA); }
 static void action_screen_show_home(void) { LOG_INFO("[动作] 回到主页"); send_asr_command_to_fusion(ASR_CMD_SCREEN_HOME); }
 

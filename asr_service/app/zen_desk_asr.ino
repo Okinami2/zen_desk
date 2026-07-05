@@ -2,14 +2,19 @@
 extern "C"{ void * __dso_handle = 0 ;}
 #include "setup.h"
 #include "HardwareSerial.h"
+#include "myLib/asr_event.h"
 
 uint32_t snid;
+uint8_t VOL = 4;
 void ASR_CODE();
 void app();
 
 //{speak:小蝶-清新女声,vol:1,speed:10,platform:haohaodada}
-//{playid:10001,voice:，}
-//{playid:10002,voice:，}
+//{playid:10002,voice:}
+//{playid:10601,voice:你已经学习四十分钟啦，该休息了。}
+//{playid:10602,voice:专注模式已结束，请休息，喝点水吧。}
+//{playid:10603,voice:检测到长时间分神，请认真学习。}
+// 魔术指令配置区
 /*
  * Zen Desk ASRPRO 离线语音识别固件代码
  * 这里利用了“同义词泛化”策略，为每个动作设定了足足 20 个极度口语化的语义别名
@@ -59,6 +64,14 @@ void ASR_CODE() {
     case 80: case 81: case 82: case 83: case 84:
     case 85: case 86: case 87: case 88: case 89:
       Serial.write(0x14);
+      break;
+
+    // 切换色温系列 (0x15)
+    case 290: case 291: case 292: case 293: case 294: 
+    case 295: case 296: case 297: case 298: case 299: 
+    case 300: case 301: case 302: case 303: case 304:
+    case 305: case 306: case 307: case 308: case 309:
+      Serial.write(0x15);
       break;
 
     // ============ 2. 专注与学习系列 ============
@@ -135,21 +148,77 @@ void ASR_CODE() {
     case 265: case 266: case 267: case 268: case 269:
       Serial.write(0x32);
       break;
+
+    // ============ 5. 音量控制系列 ============
+    case 270:
+      if (VOL == 7) {
+        //{playid:10500,voice:已调至最大音量}
+        play_audio(10500);
+      } else {
+        VOL = VOL + 1;
+        vol_set(VOL);
+        //{playid:10501,voice:已增大音量}
+        play_audio(10501);
+      }
+      break;
+    
+    case 271:
+      if (VOL == 1) {
+        //{playid:10502,voice:已调至最小音量}
+        play_audio(10502);
+      } else {
+        VOL = VOL - 1;
+        vol_set(VOL);
+        //{playid:10503,voice:已减小音量}
+        play_audio(10503);
+      }
+      break;
+    
+    case 272:
+      VOL = 7;
+      vol_set(VOL);
+      break;
+    
+    case 273:
+      VOL = 4;
+      vol_set(VOL);
+      break;
+    
+    case 274:
+      VOL = 1;
+      vol_set(VOL);
+      break;
   }
 }
+
+//{ID:290,keyword:"命令词",ASR:"切换色温",ASRTO:"已切换色温"}
+//{ID:291,keyword:"命令词",ASR:"换个光",ASRTO:"已切换色温"}
+//{ID:292,keyword:"命令词",ASR:"调节色温",ASRTO:"已切换色温"}
+//{ID:293,keyword:"命令词",ASR:"改变色温",ASRTO:"已切换色温"}
+//{ID:294,keyword:"命令词",ASR:"台灯换色",ASRTO:"已切换色温"}
 
 void app() {
   // 主循环，处理后台任务
   while (1) {
-    delay(100);
+    if (Serial.available() > 0) {
+      uint8_t cmd = Serial.read();
+      if (cmd == 0xF1) {
+        play_audio(10601);
+      } else if (cmd == 0xF2) {
+        play_audio(10602);
+      } else if (cmd == 0xF3) {
+        play_audio(10603);
+      }
+    }
+    delay(10);
   }
   vTaskDelete(NULL);
 }
 
 void hardware_init() {
   // 操作系统启动后初始化
-  // 将底层硬件功放音量调到最低 (通常1是最小声音)
-  vol_set(1);
+  // 将底层硬件功放音量调到默认值
+  vol_set(VOL);
   // 这里将 RX(13) TX(14) 设为串口模式 (根据实际板子修改引脚)
   setPinFun(13, SECOND_FUNCTION);
   setPinFun(14, SECOND_FUNCTION);
@@ -457,9 +526,18 @@ void setup() {
   //{ID:267,keyword:"命令词",ASR:"不看数据了",ASRTO:"屏幕已切回主页"}
   //{ID:268,keyword:"命令词",ASR:"退到主页",ASRTO:"屏幕已切回主页"}
   //{ID:269,keyword:"命令词",ASR:"切回桌面",ASRTO:"屏幕已切回主页"}
+
+  // ---- 场景 5: 音量控制 ----
+  //{ID:270,keyword:"命令词",ASR:"增大音量",ASRTO:""}
+  //{ID:271,keyword:"命令词",ASR:"减小音量",ASRTO:""}
+  //{ID:272,keyword:"命令词",ASR:"最大音量",ASRTO:"音量调整到最大"}
+  //{ID:273,keyword:"命令词",ASR:"中等音量",ASRTO:"音量调整到中等"}
+  //{ID:274,keyword:"命令词",ASR:"最小音量",ASRTO:"音量调整到最小"}
   
   // LED 提示灯初始化
   setPinFun(4, FIRST_FUNCTION);
   pinMode(4, output);
   digitalWrite(4, 0);
 }
+
+

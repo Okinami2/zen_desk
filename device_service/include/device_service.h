@@ -44,4 +44,34 @@ int device_control_lamp(uint8_t action, uint8_t brightness, uint16_t color_temp)
  */
 int device_adjust_lamp_brightness(int delta_percent);
 
+/**
+ * @brief 切换台灯色温
+ * 
+ * @return 0 成功, 其它 失败
+ */
+int device_toggle_lamp_color_temp(void);
+
+/**
+ * @brief 绝对设置亮度（用于进度条百分比同步）
+ * 
+ * @param percent 百分比 (0-100)
+ * @return 0 成功, 其它 失败
+ */
+void device_set_lamp_brightness_absolute(int percent);
+
+/**
+ * @brief 绝对设置色温比例（用于进度条同步）
+ * 
+ * @param ratio 色温比例 (0.0 - 1.0, 0.0 为纯冷，1.0为纯暖)
+ */
+void device_set_lamp_color_temp_absolute(float ratio);
+
+/**
+ * @brief 获取当前台灯的亮度百分比和色温比例
+ * 
+ * @param brightness 返回当前亮度百分比 (0-100)
+ * @param color_ratio 返回当前色温比例 (0.0-1.0)
+ */
+void device_get_lamp_state(int *brightness, float *color_ratio);
+
 #endif // DEVICE_SERVICE_H

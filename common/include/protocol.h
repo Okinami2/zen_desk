@@ -68,6 +68,8 @@ typedef struct {
     uint8_t intervention_level;     // 干预级别
     uint16_t duration_minutes;      // 专注时长 (如果是定时专注，则下发时长)
     uint64_t timestamp;             // 时间戳
+    uint8_t lamp_brightness;        // 当前台灯亮度 0-100
+    float lamp_color_ratio;         // 当前台灯色温比率 0.0-1.0
 } FusionState;
 
 // 设备控制指令
@@ -86,6 +88,9 @@ typedef enum {
     ASR_CMD_LAMP_OFF           = 0x12,
     ASR_CMD_LAMP_BRIGHT_UP     = 0x13,
     ASR_CMD_LAMP_BRIGHT_DOWN   = 0x14,
+    ASR_CMD_LAMP_TOGGLE_COLOR_TEMP = 0x15,
+    ASR_CMD_LAMP_SET_BRIGHTNESS    = 0x16, // 新增：设置绝对亮度
+    ASR_CMD_LAMP_SET_COLOR_TEMP    = 0x17, // 新增：设置绝对色温
     ASR_CMD_STUDY_START        = 0x21,
     ASR_CMD_STUDY_STOP         = 0x22,
     ASR_CMD_STUDY_PAUSE        = 0x23,
@@ -96,12 +101,20 @@ typedef enum {
     ASR_CMD_STUDY_DISTRACTED   = 0x28,
     ASR_CMD_STUDY_FOCUSED      = 0x29,
     ASR_CMD_SCREEN_DATA        = 0x31,
-    ASR_CMD_SCREEN_HOME        = 0x32
+    ASR_CMD_SCREEN_HOME        = 0x32,
+    ASR_CMD_STUDY_START_CUSTOM_BASE = 0x40, // 0x41(5m) to 0x58(120m)
+    
+    // 自下而上反向播报指令 (Fusion -> ASR)
+    ASR_CMD_PLAY_BREAK_40M     = 0xF1, // 正计时每40分钟播报
+    ASR_CMD_PLAY_END_REST      = 0xF2, // 倒计时结束播报
+    ASR_CMD_PLAY_DISTRACTED    = 0xF3  // 走神播报
 } AsrCommandType;
 
 typedef struct {
     uint8_t command_id;         // 对应的 Hex 码，如 0x21
     uint64_t timestamp;         // 时间戳
+    uint8_t arg1;               // 附加参数1 (如绝对亮度)
+    float arg2_float;           // 附加参数2 (如绝对色温比率)
 } AsrCommand;
 
 // 通用消息结构
@@ -125,7 +138,8 @@ typedef enum {
     UI_EVENT_ACTION_STUDY_START_FREE = 0x14,
     UI_EVENT_ACTION_STUDY_PAUSE = 0x15,
     UI_EVENT_ACTION_STUDY_RESUME = 0x16,
-    UI_EVENT_ACTION_STUDY_STOP = 0x17
+    UI_EVENT_ACTION_STUDY_STOP = 0x17,
+    UI_EVENT_ACTION_STUDY_START_CUSTOM = 0x18
 } UiEventType;
 
 typedef struct {

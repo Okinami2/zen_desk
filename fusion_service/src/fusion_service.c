@@ -22,17 +22,44 @@ static int g_server_running = 0;
 static int g_udp_fd = -1;
 static struct sockaddr_in g_udp_addr;
 
-#define VISION_FOCUS_WINDOW_SIZE 10
+static int g_asr_socket_fd = -1;
+static pthread_mutex_t g_asr_socket_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void fusion_send_asr_command(uint8_t cmd_id) {
+    pthread_mutex_lock(&g_asr_socket_mutex);
+    if (g_asr_socket_fd >= 0) {
+        Message msg;
+        memset(&msg, 0, sizeof(Message));
+        AsrCommand asr_cmd;
+        asr_cmd.command_id = cmd_id;
+        asr_cmd.timestamp = time(NULL);
+
+        msg.type = MSG_ASR_COMMAND;
+        msg.length = sizeof(AsrCommand);
+        memcpy(msg.data, &asr_cmd, msg.length);
+
+        uint32_t type_be = htonl(msg.type);
+        uint32_t len_be = htonl(msg.length);
+
+        send(g_asr_socket_fd, &type_be, 4, MSG_NOSIGNAL);
+        send(g_asr_socket_fd, &len_be, 4, MSG_NOSIGNAL);
+        send(g_asr_socket_fd, msg.data, msg.length, MSG_NOSIGNAL);
+        LOG_INFO("Fusion sent ASR Command 0x%02X down to ASR service", cmd_id);
+    }
+    pthread_mutex_unlock(&g_asr_socket_mutex);
+}
+
+#define VISION_FOCUS_WINDOW_SIZE 20
 #define VISION_MIN_VALID_SAMPLES 6
-#define VISION_DISTRACTED_SAMPLE_THRESHOLD 7
-#define VISION_FOCUSED_SAMPLE_THRESHOLD 8
-#define VISION_TRANSITION_COOLDOWN_MS 1500ULL
-#define VISION_NO_BLINK_TIMEOUT_MS 30000ULL
-#define VISION_EYES_CLOSED_TIMEOUT_MS 1500ULL
+#define VISION_DISTRACTED_SAMPLE_THRESHOLD 15
+#define VISION_FOCUSED_SAMPLE_THRESHOLD 12
+#define VISION_TRANSITION_COOLDOWN_MS 3000ULL
+#define VISION_NO_BLINK_TIMEOUT_MS 20000ULL
+#define VISION_EYES_CLOSED_TIMEOUT_MS 3000ULL
 #define VISION_SEAT_ENTER_DIAG 165.0f
 #define VISION_SEAT_EXIT_DIAG 160.0f
 #define VISION_SEAT_ENTER_SAMPLES 2
-#define VISION_SEAT_EXIT_SAMPLES 6
+#define VISION_SEAT_EXIT_SAMPLES 50
 #define VISION_FRAME_WIDTH 1280.0f
 #define VISION_FRAME_HEIGHT 720.0f
 #define VISION_SEAT_CENTER_MIN_X_RATIO 0.25f
@@ -77,6 +104,15 @@ void fusion_send_ui_event(UiEventType type) {
     UiEventMessage msg;
     memset(&msg, 0, sizeof(msg));
     msg.event_type = type;
+    sendto(g_udp_fd, &msg, sizeof(msg), 0, (struct sockaddr*)&g_udp_addr, sizeof(g_udp_addr));
+}
+
+void fusion_send_ui_event_custom_start(uint32_t mins) {
+    if (g_udp_fd < 0) return;
+    UiEventMessage msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.event_type = UI_EVENT_ACTION_STUDY_START_CUSTOM;
+    msg.state.duration_minutes = mins;
     sendto(g_udp_fd, &msg, sizeof(msg), 0, (struct sockaddr*)&g_udp_addr, sizeof(g_udp_addr));
 }
 
@@ -130,6 +166,22 @@ static void* tcp_client_handler(void *arg)
             LOG_INFO("Recv radar: presence=%d, motion=%.2f, dist=%.2f m",
                      rs->presence, rs->motion_level, rs->distance);
             radar_to_fusion_and_dispatch(rs);
+        } else if (msg_type == MSG_HEARTBEAT) {
+            pthread_mutex_lock(&g_asr_socket_mutex);
+            g_asr_socket_fd = client_fd;
+            pthread_mutex_unlock(&g_asr_socket_mutex);
+            LOG_INFO("Registered ASR socket fd = %d", client_fd);
+        } else if (msg_type == MSG_DEVICE_CONTROL && msg_len == sizeof(DeviceControl)) {
+            DeviceControl *dc = (DeviceControl *)payload;
+            LOG_INFO("Recv Device Control: action=%d brightness=%d color_temp=%d", dc->action, dc->brightness, dc->color_temp);
+            // Action约定: 0=关闭, 1=常规静态, 2=呼吸, 3=色温切换, 4=绝对亮度设置
+            if (dc->action == 3) {
+                device_toggle_lamp_color_temp();
+            } else if (dc->action == 4) {
+                device_set_lamp_brightness_absolute(dc->brightness);
+            } else {
+                device_control_lamp(dc->action, dc->brightness, dc->color_temp);
+            }
         } else if (msg_type == MSG_VISION_STATE && msg_len == sizeof(VisionState)) {
             VisionState *vs = (VisionState *)payload;
             vision_to_fusion_and_dispatch(vs);
@@ -153,12 +205,18 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 0; // 默认正计时
+                    g_fusion_service.config_duration_minutes = 0;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (Free)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_FREE);
                     break;
                 case ASR_CMD_STUDY_RESUME:
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
+                    g_fusion_service.last_tick_ms = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (Resume)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_RESUME);
                     break;
@@ -166,6 +224,11 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 25;
+                    g_fusion_service.config_duration_minutes = 25;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (25 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_25);
                     break;
@@ -173,6 +236,11 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 45;
+                    g_fusion_service.config_duration_minutes = 45;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (45 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_45);
                     break;
@@ -180,13 +248,35 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_FOCUSED;
                     vision_focus_reset(0);
                     fs.duration_minutes = 60;
+                    g_fusion_service.config_duration_minutes = 60;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    g_fusion_service.played_40m_count = 0;
+                    g_fusion_service.has_played_end = 0;
                     LOG_INFO("ASR overridden state to FOCUSED (60 min)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_START_60);
+                    break;
+                default:
+                    if (cmd->command_id >= ASR_CMD_STUDY_START_CUSTOM_BASE && 
+                        cmd->command_id <= ASR_CMD_STUDY_START_CUSTOM_BASE + 24) {
+                        uint32_t custom_mins = (cmd->command_id - ASR_CMD_STUDY_START_CUSTOM_BASE) * 5;
+                        g_fusion_service.current_state = STATE_FOCUSED;
+                        vision_focus_reset(0);
+                        fs.duration_minutes = custom_mins;
+                        g_fusion_service.config_duration_minutes = custom_mins;
+                        g_fusion_service.session_accumulated_ms = 0;
+                        g_fusion_service.last_tick_ms = 0;
+                        g_fusion_service.played_40m_count = 0;
+                        g_fusion_service.has_played_end = 0;
+                        LOG_INFO("ASR overridden state to FOCUSED (%d min)", custom_mins);
+                        fusion_send_ui_event_custom_start(custom_mins);
+                    }
                     break;
                 case ASR_CMD_STUDY_PAUSE:
                     g_fusion_service.current_state = STATE_SEATED_IDLE;
                     vision_focus_reset(0);
                     fs.duration_minutes = 0;
+                    g_fusion_service.last_tick_ms = 0;
                     LOG_INFO("ASR overridden state to IDLE (Pause)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_PAUSE);
                     break;
@@ -194,6 +284,8 @@ static void* tcp_client_handler(void *arg)
                     g_fusion_service.current_state = STATE_SEATED_IDLE;
                     vision_focus_reset(0);
                     fs.duration_minutes = 0;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
                     LOG_INFO("ASR overridden state to IDLE (Stop)");
                     fusion_send_ui_event(UI_EVENT_ACTION_STUDY_STOP);
                     break;
@@ -204,6 +296,18 @@ static void* tcp_client_handler(void *arg)
                 case ASR_CMD_LAMP_OFF:
                     LOG_INFO("ASR requested Lamp OFF");
                     device_control_lamp(0, 0, 0);
+                    break;
+                case ASR_CMD_LAMP_TOGGLE_COLOR_TEMP:
+                    LOG_INFO("ASR requested Lamp Toggle Color Temp");
+                    device_toggle_lamp_color_temp();
+                    break;
+                case ASR_CMD_LAMP_SET_BRIGHTNESS:
+                    LOG_INFO("Qt Client requested Lamp Brightness Set to %d", cmd->arg1);
+                    device_set_lamp_brightness_absolute(cmd->arg1);
+                    break;
+                case ASR_CMD_LAMP_SET_COLOR_TEMP:
+                    LOG_INFO("Qt Client requested Lamp Color Temp Set to %.2f", cmd->arg2_float);
+                    device_set_lamp_color_temp_absolute(cmd->arg2_float);
                     break;
                 case ASR_CMD_LAMP_BRIGHT_UP:
                     LOG_INFO("ASR requested Lamp Brightness UP");
@@ -237,6 +341,7 @@ static void* tcp_client_handler(void *arg)
             
             // 只有状态改变时才向外广播状态，触发后续联动（UI/灯光）
             if ((cmd->command_id >= ASR_CMD_STUDY_START && cmd->command_id <= ASR_CMD_STUDY_START_60) ||
+                (cmd->command_id >= ASR_CMD_STUDY_START_CUSTOM_BASE && cmd->command_id <= ASR_CMD_STUDY_START_CUSTOM_BASE + 24) ||
                 cmd->command_id == ASR_CMD_STUDY_DISTRACTED || cmd->command_id == ASR_CMD_STUDY_FOCUSED) {
                 fusion_send_state(&fs);
                 device_handle_fusion_state(&fs);
@@ -246,6 +351,11 @@ static void* tcp_client_handler(void *arg)
         }
     }
 
+    pthread_mutex_lock(&g_asr_socket_mutex);
+    if (client_fd == g_asr_socket_fd) {
+        g_asr_socket_fd = -1;
+    }
+    pthread_mutex_unlock(&g_asr_socket_mutex);
     close(client_fd);
     LOG_DEBUG("TCP client thread disconnected (fd=%d)", client_fd);
     return NULL;
@@ -359,6 +469,13 @@ static void fusion_send_current_state_snapshot(void)
     msg.state.intervention_level = 0;
     msg.state.duration_minutes = 0;
     msg.state.timestamp = time(NULL);
+    
+    int bright;
+    float color_ratio;
+    device_get_lamp_state(&bright, &color_ratio);
+    msg.state.lamp_brightness = (uint8_t)bright;
+    msg.state.lamp_color_ratio = color_ratio;
+    
     pthread_mutex_unlock(&g_fusion_service.mutex);
 
     sendto(g_udp_fd, &msg, sizeof(msg), 0,
@@ -683,6 +800,7 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
             restore_state = STATE_FOCUSED;
         }
         g_fusion_service.current_state = restore_state;
+        g_fusion_service.last_tick_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
         vision_focus_reset(restore_state == STATE_DISTRACTED);
         should_dispatch = 1;
         LOG_INFO("Vision seat -> PRESENT (face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d restore=%d)",
@@ -718,6 +836,54 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     }
 
     fs.current_state = g_fusion_service.current_state;
+    
+    // ==========================================
+    // Timer Logic for voice prompts
+    // ==========================================
+    if (g_fusion_service.current_state == STATE_FOCUSED || g_fusion_service.current_state == STATE_DISTRACTED) {
+        if (g_fusion_service.last_tick_ms > 0) {
+            g_fusion_service.session_accumulated_ms += (now_ms - g_fusion_service.last_tick_ms);
+        }
+        g_fusion_service.last_tick_ms = now_ms;
+        
+        // Positive timer (config_duration_minutes == 0)
+        if (g_fusion_service.config_duration_minutes == 0) {
+            uint32_t current_40m_count = g_fusion_service.session_accumulated_ms / (40ULL * 60ULL * 1000ULL);
+            if (current_40m_count > g_fusion_service.played_40m_count) {
+                g_fusion_service.played_40m_count = current_40m_count;
+                fusion_send_asr_command(ASR_CMD_PLAY_BREAK_40M);
+            }
+        } 
+        // Countdown timer
+        else {
+            if (g_fusion_service.session_accumulated_ms >= g_fusion_service.config_duration_minutes * 60ULL * 1000ULL) {
+                if (!g_fusion_service.has_played_end) {
+                    g_fusion_service.has_played_end = 1;
+                    fusion_send_asr_command(ASR_CMD_PLAY_END_REST);
+                    
+                    // Auto-end the study session
+                    g_fusion_service.current_state = STATE_SEATED_IDLE;
+                    vision_focus_reset(0);
+                    fs.duration_minutes = 0;
+                    g_fusion_service.session_accumulated_ms = 0;
+                    g_fusion_service.last_tick_ms = 0;
+                    fusion_send_ui_event(UI_EVENT_ACTION_STUDY_STOP);
+                    
+                    fs.current_state = g_fusion_service.current_state;
+                    should_dispatch = 1;
+                }
+            }
+        }
+    } else {
+        g_fusion_service.last_tick_ms = 0; // reset tick if not focused
+    }
+
+    if (g_fusion_service.current_state == STATE_DISTRACTED && next_state == STATE_DISTRACTED && should_dispatch) {
+        // Just entered distracted state
+        fusion_send_asr_command(ASR_CMD_PLAY_DISTRACTED);
+    }
+    // ==========================================
+    
     pthread_mutex_unlock(&g_fusion_service.mutex);
 
     if (should_dispatch) {
@@ -839,6 +1005,13 @@ int fusion_send_state(const FusionState *state) {
         memset(&msg, 0, sizeof(msg));
         msg.event_type = UI_EVENT_STATE_UPDATE;
         msg.state = *state;
+        
+        int bright;
+        float color_ratio;
+        device_get_lamp_state(&bright, &color_ratio);
+        msg.state.lamp_brightness = (uint8_t)bright;
+        msg.state.lamp_color_ratio = color_ratio;
+        
         sendto(g_udp_fd, &msg, sizeof(msg), 0, (struct sockaddr*)&g_udp_addr, sizeof(g_udp_addr));
     }
     return 0;

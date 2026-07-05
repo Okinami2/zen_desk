@@ -26,4 +26,11 @@ void serial_close(void);
  */
 int serial_read_byte(uint8_t *out_byte);
 
+/**
+ * @brief 向串口写入一个字节
+ * @param byte 要写入的字节
+ * @return 成功返回 0，失败返回 -1
+ */
+int serial_write_byte(uint8_t byte);
+
 #endif // SERIAL_SETUP_H

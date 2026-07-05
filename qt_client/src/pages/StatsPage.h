@@ -54,6 +54,8 @@ private:
     QLabel *absentCountVal;
     QLabel *distractedCountVal;
     QLabel *distractedTimeVal;
+    QLabel *gradeVal;
+    QLabel *gradeDesc;
     LineChartWidget *lineChart;
     StackedBarWidget *barChart;
 };
