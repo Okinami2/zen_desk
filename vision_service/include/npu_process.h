@@ -54,6 +54,12 @@ typedef struct {
     td_bool posture_ok;
     td_float score;
     td_float detection_score;
+    td_float posture_score;
+    td_float shoulder_tilt;
+    td_float body_lean;
+    td_float head_offset;
+    td_float head_drop;
+    td_float hand_support_score;
     td_float age_s;
     td_char label[32];
     td_u32 landmark_num;

@@ -4,6 +4,10 @@
 
 所有命令请在海鸥派板子的 /root/zen_desk/ 目录下执行。
 
+注意：需要 NPU/Qt 动态库时，必须 source 环境脚本：
+. ./scripts/env.sh
+不要直接执行 ./scripts/env.sh；直接执行只会影响子进程，当前 shell 找不到 libsvp_aicpu.so。
+
 【1. 查看后台逻辑日志 (最常用)】
 -----------------------------------------
 1.1 仅查看 EC11 旋钮的旋转、按压动作日志：
@@ -22,14 +26,24 @@ tail -f out/log/asr_service.log
 tail -f out/log/radar_service.log
 
 1.6 单独运行视觉服务并保存关键帧、标注图和 JSON：
-./out/bin/vision_service --device /dev/video0 --format MJPEG --width 1280 --height 720 \
+./out/bin/vision_service --device /dev/video0 --format YUYV --width 1280 --height 720 \
   --snapshot-dir /root/zen_desk/out/snapshots --snapshot-every 10 --snapshot-limit 100
+
+说明：默认用 YUYV raw UVC，避免 MJPEG/H264/H265 进入 MPP VDEC。若摄像头不支持 YUYV，
+先执行 v4l2-ctl --list-formats-ext -d /dev/video0 查看可用 raw 格式，再尝试 NV12/NV21。
 
 1.7 查看视觉 JSON 中的注意力方向：
 grep "\"attention\"" /root/zen_desk/out/snapshots/frame_*.json | tail
 
 1.8 查看低频坐姿检测结果：
 grep "\"posture\"" /root/zen_desk/out/snapshots/frame_*.json | tail
+
+1.9 查看坐姿模型调试 dump：
+ls -lh /root/zen_desk/out/pose_debug | tail
+cat /root/zen_desk/out/pose_debug/pose_000001.meta.txt
+
+1.10 临时关闭坐姿模型 dump：
+VISION_POSE_DEBUG=0 ./out/bin/vision_service --device /dev/video0 --format YUYV --width 1280 --height 720
 
 
 

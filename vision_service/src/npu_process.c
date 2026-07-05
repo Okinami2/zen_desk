@@ -21,6 +21,8 @@
 #include <string.h>
 #include <math.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 #include "securec.h"
 #include "svp_acl_rt.h"
@@ -68,6 +70,8 @@
 #define SAMPLE_SVP_POSE_DET_TH        0.50f
 #define SAMPLE_SVP_POSE_SCORE_TH      0.50f
 #define SAMPLE_SVP_POSE_VIS_TH        0.35f
+#define SAMPLE_SVP_POSE_DEBUG_DIR     "./out/pose_debug"
+#define SAMPLE_SVP_POSE_DEBUG_MAX     120
 #define SAMPLE_SVP_PI_F               3.14159265358979323846f
 
 #define SAMPLE_SVP_LANDMARK_CROP_SCALE 1.50f
@@ -138,6 +142,8 @@ static td_u8 *g_pose_lm_input_virt = TD_NULL;
 static td_double g_pose_last_run_s = -1000.0;
 static sample_svp_pose_result g_pose_cached = {0};
 static td_float g_pose_output_tmp[2][SAMPLE_SVP_POSE_ANCHOR_NUM * 12];
+static td_u32 g_pose_debug_seq = 0;
+static td_u32 g_pose_debug_current_seq = 0;
 
 static svp_acl_format sample_svp_model_input_format(td_u32 model_idx);
 static svp_acl_data_type sample_svp_model_input_type(td_u32 model_idx);
@@ -1673,6 +1679,181 @@ static td_s32 sample_svp_estimate_head_from_landmarks(const sample_svp_landmark1
 
 /* ----------------------------- 低频坐姿检测 ----------------------------- */
 
+
+static td_bool sample_svp_pose_debug_enabled(td_void)
+{
+    const char *env = getenv("VISION_POSE_DEBUG");
+    return (env != TD_NULL && strcmp(env, "0") == 0) ? TD_FALSE : TD_TRUE;
+}
+
+static td_void sample_svp_pose_debug_mkdir(td_void)
+{
+    if (mkdir("./out", 0755) != 0 && errno != EEXIST) {
+        return;
+    }
+    (td_void)mkdir(SAMPLE_SVP_POSE_DEBUG_DIR, 0755);
+}
+
+static td_s32 sample_svp_pose_debug_path(td_char *path, size_t size,
+    const td_char *suffix)
+{
+    int ret = snprintf(path, size, "%s/pose_%06u.%s",
+        SAMPLE_SVP_POSE_DEBUG_DIR, g_pose_debug_current_seq, suffix);
+    return (ret < 0 || (size_t)ret >= size) ? TD_FAILURE : TD_SUCCESS;
+}
+
+static td_void sample_svp_pose_debug_write_blob(const td_char *suffix,
+    const td_void *data, size_t size)
+{
+    td_char path[256];
+    FILE *file;
+
+    if (sample_svp_pose_debug_enabled() != TD_TRUE ||
+        data == TD_NULL || size == 0 || g_pose_debug_current_seq == 0) {
+        return;
+    }
+    sample_svp_pose_debug_mkdir();
+    if (sample_svp_pose_debug_path(path, sizeof(path), suffix) != TD_SUCCESS) {
+        return;
+    }
+    file = fopen(path, "wb");
+    if (file == TD_NULL) {
+        return;
+    }
+    (td_void)fwrite(data, 1, size, file);
+    (td_void)fclose(file);
+}
+
+static td_void sample_svp_pose_debug_write_frame_nv21(td_void)
+{
+    td_char path[256];
+    FILE *file;
+    const td_u8 *src = g_svp_npu_face_det_frame_virt;
+    td_u32 width = g_svp_npu_face_det_frame.video_frame.width;
+    td_u32 height = g_svp_npu_face_det_frame.video_frame.height;
+    td_u32 stride_y = g_svp_npu_face_det_frame.video_frame.stride[0];
+    td_u32 stride_uv = g_svp_npu_face_det_frame.video_frame.stride[1];
+    const td_u8 *uv;
+    td_u32 row;
+
+    if (sample_svp_pose_debug_enabled() != TD_TRUE || src == TD_NULL ||
+        g_pose_debug_current_seq == 0 || width == 0 || height == 0) {
+        return;
+    }
+    sample_svp_pose_debug_mkdir();
+    if (sample_svp_pose_debug_path(path, sizeof(path), "frame_nv21.bin") != TD_SUCCESS) {
+        return;
+    }
+    file = fopen(path, "wb");
+    if (file == TD_NULL) {
+        return;
+    }
+    for (row = 0; row < height; row++) {
+        (td_void)fwrite(src + (size_t)row * stride_y, 1, width, file);
+    }
+    uv = src + (size_t)stride_y * height;
+    for (row = 0; row < height / 2; row++) {
+        (td_void)fwrite(uv + (size_t)row * stride_uv, 1, width, file);
+    }
+    (td_void)fclose(file);
+}
+
+static td_void sample_svp_pose_debug_dump_outputs(td_u32 task_idx,
+    const td_char *prefix)
+{
+    td_u32 i;
+    size_t num;
+    svp_acl_mdl_dataset *dataset;
+
+    if (sample_svp_pose_debug_enabled() != TD_TRUE ||
+        task_idx >= SAMPLE_SVP_NPU_OFFLINE_TASK_NUM ||
+        g_pose_debug_current_seq == 0) {
+        return;
+    }
+    dataset = g_svp_npu_task[task_idx].output_dataset;
+    if (dataset == TD_NULL) {
+        return;
+    }
+    num = svp_acl_mdl_get_dataset_num_buffers(dataset);
+    for (i = 0; i < num; i++) {
+        svp_acl_data_buffer *buf = svp_acl_mdl_get_dataset_buffer(dataset, i);
+        td_void *addr;
+        size_t size;
+        td_char suffix[64];
+        if (buf == TD_NULL) {
+            continue;
+        }
+        addr = svp_acl_get_data_buffer_addr(buf);
+        size = svp_acl_get_data_buffer_size(buf);
+        (td_void)snprintf(suffix, sizeof(suffix), "%s_out%u.bin", prefix, i);
+        sample_svp_pose_debug_write_blob(suffix, addr, size);
+    }
+}
+
+static td_void sample_svp_pose_debug_write_meta(const sample_svp_pose_result *pose,
+    const sample_svp_pose_detection *det, const sample_svp_pose_roi *roi,
+    td_float scale, td_float pad_l, td_float pad_t)
+{
+    td_char path[256];
+    FILE *file;
+
+    if (sample_svp_pose_debug_enabled() != TD_TRUE ||
+        pose == TD_NULL || g_pose_debug_current_seq == 0) {
+        return;
+    }
+    sample_svp_pose_debug_mkdir();
+    if (sample_svp_pose_debug_path(path, sizeof(path), "meta.txt") != TD_SUCCESS) {
+        return;
+    }
+    file = fopen(path, "wb");
+    if (file == TD_NULL) {
+        return;
+    }
+    (td_void)fprintf(file, "frame_width=%u\nframe_height=%u\n",
+        g_svp_npu_face_det_frame.video_frame.width,
+        g_svp_npu_face_det_frame.video_frame.height);
+    (td_void)fprintf(file, "detector_input_width=%u\ndetector_input_height=%u\n"
+        "landmark_input_width=%u\nlandmark_input_height=%u\n",
+        SAMPLE_SVP_POSE_DET_INPUT_W, SAMPLE_SVP_POSE_DET_INPUT_H,
+        SAMPLE_SVP_POSE_LM_INPUT_W, SAMPLE_SVP_POSE_LM_INPUT_H);
+    (td_void)fprintf(file, "letterbox_scale=%.8f\nletterbox_pad_left=%.8f\nletterbox_pad_top=%.8f\n",
+        scale, pad_l, pad_t);
+    if (det != TD_NULL) {
+        (td_void)fprintf(file, "det_score=%.6f\n"
+            "det_box_norm=%.8f,%.8f,%.8f,%.8f\n"
+            "det_keypoint0_norm=%.8f,%.8f\n"
+            "det_keypoint1_norm=%.8f,%.8f\n",
+            det->score, det->box[0], det->box[1], det->box[2], det->box[3],
+            det->keypoints[0][0], det->keypoints[0][1],
+            det->keypoints[1][0], det->keypoints[1][1]);
+    }
+    if (roi != TD_NULL) {
+        (td_void)fprintf(file, "roi_cx=%.6f\nroi_cy=%.6f\nroi_size=%.6f\nroi_rotation=%.6f\n",
+            roi->cx, roi->cy, roi->size, roi->rotation);
+    }
+    (td_void)fprintf(file, "label=%s\nposture_ok=%d\nhas_pose=%d\npose_score=%.6f\n"
+        "posture_score=%.6f\nshoulder_tilt=%.6f\nbody_lean=%.6f\n"
+        "head_offset=%.6f\nhead_drop=%.6f\nhand_support_score=%.6f\n",
+        pose->label, pose->posture_ok, pose->has_pose, pose->score,
+        pose->posture_score, pose->shoulder_tilt, pose->body_lean,
+        pose->head_offset, pose->head_drop, pose->hand_support_score);
+    (td_void)fclose(file);
+}
+
+static td_void sample_svp_pose_debug_begin(td_void)
+{
+    if (sample_svp_pose_debug_enabled() != TD_TRUE) {
+        g_pose_debug_current_seq = 0;
+        return;
+    }
+    if (g_pose_debug_seq >= SAMPLE_SVP_POSE_DEBUG_MAX) {
+        g_pose_debug_current_seq = 0;
+        return;
+    }
+    g_pose_debug_current_seq = ++g_pose_debug_seq;
+    sample_svp_pose_debug_write_frame_nv21();
+}
+
 static td_float sample_svp_sigmoid_f32(td_float value)
 {
     if (value < -80.0f) {
@@ -2165,24 +2346,57 @@ static td_bool sample_svp_pose_lm_ok(const sample_svp_pose_result *pose, td_u32 
         pose->landmarks[idx][4] >= SAMPLE_SVP_POSE_VIS_TH) ? TD_TRUE : TD_FALSE;
 }
 
+static td_float sample_svp_pose_lm_conf(const sample_svp_pose_result *pose, td_u32 idx)
+{
+    if (idx >= pose->landmark_num) {
+        return 0.0f;
+    }
+    return fminf(pose->landmarks[idx][3], pose->landmarks[idx][4]);
+}
+
+static td_float sample_svp_pose_dist_norm(const sample_svp_pose_result *pose,
+    td_u32 a, td_u32 b, td_float norm)
+{
+    if (sample_svp_pose_lm_ok(pose, a) != TD_TRUE ||
+        sample_svp_pose_lm_ok(pose, b) != TD_TRUE || norm <= 1e-3f) {
+        return 999.0f;
+    }
+    return hypotf(pose->landmarks[a][0] - pose->landmarks[b][0],
+        pose->landmarks[a][1] - pose->landmarks[b][1]) / norm;
+}
+
+static td_void sample_svp_pose_set_label(sample_svp_pose_result *pose,
+    const td_char *label, td_float score)
+{
+    (td_void)strncpy_s(pose->label, sizeof(pose->label), label, sizeof(pose->label) - 1);
+    pose->posture_score = sample_svp_clamp_f32(score, 0.0f, 1.0f);
+    pose->posture_ok = (strcmp(label, "normal") == 0) ? TD_TRUE : TD_FALSE;
+}
+
 static td_void sample_svp_classify_posture(sample_svp_pose_result *pose)
 {
     td_float lsx, lsy, rsx, rsy;
+    td_float shoulder_cx;
+    td_float shoulder_cy;
     td_float shoulder_w;
-    td_float shoulder_tilt;
     td_bool shoulder_ok;
     td_bool hip_ok;
+    td_bool head_ok;
+    td_float worst_score = 0.0f;
+    const td_char *worst_label = "normal";
 
     if (pose->has_pose != TD_TRUE) {
-        (td_void)strncpy_s(pose->label, sizeof(pose->label), "no_pose", sizeof(pose->label) - 1);
+        sample_svp_pose_set_label(pose, "no_pose", 1.0f);
         pose->posture_ok = TD_FALSE;
         return;
     }
 
     shoulder_ok = sample_svp_pose_lm_ok(pose, 11) && sample_svp_pose_lm_ok(pose, 12);
     hip_ok = sample_svp_pose_lm_ok(pose, 23) && sample_svp_pose_lm_ok(pose, 24);
+    head_ok = sample_svp_pose_lm_ok(pose, 0) ||
+        sample_svp_pose_lm_ok(pose, 7) || sample_svp_pose_lm_ok(pose, 8);
     if (shoulder_ok != TD_TRUE) {
-        (td_void)strncpy_s(pose->label, sizeof(pose->label), "unknown", sizeof(pose->label) - 1);
+        sample_svp_pose_set_label(pose, "unknown", 1.0f);
         pose->posture_ok = TD_FALSE;
         return;
     }
@@ -2191,42 +2405,67 @@ static td_void sample_svp_classify_posture(sample_svp_pose_result *pose)
     lsy = pose->landmarks[11][1];
     rsx = pose->landmarks[12][0];
     rsy = pose->landmarks[12][1];
+    shoulder_cx = (lsx + rsx) * 0.5f;
+    shoulder_cy = (lsy + rsy) * 0.5f;
     shoulder_w = fmaxf(20.0f, hypotf(rsx - lsx, rsy - lsy));
-    shoulder_tilt = fabsf(rsy - lsy) / shoulder_w;
-    if (shoulder_tilt > 0.22f) {
-        (td_void)strncpy_s(pose->label, sizeof(pose->label), "shoulder_tilt", sizeof(pose->label) - 1);
-        pose->posture_ok = TD_FALSE;
-        return;
+
+    pose->shoulder_tilt = fabsf(rsy - lsy) / shoulder_w;
+    if (pose->shoulder_tilt > 0.16f) {
+        worst_label = "shoulder_tilt";
+        worst_score = sample_svp_clamp_f32((pose->shoulder_tilt - 0.16f) / 0.16f, 0.0f, 1.0f);
     }
 
     if (hip_ok == TD_TRUE) {
-        td_float shoulder_cx = (lsx + rsx) * 0.5f;
         td_float hip_cx = (pose->landmarks[23][0] + pose->landmarks[24][0]) * 0.5f;
-        td_float lean = (shoulder_cx - hip_cx) / shoulder_w;
-        if (lean < -0.35f) {
-            (td_void)strncpy_s(pose->label, sizeof(pose->label), "lean_left", sizeof(pose->label) - 1);
-            pose->posture_ok = TD_FALSE;
-            return;
+        td_float hip_cy = (pose->landmarks[23][1] + pose->landmarks[24][1]) * 0.5f;
+        td_float torso_h = fmaxf(shoulder_w * 0.7f, fabsf(hip_cy - shoulder_cy));
+        pose->body_lean = (shoulder_cx - hip_cx) / shoulder_w;
+        if (pose->body_lean < -0.28f && (-pose->body_lean - 0.28f) / 0.22f > worst_score) {
+            worst_label = "lean_left";
+            worst_score = sample_svp_clamp_f32((-pose->body_lean - 0.28f) / 0.22f, 0.0f, 1.0f);
+        } else if (pose->body_lean > 0.28f && (pose->body_lean - 0.28f) / 0.22f > worst_score) {
+            worst_label = "lean_right";
+            worst_score = sample_svp_clamp_f32((pose->body_lean - 0.28f) / 0.22f, 0.0f, 1.0f);
         }
-        if (lean > 0.35f) {
-            (td_void)strncpy_s(pose->label, sizeof(pose->label), "lean_right", sizeof(pose->label) - 1);
-            pose->posture_ok = TD_FALSE;
-            return;
-        }
-    }
-
-    if (sample_svp_pose_lm_ok(pose, 0) == TD_TRUE) {
-        td_float shoulder_cx = (lsx + rsx) * 0.5f;
-        td_float nose_dx = fabsf(pose->landmarks[0][0] - shoulder_cx) / shoulder_w;
-        if (nose_dx > 0.65f) {
-            (td_void)strncpy_s(pose->label, sizeof(pose->label), "head_offset", sizeof(pose->label) - 1);
-            pose->posture_ok = TD_FALSE;
-            return;
+        if (head_ok == TD_TRUE && sample_svp_pose_lm_ok(pose, 0) == TD_TRUE) {
+            pose->head_drop = (pose->landmarks[0][1] - shoulder_cy) / torso_h;
+            if (pose->head_drop > -0.20f && (pose->head_drop + 0.20f) / 0.30f > worst_score) {
+                worst_label = "hunchback";
+                worst_score = sample_svp_clamp_f32((pose->head_drop + 0.20f) / 0.30f, 0.0f, 1.0f);
+            }
         }
     }
 
-    (td_void)strncpy_s(pose->label, sizeof(pose->label), "normal", sizeof(pose->label) - 1);
-    pose->posture_ok = TD_TRUE;
+    if (head_ok == TD_TRUE && sample_svp_pose_lm_ok(pose, 0) == TD_TRUE) {
+        td_float nose_x = pose->landmarks[0][0];
+        pose->head_offset = (nose_x - shoulder_cx) / shoulder_w;
+        if (fabsf(pose->head_offset) > 0.48f &&
+            (fabsf(pose->head_offset) - 0.48f) / 0.25f > worst_score) {
+            worst_label = "head_offset";
+            worst_score = sample_svp_clamp_f32((fabsf(pose->head_offset) - 0.48f) / 0.25f, 0.0f, 1.0f);
+        }
+    }
+
+    if (head_ok == TD_TRUE) {
+        td_float left_hand = fminf(sample_svp_pose_dist_norm(pose, 15, 7, shoulder_w),
+            sample_svp_pose_dist_norm(pose, 15, 0, shoulder_w));
+        td_float right_hand = fminf(sample_svp_pose_dist_norm(pose, 16, 8, shoulder_w),
+            sample_svp_pose_dist_norm(pose, 16, 0, shoulder_w));
+        td_float best_hand = fminf(left_hand, right_hand);
+        td_float wrist_conf = fmaxf(sample_svp_pose_lm_conf(pose, 15), sample_svp_pose_lm_conf(pose, 16));
+        pose->hand_support_score = sample_svp_clamp_f32((0.42f - best_hand) / 0.22f, 0.0f, 1.0f) *
+            sample_svp_clamp_f32((wrist_conf - SAMPLE_SVP_POSE_VIS_TH) / 0.35f, 0.0f, 1.0f);
+        if (pose->hand_support_score > 0.45f && pose->hand_support_score > worst_score) {
+            worst_label = "hand_support_head";
+            worst_score = pose->hand_support_score;
+        }
+    }
+
+    if (worst_score > 0.0f) {
+        sample_svp_pose_set_label(pose, worst_label, worst_score);
+        return;
+    }
+    sample_svp_pose_set_label(pose, "normal", 1.0f);
 }
 
 static td_s32 sample_svp_run_pose_once(sample_svp_pose_result *pose)
@@ -2252,25 +2491,31 @@ static td_s32 sample_svp_run_pose_once(sample_svp_pose_result *pose)
     td_u32 score_num;
 
     (td_void)memset_s(pose, sizeof(*pose), 0, sizeof(*pose));
+    sample_svp_pose_debug_begin();
     ret = sample_svp_prepare_pose_detector_input();
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
         SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare pose detector failed\n");
+    sample_svp_pose_debug_write_blob("det_input.bin", g_pose_det_input_virt, g_pose_det_input_size);
     ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[2]);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
         SAMPLE_SVP_ERR_LEVEL_ERROR, "run pose detector failed\n");
+    sample_svp_pose_debug_dump_outputs(2, "det");
     if (sample_svp_decode_pose_detection(&det, &pad_l, &pad_t, &scale_w, &scale_h) != TD_SUCCESS ||
         sample_svp_pose_roi_from_detection(&det, (td_u32)frame_w, (td_u32)frame_h, &roi) != TD_SUCCESS) {
         pose->detection_score = det.score;
         sample_svp_classify_posture(pose);
+        sample_svp_pose_debug_write_meta(pose, &det, TD_NULL, scale, pad_l, pad_t);
         return TD_SUCCESS;
     }
 
     ret = sample_svp_prepare_pose_landmark_input(&roi);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
         SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare pose landmark failed\n");
+    sample_svp_pose_debug_write_blob("lm_input.bin", g_pose_lm_input_virt, g_pose_lm_input_size);
     ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[3]);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
         SAMPLE_SVP_ERR_LEVEL_ERROR, "run pose landmark failed\n");
+    sample_svp_pose_debug_dump_outputs(3, "lm");
     sample_svp_check_exps_return(sample_svp_pose_output_f32(&g_svp_npu_task[3], 0, &raw_lm, &raw_num) != TD_SUCCESS ||
         sample_svp_pose_output_f32(&g_svp_npu_task[3], 1, &score_data, &score_num) != TD_SUCCESS,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "get pose landmark outputs failed\n");
@@ -2287,6 +2532,7 @@ static td_s32 sample_svp_run_pose_once(sample_svp_pose_result *pose)
         sample_svp_project_pose_landmarks(&roi, pose, raw_lm);
     }
     sample_svp_classify_posture(pose);
+    sample_svp_pose_debug_write_meta(pose, &det, &roi, scale, pad_l, pad_t);
     return TD_SUCCESS;
 }
 

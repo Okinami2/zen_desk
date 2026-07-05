@@ -46,3 +46,13 @@ fi
 
 export LD_LIBRARY_PATH
 export PATH
+
+
+case "$(basename -- "$0" 2>/dev/null)" in
+    env.sh)
+        echo "[INFO] env.sh was executed in a child shell." >&2
+        echo "[INFO] To affect the current shell, run: . ./scripts/env.sh" >&2
+        echo "[INFO] Current LD_LIBRARY_PATH prepared for child shell:" >&2
+        echo "$LD_LIBRARY_PATH" >&2
+        ;;
+esac

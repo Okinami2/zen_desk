@@ -12,7 +12,7 @@ PID_DIR="$PROJ_DIR/out/pid"
 VISION_SNAPSHOT_ENABLE="${VISION_SNAPSHOT_ENABLE:-0}"
 SNAPSHOT_DIR="${VISION_SNAPSHOT_DIR:-}"
 VISION_DEVICE="${VISION_DEVICE:-/dev/video0}"
-VISION_FORMAT="${VISION_FORMAT:-MJPEG}"
+VISION_FORMAT="${VISION_FORMAT:-YUYV}"
 VISION_WIDTH="${VISION_WIDTH:-1280}"
 VISION_HEIGHT="${VISION_HEIGHT:-720}"
 VISION_TELEMETRY="${VISION_TELEMETRY:-127.0.0.1:8889}"
@@ -68,6 +68,9 @@ if [ -f "$PID_DIR/vision_service.pid" ]; then
 fi
 
 echo "       Starting vision_service..."
+if [ "$VISION_FORMAT" = "MJPEG" ] || [ "$VISION_FORMAT" = "H264" ] || [ "$VISION_FORMAT" = "H265" ]; then
+    echo "       warning: $VISION_FORMAT uses MPP VDEC; prefer YUYV/NV12/NV21 if capture fails"
+fi
 if [ "$VISION_SNAPSHOT_ENABLE" = "1" ]; then
     "$BIN_DIR/vision_service" \
         --device "$VISION_DEVICE" \
@@ -108,7 +111,7 @@ fi
 
 echo "       vision_service started (pid=$(cat "$PID_DIR/vision_service.pid"))"
 if [ "$VISION_SNAPSHOT_ENABLE" = "1" ]; then
-    echo "       snapshots=$SNAPSHOT_DIR telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE monitoring=$VISION_MONITORING_ENABLE control=$VISION_CONTROL_PORT"
+    echo "       format=$VISION_FORMAT size=${VISION_WIDTH}x${VISION_HEIGHT} snapshots=$SNAPSHOT_DIR telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE monitoring=$VISION_MONITORING_ENABLE control=$VISION_CONTROL_PORT"
 else
-    echo "       snapshots=disabled telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE monitoring=$VISION_MONITORING_ENABLE control=$VISION_CONTROL_PORT"
+    echo "       format=$VISION_FORMAT size=${VISION_WIDTH}x${VISION_HEIGHT} snapshots=disabled telemetry=$VISION_TELEMETRY mpp_attached=$VISION_MPP_ATTACHED display=$VISION_DISPLAY_ENABLE monitoring=$VISION_MONITORING_ENABLE control=$VISION_CONTROL_PORT"
 fi

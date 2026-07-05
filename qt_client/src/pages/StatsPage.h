@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QVector>
+#include <QString>
 
 // ── 折线图 Widget ─────────────────────────────────────────────────────────
 class LineChartWidget : public QWidget {
@@ -45,6 +46,11 @@ public:
     void updateTimelineData(const QVector<QVector<int>> &segments,
                             const QStringList &labels,
                             const QVector<double> &focusScores);
+    void updatePostureStatus(const QString &label, bool ok, bool present,
+                             double poseScore, double detectionScore,
+                             double ageMs, bool updated,
+                             double shoulderTilt, double bodyLean,
+                             double headDrop, double handSupportScore);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -56,6 +62,10 @@ private:
     QLabel *distractedTimeVal;
     QLabel *gradeVal;
     QLabel *gradeDesc;
+    QLabel *postureStateVal;
+    QLabel *postureDetailVal;
+    QLabel *postureMetricVal;
+    QLabel *postureAgeVal;
     LineChartWidget *lineChart;
     StackedBarWidget *barChart;
 };

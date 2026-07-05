@@ -144,6 +144,8 @@ static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
         "\"score\":%.5f,\"yaw\":%.3f,\"pitch\":%.3f,\"roll\":%.3f,"
         "\"attention\":\"%s\",\"posture\":\"%s\",\"posture_ok\":%s,"
         "\"pose_present\":%s,\"pose_score\":%.3f,\"pose_detection_score\":%.3f,"
+        "\"posture_score\":%.3f,\"shoulder_tilt\":%.3f,\"body_lean\":%.3f,"
+        "\"head_offset\":%.3f,\"head_drop\":%.3f,\"hand_support_score\":%.3f,"
         "\"pose_age_ms\":%.0f,\"pose_updated\":%s,"
         "\"eyes_closed\":%s,\"yawning\":%s,\"blink_count\":%u,"
         "\"yawn_count\":%u,\"inference_ms\":%.3f}\n",
@@ -159,6 +161,9 @@ static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
         result->pose.posture_ok == TD_TRUE ? "true" : "false",
         result->pose.has_pose == TD_TRUE ? "true" : "false",
         result->pose.score, result->pose.detection_score,
+        result->pose.posture_score, result->pose.shoulder_tilt,
+        result->pose.body_lean, result->pose.head_offset,
+        result->pose.head_drop, result->pose.hand_support_score,
         result->pose.age_s * 1000.0f,
         result->pose.updated == TD_TRUE ? "true" : "false",
         result->state_snapshot.eyes_closed == TD_TRUE ? "true" : "false",

@@ -9,7 +9,7 @@
 #include "vision_service.h"
 
 #define VISION_UVC_DEV_PATH       "/dev/video0"
-#define VISION_UVC_PIX_FMT        "MJPEG"
+#define VISION_UVC_PIX_FMT        "YUYV"
 #define VISION_UVC_WIDTH          1280
 #define VISION_UVC_HEIGHT         720
 #define VISION_UVC_TIMEOUT_MS     2000
@@ -72,11 +72,22 @@ static td_bool vision_parse_endpoint(td_char *endpoint, td_char **host, td_u16 *
     return TD_TRUE;
 }
 
+static td_bool vision_is_encoded_format(const td_char *format)
+{
+    if (format == TD_NULL) {
+        return TD_FALSE;
+    }
+
+    return (strcmp(format, "MJPEG") == 0 ||
+        strcmp(format, "H264") == 0 ||
+        strcmp(format, "H265") == 0) ? TD_TRUE : TD_FALSE;
+}
+
 static void vision_print_usage(const td_char *program)
 {
     printf("Usage: %s [options]\n"
         "  --device PATH             UVC device (default: %s)\n"
-        "  --format NAME             MJPEG/H264/H265/YUYV (default: %s)\n"
+        "  --format NAME             YUYV/NV12/NV21/MJPEG/H264/H265 (default: %s)\n"
         "  --width N                 capture width (default: %u)\n"
         "  --height N                capture height (default: %u)\n"
         "  --telemetry IP:PORT       send per-frame JSON over UDP\n"
@@ -215,6 +226,11 @@ int main(int argc, char *argv[])
 
     if (vision_install_signal_handlers() != TD_SUCCESS) {
         return 1;
+    }
+
+    if (vision_is_encoded_format(config.pixel_format) == TD_TRUE) {
+        fprintf(stderr, "vision: warning: %s uses MPP VDEC; prefer YUYV/NV12/NV21 if capture fails\n",
+            config.pixel_format);
     }
 
     return (vision_service_run(&config) == TD_SUCCESS) ? 0 : 1;

@@ -733,6 +733,20 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     statusPage->setFacePresent(hasFace, score);
     statusPage->setAttention(attention, yaw, pitch, roll);
 
+    const QString posture = obj.value("posture").toString("unknown");
+    const bool postureOk = obj.value("posture_ok").toBool(false);
+    const bool posePresent = obj.value("pose_present").toBool(false);
+    const double poseScore = obj.value("pose_score").toDouble(0.0);
+    const double poseDetectionScore = obj.value("pose_detection_score").toDouble(0.0);
+    const double poseAgeMs = obj.value("pose_age_ms").toDouble(0.0);
+    const bool poseUpdated = obj.value("pose_updated").toBool(false);
+    statsPage->updatePostureStatus(posture, postureOk, posePresent,
+        poseScore, poseDetectionScore, poseAgeMs, poseUpdated,
+        obj.value("shoulder_tilt").toDouble(0.0),
+        obj.value("body_lean").toDouble(0.0),
+        obj.value("head_drop").toDouble(0.0),
+        obj.value("hand_support_score").toDouble(0.0));
+
     VisionState state;
     std::memset(&state, 0, sizeof(state));
     state.face_present = hasFace ? 1 : 0;

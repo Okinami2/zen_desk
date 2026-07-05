@@ -34,7 +34,9 @@ Zen Desk 是面向 SS928 开发板的多模态学习状态感知项目，当前�
 `posture` 取值：
 
 - `normal`: 坐姿正常
-- `shoulder_tilt`: 肩部明显倾斜
+- `hunchback`: 疑似驼背，头部相对肩线过低
+- `shoulder_tilt`: 斜肩，左右肩高度差偏大
+- `hand_support_head`: 疑似单手撑头，手腕靠近头部
 - `lean_left`: 身体左倾
 - `lean_right`: 身体右倾
 - `head_offset`: 头部相对肩部明显偏移
@@ -103,16 +105,26 @@ VISION_ENABLE=0 ./scripts/start_all.sh
 
 单独运行视觉服务并保存调试帧：
 
+注意：手动运行前必须在当前 shell 中 source 环境脚本，否则 NPU 会找不到 `libsvp_aicpu.so`：
+
+```sh
+. ./scripts/env.sh
+```
+
+然后运行：
+
 ```sh
 ./out/bin/vision_service \
   --device /dev/video0 \
-  --format MJPEG \
+  --format YUYV \
   --width 1280 \
   --height 720 \
   --snapshot-dir /root/zen_desk/out/snapshots \
   --snapshot-every 10 \
   --snapshot-limit 100
 ```
+
+默认使用 `YUYV` raw UVC 输入，避免 MJPEG/H264/H265 进入 MPP VDEC。只有在专门调试编码流解码链路时才建议手动切回 `MJPEG`；如果摄像头不支持 `YUYV`，先用 `v4l2-ctl --list-formats-ext -d /dev/video0` 查看可用 raw 格式，再尝试 `NV12` 或 `NV21`。
 
 如果要独占 HDMI 预览：
 
@@ -128,6 +140,21 @@ VISION_ENABLE=0 ./scripts/start_all.sh
 - `frame_XXXXXXXX.annotated.ppm`: 带人脸框和关键点的图。
 - `frame_XXXXXXXX.json`: telemetry 摘要、106 点人脸坐标和低频 pose 坐标。
 
+坐姿模型每次低频运行还会默认保存调试 dump 到 `out/pose_debug`，最多保存 120 组：
+
+- `pose_XXXXXX.frame_nv21.bin`: 原始 NV21 输入帧，按实际宽高去 stride 后保存。
+- `pose_XXXXXX.det_input.bin`: `pose_detector.om` 实际输入 buffer。
+- `pose_XXXXXX.det_out*.bin`: `pose_detector.om` 原始输出 buffer。
+- `pose_XXXXXX.lm_input.bin`: `pose_landmarks_detector.om` 实际输入 buffer。
+- `pose_XXXXXX.lm_out*.bin`: `pose_landmarks_detector.om` 原始输出 buffer。
+- `pose_XXXXXX.meta.txt`: letterbox、ROI、置信度和坐姿规则指标。
+
+如果不想保存坐姿 dump，可以启动前设置：
+
+```sh
+VISION_POSE_DEBUG=0 ./out/bin/vision_service ...
+```
+
 JSON 中重点字段：
 
 - `has_face`
@@ -140,6 +167,12 @@ JSON 中重点字段：
 - `posture_ok`
 - `pose_present`
 - `pose_age_ms`
+- `posture_score`
+- `shoulder_tilt`
+- `body_lean`
+- `head_offset`
+- `head_drop`
+- `hand_support_score`
 - `eyes_closed`
 - `yawning`
 - `blink_count`
