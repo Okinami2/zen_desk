@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QDateTime>
+#include "services/DatabaseManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScreen>
@@ -149,6 +150,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     resize(1024, 600);
     // showFullScreen();  // 端侧打开
 
+    DatabaseManager::instance().initDb();
+    DatabaseManager::instance().loadTodayStats(
+        effectiveStudySeconds, absentCount, distractedCount, distractedSeconds
+    );
+    
+    focusBucketSeconds.fill(0, 24);
+    distractedBucketSeconds.fill(0, 24);
+    absentBucketSeconds.fill(0, 24);
+    
+    DatabaseManager::instance().loadHourlyStats(
+        focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds
+    );
+
     QFile file(":/style.qss");
     if (file.open(QFile::ReadOnly)) {
         setStyleSheet(QLatin1String(file.readAll()));
@@ -261,9 +275,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     }
 
     // 初始化真实数据累计定时器
-    focusBucketSeconds.fill(0, 24);
-    distractedBucketSeconds.fill(0, 24);
-    absentBucketSeconds.fill(0, 24);
 
     studyAccumulationTimer = new QTimer(this);
     connect(studyAccumulationTimer, &QTimer::timeout, this, &MainWindow::onStudyAccumulationTick);
@@ -293,6 +304,11 @@ void MainWindow::onStudyAccumulationTick() {
         distractedBucketSeconds[hour]++;
     } else {
         focusBucketSeconds[hour]++;
+    }
+
+    if (effectiveStudySeconds % 60 == 0) {
+        DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
+        DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds);
     }
 }
 
@@ -612,6 +628,10 @@ void MainWindow::stopStudy()
     inStudyMode = false;
     isDistracted = false;
     studyPage->stopTimer();
+    
+    DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
+    DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds);
+
     stack->setCurrentWidget(homePage);
     setActiveNav(btnHome);
     

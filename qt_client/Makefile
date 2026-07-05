@@ -14,10 +14,10 @@ EQ            = =
 
 CC            = aarch64-openeuler-linux-gnu-gcc
 CXX           = aarch64-openeuler-linux-gnu-g++
-DEFINES       = -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB
+DEFINES       = -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_SQL_LIB -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
 CXXFLAGS      = -pipe -O2 -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
-INCPATH       = -I. -Isrc -Isrc/pages -Isrc/controllers -Isrc/services -I../common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I. -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++
+INCPATH       = -I. -Isrc -Isrc/pages -Isrc/controllers -Isrc/services -I../common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I. -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++
 QMAKE         = /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/qmake
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
@@ -40,7 +40,7 @@ DISTNAME      = qt_client1.0.0
 DISTDIR = /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/.tmp/qt_client1.0.0
 LINK          = aarch64-openeuler-linux-gnu-g++
 LFLAGS        = -Wl,-O1
-LIBS          = $(SUBLIBS) /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Widgets.so /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Gui.so /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Network.so /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Core.so -lpthread   
+LIBS          = $(SUBLIBS) /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Widgets.so /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Gui.so /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Network.so /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Sql.so /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/lib/libQt5Core.so -lpthread   
 AR            = aarch64-openeuler-linux-gnu-ar cqs
 RANLIB        = 
 SED           = sed
@@ -59,7 +59,8 @@ SOURCES       = src/main.cpp \
 		src/pages/StatsPage.cpp \
 		src/pages/StudyPage.cpp \
 		src/pages/ControlPage.cpp \
-		src/services/MockFusionClient.cpp qrc_resources.cpp \
+		src/services/MockFusionClient.cpp \
+		src/services/DatabaseManager.cpp qrc_resources.cpp \
 		qrc_fonts.cpp \
 		moc_MainWindow.cpp \
 		moc_HomePage.cpp \
@@ -67,7 +68,8 @@ SOURCES       = src/main.cpp \
 		moc_StatsPage.cpp \
 		moc_StudyPage.cpp \
 		moc_ControlPage.cpp \
-		moc_MockFusionClient.cpp
+		moc_MockFusionClient.cpp \
+		moc_DatabaseManager.cpp
 OBJECTS       = main.o \
 		MainWindow.o \
 		HomePage.o \
@@ -76,6 +78,7 @@ OBJECTS       = main.o \
 		StudyPage.o \
 		ControlPage.o \
 		MockFusionClient.o \
+		DatabaseManager.o \
 		qrc_resources.o \
 		qrc_fonts.o \
 		moc_MainWindow.o \
@@ -84,7 +87,8 @@ OBJECTS       = main.o \
 		moc_StatsPage.o \
 		moc_StudyPage.o \
 		moc_ControlPage.o \
-		moc_MockFusionClient.o
+		moc_MockFusionClient.o \
+		moc_DatabaseManager.o
 DIST          = /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/features/spec_pre.prf \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/common/unix.conf \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/common/linux.conf \
@@ -185,14 +189,16 @@ DIST          = /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mks
 		src/pages/StatsPage.h \
 		src/pages/StudyPage.h \
 		src/pages/ControlPage.h \
-		src/services/MockFusionClient.h src/main.cpp \
+		src/services/MockFusionClient.h \
+		src/services/DatabaseManager.h src/main.cpp \
 		src/MainWindow.cpp \
 		src/pages/HomePage.cpp \
 		src/pages/StatusPage.cpp \
 		src/pages/StatsPage.cpp \
 		src/pages/StudyPage.cpp \
 		src/pages/ControlPage.cpp \
-		src/services/MockFusionClient.cpp
+		src/services/MockFusionClient.cpp \
+		src/services/DatabaseManager.cpp
 QMAKE_TARGET  = qt_client
 DESTDIR       = 
 TARGET        = qt_client
@@ -415,8 +421,8 @@ distdir: FORCE
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents resources/resources.qrc resources/fonts.qrc $(DISTDIR)/
 	$(COPY_FILE) --parents /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents src/MainWindow.h src/pages/HomePage.h src/pages/StatusPage.h src/pages/StatsPage.h src/pages/StudyPage.h src/pages/ControlPage.h src/services/MockFusionClient.h $(DISTDIR)/
-	$(COPY_FILE) --parents src/main.cpp src/MainWindow.cpp src/pages/HomePage.cpp src/pages/StatusPage.cpp src/pages/StatsPage.cpp src/pages/StudyPage.cpp src/pages/ControlPage.cpp src/services/MockFusionClient.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents src/MainWindow.h src/pages/HomePage.h src/pages/StatusPage.h src/pages/StatsPage.h src/pages/StudyPage.h src/pages/ControlPage.h src/services/MockFusionClient.h src/services/DatabaseManager.h $(DISTDIR)/
+	$(COPY_FILE) --parents src/main.cpp src/MainWindow.cpp src/pages/HomePage.cpp src/pages/StatusPage.cpp src/pages/StatsPage.cpp src/pages/StudyPage.cpp src/pages/ControlPage.cpp src/services/MockFusionClient.cpp src/services/DatabaseManager.cpp $(DISTDIR)/
 
 
 clean: compiler_clean 
@@ -460,9 +466,9 @@ compiler_moc_predefs_clean:
 moc_predefs.h: /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/features/data/dummy.cpp
 	aarch64-openeuler-linux-gnu-g++ -pipe -O2 -std=gnu++1z -Wall -Wextra -dM -E -o moc_predefs.h /home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: moc_MainWindow.cpp moc_HomePage.cpp moc_StatusPage.cpp moc_StatsPage.cpp moc_StudyPage.cpp moc_ControlPage.cpp moc_MockFusionClient.cpp
+compiler_moc_header_make_all: moc_MainWindow.cpp moc_HomePage.cpp moc_StatusPage.cpp moc_StatsPage.cpp moc_StudyPage.cpp moc_ControlPage.cpp moc_MockFusionClient.cpp moc_DatabaseManager.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) moc_MainWindow.cpp moc_HomePage.cpp moc_StatusPage.cpp moc_StatsPage.cpp moc_StudyPage.cpp moc_ControlPage.cpp moc_MockFusionClient.cpp
+	-$(DEL_FILE) moc_MainWindow.cpp moc_HomePage.cpp moc_StatusPage.cpp moc_StatsPage.cpp moc_StudyPage.cpp moc_ControlPage.cpp moc_MockFusionClient.cpp moc_DatabaseManager.cpp
 moc_MainWindow.cpp: src/MainWindow.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QMainWindow \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/qmainwindow.h \
@@ -594,7 +600,7 @@ moc_MainWindow.cpp: src/MainWindow.h \
 		../common/include/protocol.h \
 		moc_predefs.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
-	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/MainWindow.h -o moc_MainWindow.cpp
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/MainWindow.h -o moc_MainWindow.cpp
 
 moc_HomePage.cpp: src/pages/HomePage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QWidget \
@@ -712,7 +718,7 @@ moc_HomePage.cpp: src/pages/HomePage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui/qicon.h \
 		moc_predefs.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
-	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/HomePage.h -o moc_HomePage.cpp
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/HomePage.h -o moc_HomePage.cpp
 
 moc_StatusPage.cpp: src/pages/StatusPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QWidget \
@@ -824,7 +830,7 @@ moc_StatusPage.cpp: src/pages/StatusPage.h \
 		../common/include/protocol.h \
 		moc_predefs.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
-	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatusPage.h -o moc_StatusPage.cpp
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatusPage.h -o moc_StatusPage.cpp
 
 moc_StatsPage.cpp: src/pages/StatsPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QWidget \
@@ -936,7 +942,7 @@ moc_StatsPage.cpp: src/pages/StatsPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QVector \
 		moc_predefs.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
-	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatsPage.h -o moc_StatsPage.cpp
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StatsPage.h -o moc_StatsPage.cpp
 
 moc_StudyPage.cpp: src/pages/StudyPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QWidget \
@@ -1059,7 +1065,7 @@ moc_StudyPage.cpp: src/pages/StudyPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui/qicon.h \
 		moc_predefs.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
-	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StudyPage.h -o moc_StudyPage.cpp
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/StudyPage.h -o moc_StudyPage.cpp
 
 moc_ControlPage.cpp: src/pages/ControlPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QWidget \
@@ -1177,7 +1183,7 @@ moc_ControlPage.cpp: src/pages/ControlPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui/qicon.h \
 		moc_predefs.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
-	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/ControlPage.h -o moc_ControlPage.cpp
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/pages/ControlPage.h -o moc_ControlPage.cpp
 
 moc_MockFusionClient.cpp: src/services/MockFusionClient.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QObject \
@@ -1239,7 +1245,69 @@ moc_MockFusionClient.cpp: src/services/MockFusionClient.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QString \
 		moc_predefs.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
-	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/services/MockFusionClient.h -o moc_MockFusionClient.cpp
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/services/MockFusionClient.h -o moc_MockFusionClient.cpp
+
+moc_DatabaseManager.cpp: src/services/DatabaseManager.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QObject \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobject.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobjectdefs.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qnamespace.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qglobal.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qconfig-bootstrapped.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qconfig.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qtcore-config.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qsystemdetection.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qprocessordetection.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcompilerdetection.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qtypeinfo.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qsysinfo.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qlogging.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qflags.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qbasicatomic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic_bootstrap.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qgenericatomic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic_cxx11.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic_msvc.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qglobalstatic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qmutex.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qnumeric.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qversiontagging.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobjectdefs_impl.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstring.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qchar.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qbytearray.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qrefcount.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qarraydata.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringliteral.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringalgorithms.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringview.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringbuilder.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qlist.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qalgorithms.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qiterator.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qhashfunctions.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qpair.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qvector.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcontainertools_impl.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qpoint.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qbytearraylist.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringlist.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qregexp.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringmatcher.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcoreevent.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qscopedpointer.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qmetatype.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qvarlengtharray.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcontainerfwd.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobject_impl.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/QSqlDatabase \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qsqldatabase.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qtsqlglobal.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qtsql-config.h \
+		moc_predefs.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc
+	/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/bin/moc $(DEFINES) --include /home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/moc_predefs.h -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/mkspecs/aarch64-openeuler-linux-gnu-g++ -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/pages -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/controllers -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/qt_client/src/services -I/home/hispark/pegasus/platform/ss928v100_gcc/smp/a55_linux/mpp/zen_desk/common/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtNetwork -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql -I/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1 -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/aarch64-openeuler-linux-gnu -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include/c++/12.3.1/backward -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include -I/home/okinami/openeuler_gcc_arm64le/lib64/gcc/aarch64-openeuler-linux-gnu/12.3.1/include-fixed -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/include -I/home/okinami/openeuler_gcc_arm64le/aarch64-openeuler-linux-gnu/sysroot/usr/include src/services/DatabaseManager.h -o moc_DatabaseManager.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -1551,6 +1619,12 @@ MainWindow.o: src/MainWindow.cpp src/MainWindow.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui/qpainterpath.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QDateTime \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qdatetime.h \
+		src/services/DatabaseManager.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QObject \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/QSqlDatabase \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qsqldatabase.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qtsqlglobal.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qtsql-config.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QVBoxLayout \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/qboxlayout.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/qlayout.h \
@@ -1560,7 +1634,6 @@ MainWindow.o: src/MainWindow.cpp src/MainWindow.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui/QScreen \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtGui/qscreen.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QList \
-		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QObject \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QRect \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QSize \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QSizeF \
@@ -2259,7 +2332,10 @@ ControlPage.o: src/pages/ControlPage.cpp src/pages/ControlPage.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/qlayout.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/qlayoutitem.h \
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/qgridlayout.h \
-		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QHBoxLayout
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QHBoxLayout \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/QStyle \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtWidgets/qstyle.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QVariant
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o ControlPage.o src/pages/ControlPage.cpp
 
 MockFusionClient.o: src/services/MockFusionClient.cpp src/services/MockFusionClient.h \
@@ -2322,6 +2398,93 @@ MockFusionClient.o: src/services/MockFusionClient.cpp src/services/MockFusionCli
 		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QString
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o MockFusionClient.o src/services/MockFusionClient.cpp
 
+DatabaseManager.o: src/services/DatabaseManager.cpp src/services/DatabaseManager.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QObject \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobject.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobjectdefs.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qnamespace.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qglobal.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qconfig-bootstrapped.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qconfig.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qtcore-config.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qsystemdetection.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qprocessordetection.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcompilerdetection.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qtypeinfo.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qsysinfo.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qlogging.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qflags.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qbasicatomic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic_bootstrap.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qgenericatomic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic_cxx11.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qatomic_msvc.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qglobalstatic.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qmutex.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qnumeric.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qversiontagging.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobjectdefs_impl.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstring.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qchar.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qbytearray.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qrefcount.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qarraydata.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringliteral.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringalgorithms.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringview.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringbuilder.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qlist.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qalgorithms.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qiterator.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qhashfunctions.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qpair.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qvector.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcontainertools_impl.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qpoint.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qbytearraylist.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringlist.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qregexp.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qstringmatcher.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcoreevent.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qscopedpointer.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qmetatype.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qvarlengtharray.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcontainerfwd.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qobject_impl.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/QSqlDatabase \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qsqldatabase.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qtsqlglobal.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qtsql-config.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/QSqlError \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qsqlerror.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/QSqlQuery \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtSql/qsqlquery.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QDir \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qdir.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qfileinfo.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qfile.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qfiledevice.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qiodevice.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qshareddata.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qhash.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QCoreApplication \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcoreapplication.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qeventloop.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QDateTime \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qdatetime.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/QDebug \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qdebug.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qmap.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qtextstream.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qlocale.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qvariant.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qset.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qcontiguouscache.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qsharedpointer.h \
+		/home/hispark/qt-everywhere-src-5.15.16/SS928V100_QT_INTASLL/include/QtCore/qsharedpointer_impl.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o DatabaseManager.o src/services/DatabaseManager.cpp
+
 qrc_resources.o: qrc_resources.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o qrc_resources.o qrc_resources.cpp
 
@@ -2348,6 +2511,9 @@ moc_ControlPage.o: moc_ControlPage.cpp
 
 moc_MockFusionClient.o: moc_MockFusionClient.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_MockFusionClient.o moc_MockFusionClient.cpp
+
+moc_DatabaseManager.o: moc_DatabaseManager.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_DatabaseManager.o moc_DatabaseManager.cpp
 
 ####### Install
 

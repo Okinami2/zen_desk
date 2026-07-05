@@ -294,7 +294,7 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
     QLabel *gradeTitle = new QLabel("学习状态评估");
     gradeTitle->setStyleSheet("font-size: 14px; color: #6B7280; background: transparent;");
 
-    QLabel *gradeVal = new QLabel("A");
+    gradeVal = new QLabel("A");
     gradeVal->setAlignment(Qt::AlignCenter);
     gradeVal->setFixedHeight(80);
     gradeVal->setStyleSheet(
@@ -305,7 +305,7 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
         "letter-spacing: -2px;"
     );
 
-    QLabel *gradeDesc = new QLabel("状态良好，保持专注！");
+    gradeDesc = new QLabel("状态良好，保持专注！");
     gradeDesc->setAlignment(Qt::AlignCenter);
     gradeDesc->setStyleSheet("font-size: 14px; color: #10B981; background: transparent;");
 
@@ -346,7 +346,7 @@ StatsPage::StatsPage(QWidget *parent) : QWidget(parent)
         return row;
     };
 
-    distLay->addWidget(makeDistRow("😶", "发呆次数", "0 次", QColor(0xF5,0x9E,0x0B), distractedCountVal));
+    distLay->addWidget(makeDistRow("😶", "走神次数", "0 次", QColor(0xF5,0x9E,0x0B), distractedCountVal));
     distLay->addWidget(makeDistRow("⏱", "走神时长", "0 分钟", QColor(0xEF,0x44,0x44), distractedTimeVal));
     distLay->addWidget(makeDistRow("🚶", "离座次数", "0 次", QColor(0x6B,0x72,0x80), absentCountVal));
     rightLay->addWidget(distCard);
@@ -373,6 +373,52 @@ void StatsPage::updateStatsData(int totalSeconds, int absentCount, int distracte
     absentCountVal->setText(QString("%1 次").arg(absentCount));
     distractedCountVal->setText(QString("%1 次").arg(distractedCount));
     distractedTimeVal->setText(QString("%1 分钟").arg(distractedSeconds / 60));
+
+    // 学习状态评估算法
+    double focusRate = 100.0;
+    if (totalSeconds > 0) {
+        focusRate = (effectiveSeconds * 100.0) / totalSeconds;
+    }
+    double disturbanceScore = 100.0 - (distractedCount + absentCount) * 5.0;
+    if (disturbanceScore < 0) disturbanceScore = 0;
+    
+    double finalScore = focusRate * 0.7 + disturbanceScore * 0.3;
+
+    QString grade = "C";
+    QString desc = "频繁分心，建议稍作休息调整状态。";
+    QString color = "#EF4444"; // 红色
+    QString bgColor = "#FEE2E2";
+
+    if (finalScore >= 90 && absentCount == 0) {
+        grade = "S";
+        desc = "心如止水，极致专注！";
+        color = "#8B5CF6"; // 紫色
+        bgColor = "#EDE9FE";
+    } else if (finalScore >= 80) {
+        grade = "A";
+        desc = "状态良好，继续保持！";
+        color = "#10B981"; // 绿色
+        bgColor = "#D1FAE5";
+    } else if (finalScore >= 60) {
+        grade = "B";
+        desc = "表现及格，但还有提升空间。";
+        color = "#F59E0B"; // 橙色
+        bgColor = "#FEF3C7";
+    }
+
+    if (gradeVal && gradeDesc) {
+        gradeVal->setText(grade);
+        gradeVal->setStyleSheet(QString(
+            "font-size: 72px; font-weight: 900;"
+            "color: %1;"
+            "background: %2;"
+            "border-radius: 16px;"
+            "letter-spacing: -2px;"
+        ).arg(color).arg(bgColor));
+
+        gradeDesc->setText(desc);
+        gradeDesc->setStyleSheet(QString("font-size: 14px; color: %1; background: transparent;").arg(color));
+    }
 }
 
 void StatsPage::updateTimelineData(const QVector<QVector<int>> &segments,
