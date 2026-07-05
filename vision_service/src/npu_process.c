@@ -2105,7 +2105,7 @@ static td_s32 sample_svp_prepare_pose_detector_input(td_void)
                 SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX, g_pose_det_input_virt,
                 g_pose_det_input_size, g_pose_det_input_stride,
                 SAMPLE_SVP_POSE_DET_INPUT_W, SAMPLE_SVP_POSE_DET_INPUT_H,
-                x + pad_x, y + pad_y, r, g, b, 1.0f / 127.5f, -1.0f) != TD_SUCCESS,
+                x + pad_x, y + pad_y, r, g, b, 1.0f / 255.0f, 0.0f) != TD_SUCCESS,
                 TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "write pose detector pixel failed\n");
         }
     }
@@ -2218,7 +2218,10 @@ static td_s32 sample_svp_decode_pose_detection(sample_svp_pose_detection *det,
     }
 
     for (i = 0; i < SAMPLE_SVP_POSE_ANCHOR_NUM; i++) {
-        td_float score = sample_svp_sigmoid_f32(scores[i]);
+        td_float score = scores[i];
+        if (score < 0.0f || score > 1.0f) {
+            score = sample_svp_sigmoid_f32(score);
+        }
         if (score > best_score) {
             best_score = score;
             best_idx = i;

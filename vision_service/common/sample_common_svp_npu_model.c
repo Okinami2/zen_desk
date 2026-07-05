@@ -830,9 +830,10 @@ td_s32 sample_common_svp_npu_model_execute(const sample_svp_npu_task_info *task)
             sample_svp_check_exps_return(size == 0, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
                 "get %u-th output data size is 0!\n", i);
 
-            ret = svp_acl_rt_mem_flush(data, size);
-            sample_svp_check_exps_return(data_buffer == TD_NULL, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
-                "flush %u-th output data failed, error code is %d!\n", i, ret);
+            size = (size + 63) & ~63;
+            ret = svp_acl_rt_mem_invalidate(data, size);
+            sample_svp_check_exps_return(ret != SVP_ACL_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+                "invalidate %u-th output data failed, error code is %d!\n", i, ret);
         }
     }
     return ret;

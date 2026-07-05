@@ -314,10 +314,10 @@ td_s32 vision_display_start(const td_char *ready_file)
         return TD_FAILURE;
     }
 
-    if (show_test_pattern(&g_display) != 0) {
-        vision_display_stop();
-        return TD_FAILURE;
-    }
+    // if (show_test_pattern(&g_display) != 0) {
+    //     vision_display_stop();
+    //     return TD_FAILURE;
+    // }
 
     if (write_ready_file(&g_display, ready_file) != TD_SUCCESS) {
         vision_display_stop();
