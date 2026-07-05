@@ -256,11 +256,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     micIconLabel->move((screenRect.width() - 160) / 2, screenRect.height() - 120); // 绝对居中靠下
     micIconLabel->hide();
 
-    // 左下角常驻 test 字样
-    QLabel *testLabel = new QLabel("test", this);
-    testLabel->setStyleSheet("color: rgba(255,255,255,100); font-size: 24px; font-weight: bold; background: transparent;");
-    testLabel->move(20, height() - 50); // 左下角
-    testLabel->show();
 
     micTimer = new QTimer(this);
     micTimer->setSingleShot(true);
