@@ -4,10 +4,12 @@ Zen Desk 是面向 SS928 开发板的多模态学习状态感知项目，当前�
 
 ## 当前稳定版能力
 
-视觉服务当前默认运行两个 NPU 模型：
+视觉服务当前默认运行四个 NPU 模型，其中坐姿检测按低频调度执行：
 
-1. `face_detection.om`: SCRFD 人脸检测。
-2. `landmark106.om`: 106 点人脸关键点。
+1. `face_detection.om`: SCRFD 人脸检测，每帧执行。
+2. `landmark106.om`: 106 点人脸关键点，每帧在检测到人脸后执行。
+3. `pose_detector.om`: MediaPipe Pose 检测，默认 2 秒执行一次。
+4. `pose_landmarks_detector.om`: MediaPipe Pose 关键点，默认 2 秒执行一次。
 
 当前的注意力方向由 106 点规则估计得到：
 
@@ -27,7 +29,19 @@ Zen Desk 是面向 SS928 开发板的多模态学习状态感知项目，当前�
 - `no_face`: 未检测到人脸
 - `error`: 推理失败
 
-这版目标是稳定判断“是否注意前方/是否低头/是否闭眼/是否打哈欠”。
+坐姿模型不会每帧运行，默认 0.5Hz，用上一轮结果缓存到每帧 telemetry，避免额外 resize 把整体帧率拖慢。
+
+`posture` 取值：
+
+- `normal`: 坐姿正常
+- `shoulder_tilt`: 肩部明显倾斜
+- `lean_left`: 身体左倾
+- `lean_right`: 身体右倾
+- `head_offset`: 头部相对肩部明显偏移
+- `unknown`: 关键点置信度不足
+- `no_pose`: 未检测到人体
+
+这版目标是稳定判断“是否注意前方/是否低头/是否闭眼/是否打哈欠/坐姿是否规范”。
 
 ## 目录结构
 
@@ -112,7 +126,7 @@ VISION_ENABLE=0 ./scripts/start_all.sh
 
 - `frame_XXXXXXXX.raw.nv21`: 原始 NV21 帧。
 - `frame_XXXXXXXX.annotated.ppm`: 带人脸框和关键点的图。
-- `frame_XXXXXXXX.json`: telemetry 摘要和 106 点坐标。
+- `frame_XXXXXXXX.json`: telemetry 摘要、106 点人脸坐标和低频 pose 坐标。
 
 JSON 中重点字段：
 
@@ -122,6 +136,10 @@ JSON 中重点字段：
 - `pitch`
 - `roll`
 - `attention`
+- `posture`
+- `posture_ok`
+- `pose_present`
+- `pose_age_ms`
 - `eyes_closed`
 - `yawning`
 - `blink_count`
@@ -131,7 +149,7 @@ JSON 中重点字段：
 ## 下一步工作
 
 1. 稳定版调参：根据实际坐姿采样调整 `attention` 的 yaw/pitch 阈值。
-2. 接入融合：将 `attention/eyes_closed/yawning` 映射到 fusion_service 的学习状态。
+2. 接入融合：将 `attention/posture/eyes_closed/yawning` 映射到 fusion_service 的学习状态。
 3. 清理调试 dump 开关，区分比赛演示模式和模型调试模式。
 
 ## 常见问题

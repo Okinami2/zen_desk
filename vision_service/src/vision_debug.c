@@ -16,7 +16,7 @@
 #include "securec.h"
 #include "vision_media.h"
 
-#define VISION_JSON_BUFFER_SIZE 1024
+#define VISION_JSON_BUFFER_SIZE 2048
 #define VISION_COLOR_RED_R      255
 #define VISION_COLOR_GREEN_G    255
 #define VISION_COLOR_BLUE_B     255
@@ -142,7 +142,9 @@ static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
         "{\"frame_id\":%llu,\"timestamp_ms\":%llu,\"ok\":%s,"
         "\"has_face\":%s,\"face\":[%.2f,%.2f,%.2f,%.2f],"
         "\"score\":%.5f,\"yaw\":%.3f,\"pitch\":%.3f,\"roll\":%.3f,"
-        "\"attention\":\"%s\","
+        "\"attention\":\"%s\",\"posture\":\"%s\",\"posture_ok\":%s,"
+        "\"pose_present\":%s,\"pose_score\":%.3f,\"pose_detection_score\":%.3f,"
+        "\"pose_age_ms\":%.0f,\"pose_updated\":%s,"
         "\"eyes_closed\":%s,\"yawning\":%s,\"blink_count\":%u,"
         "\"yawn_count\":%u,\"inference_ms\":%.3f}\n",
         (unsigned long long)frame_id,
@@ -153,6 +155,12 @@ static td_s32 vision_debug_format_summary(td_char *buffer, size_t size,
         result->face.score, result->attention.yaw_deg, result->attention.pitch_deg,
         result->attention.roll_deg,
         vision_debug_attention_label(result, infer_ret),
+        result->pose.label[0] != '\0' ? result->pose.label : "unknown",
+        result->pose.posture_ok == TD_TRUE ? "true" : "false",
+        result->pose.has_pose == TD_TRUE ? "true" : "false",
+        result->pose.score, result->pose.detection_score,
+        result->pose.age_s * 1000.0f,
+        result->pose.updated == TD_TRUE ? "true" : "false",
         result->state_snapshot.eyes_closed == TD_TRUE ? "true" : "false",
         result->state_snapshot.yawning == TD_TRUE ? "true" : "false",
         result->state_snapshot.blink_count, result->state_snapshot.yawn_count,
@@ -370,6 +378,19 @@ static td_s32 vision_debug_write_json(const td_char *path,
     for (i = 0; i < result->landmark.point_num && i < SAMPLE_SVP_LANDMARK_NUM; i++) {
         if (fprintf(file, "%s[%.3f,%.3f]", i == 0 ? "" : ",",
             result->landmark.points[i][0], result->landmark.points[i][1]) < 0) {
+            fclose(file);
+            return TD_FAILURE;
+        }
+    }
+    if (fputs("],\"pose_landmarks\":[", file) == EOF) {
+        fclose(file);
+        return TD_FAILURE;
+    }
+    for (i = 0; i < result->pose.landmark_num && i < SAMPLE_SVP_POSE_LANDMARK_NUM; i++) {
+        if (fprintf(file, "%s[%.3f,%.3f,%.3f,%.3f,%.3f]", i == 0 ? "" : ",",
+            result->pose.landmarks[i][0], result->pose.landmarks[i][1],
+            result->pose.landmarks[i][2], result->pose.landmarks[i][3],
+            result->pose.landmarks[i][4]) < 0) {
             fclose(file);
             return TD_FAILURE;
         }

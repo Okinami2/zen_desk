@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 #define SAMPLE_SVP_LANDMARK_NUM 106
+#define SAMPLE_SVP_POSE_LANDMARK_NUM 39
 
 typedef struct {
     td_float x1;
@@ -46,6 +47,18 @@ typedef struct {
     td_float pitch_deg;
     td_float roll_deg;
 } sample_svp_attention_result;
+
+typedef struct {
+    td_bool updated;
+    td_bool has_pose;
+    td_bool posture_ok;
+    td_float score;
+    td_float detection_score;
+    td_float age_s;
+    td_char label[32];
+    td_u32 landmark_num;
+    td_float landmarks[SAMPLE_SVP_POSE_LANDMARK_NUM][5];
+} sample_svp_pose_result;
 
 typedef struct {
     td_u32 blink_count;
@@ -69,6 +82,7 @@ typedef struct {
     sample_svp_landmark106_result landmark;
     sample_svp_attention_result attention;
     sample_svp_face_state state_snapshot;
+    sample_svp_pose_result pose;
 } sample_svp_frame_result;
 
 /* abnormal termination signal */

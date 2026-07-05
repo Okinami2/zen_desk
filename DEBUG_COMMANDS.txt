@@ -28,6 +28,9 @@ tail -f out/log/radar_service.log
 1.7 查看视觉 JSON 中的注意力方向：
 grep "\"attention\"" /root/zen_desk/out/snapshots/frame_*.json | tail
 
+1.8 查看低频坐姿检测结果：
+grep "\"posture\"" /root/zen_desk/out/snapshots/frame_*.json | tail
+
 
 
 【2. 底层硬件连通性测试脚本】

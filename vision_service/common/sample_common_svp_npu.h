@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #define SAMPLE_SVP_NPU_MAX_TASK_NUM        16
-#define SAMPLE_SVP_NPU_MAX_MODEL_NUM       3
+#define SAMPLE_SVP_NPU_MAX_MODEL_NUM       4
 #define SAMPLE_SVP_NPU_EXTRA_INPUT_NUM     2
 #define SAMPLE_SVP_NPU_BYTE_BIT_NUM        8
 #define SAMPLE_SVP_NPU_SHOW_TOP_NUM        5

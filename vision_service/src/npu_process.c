@@ -30,10 +30,12 @@
 #include "sample_common_svp_npu.h"
 #include "sample_common_svp_npu_model.h"
 
-#define SAMPLE_SVP_NPU_OFFLINE_TASK_NUM      2
+#define SAMPLE_SVP_NPU_OFFLINE_TASK_NUM      4
 #define SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX    0
 #define SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX    1
-#define SAMPLE_SVP_NPU_ACTIVE_TASK_NUM       2
+#define SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX    2
+#define SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX 3
+#define SAMPLE_SVP_NPU_ACTIVE_TASK_NUM       4
 
 #define SAMPLE_SVP_NPU_INPUT_FILE_NUM_ONE    1
 #define SAMPLE_SVP_NPU_PATH_LEN              256
@@ -41,6 +43,8 @@
 
 #define SAMPLE_SVP_NPU_FACE_DET_MODEL_PATH   "./data/model/face_detection.om"
 #define SAMPLE_SVP_NPU_LANDMARK_MODEL_PATH   "./data/model/landmark106.om"
+#define SAMPLE_SVP_NPU_POSE_DET_MODEL_PATH   "./data/model/pose_detector.om"
+#define SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_PATH "./data/model/pose_landmarks_detector.om"
 
 #define SAMPLE_SVP_LANDMARK_INPUT_BIN_PATH   "./data/input/landmark_input.bin"
 
@@ -53,6 +57,18 @@
 #define SAMPLE_SVP_LANDMARK_IN_W      192
 #define SAMPLE_SVP_LANDMARK_IN_H      192
 #define SAMPLE_SVP_LANDMARK_NUM       106
+#define SAMPLE_SVP_POSE_DET_INPUT_W   224
+#define SAMPLE_SVP_POSE_DET_INPUT_H   224
+#define SAMPLE_SVP_POSE_LM_INPUT_W    256
+#define SAMPLE_SVP_POSE_LM_INPUT_H    256
+#define SAMPLE_SVP_POSE_HEATMAP_SIZE  64
+#define SAMPLE_SVP_POSE_LANDMARK_NUM  39
+#define SAMPLE_SVP_POSE_ANCHOR_NUM    2254
+#define SAMPLE_SVP_POSE_INTERVAL_S    2.0
+#define SAMPLE_SVP_POSE_DET_TH        0.50f
+#define SAMPLE_SVP_POSE_SCORE_TH      0.50f
+#define SAMPLE_SVP_POSE_VIS_TH        0.35f
+#define SAMPLE_SVP_PI_F               3.14159265358979323846f
 
 #define SAMPLE_SVP_LANDMARK_CROP_SCALE 1.50f
 #define SAMPLE_SVP_HEAD_YAW_LIMIT_DEG  45.0f
@@ -68,6 +84,19 @@ typedef struct {
     td_float translate_x;
     td_float translate_y;
 } sample_svp_landmark_affine;
+
+typedef struct {
+    td_float cx;
+    td_float cy;
+    td_float size;
+    td_float rotation;
+} sample_svp_pose_roi;
+
+typedef struct {
+    td_float score;
+    td_float box[4];
+    td_float keypoints[4][2];
+} sample_svp_pose_detection;
 
 #define SAMPLE_SVP_FACE_DET_DEBUG_FRAME_MAX   30
 #define SAMPLE_SVP_FACE_DET_SCORE_TH          0.50f
@@ -100,6 +129,18 @@ static td_u32 g_landmark_expect_h = 0;
 static td_u32 g_landmark_expect_size = 0;
 static td_u32 g_landmark_expect_stride = 0;
 static td_u8 *g_landmark_model_input_virt = TD_NULL;
+static td_u32 g_pose_det_input_size = 0;
+static td_u32 g_pose_det_input_stride = 0;
+static td_u8 *g_pose_det_input_virt = TD_NULL;
+static td_u32 g_pose_lm_input_size = 0;
+static td_u32 g_pose_lm_input_stride = 0;
+static td_u8 *g_pose_lm_input_virt = TD_NULL;
+static td_double g_pose_last_run_s = -1000.0;
+static sample_svp_pose_result g_pose_cached = {0};
+static td_float g_pose_output_tmp[2][SAMPLE_SVP_POSE_ANCHOR_NUM * 12];
+
+static svp_acl_format sample_svp_model_input_format(td_u32 model_idx);
+static svp_acl_data_type sample_svp_model_input_type(td_u32 model_idx);
 
 typedef struct {
     td_u64 frame_cnt;
@@ -1079,13 +1120,38 @@ static td_s32 sample_svp_npu_pipeline_load_models(td_void)
         return TD_FAILURE;
     }
     sample_svp_trace_info("Landmark model loaded, id=%u\n", SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX);
+
+    ret = sample_common_svp_npu_load_model(SAMPLE_SVP_NPU_POSE_DET_MODEL_PATH,
+        SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX, TD_TRUE);
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("load pose detector model failed!\n");
+        (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX);
+        (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX);
+        return TD_FAILURE;
+    }
+    sample_svp_trace_info("Pose detector model loaded, id=%u\n", SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX);
+
+    ret = sample_common_svp_npu_load_model(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_PATH,
+        SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX, TD_TRUE);
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("load pose landmark model failed!\n");
+        (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX);
+        (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX);
+        (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX);
+        return TD_FAILURE;
+    }
+    sample_svp_trace_info("Pose landmark model loaded, id=%u\n", SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX);
     sample_svp_trace_info("attention direction source: landmark106 head heuristic\n");
+    sample_svp_trace_info("posture source: low-frequency MediaPipe Pose models, interval=%.1fs\n",
+        (td_float)SAMPLE_SVP_POSE_INTERVAL_S);
 
     return TD_SUCCESS;
 }
 
 static td_void sample_svp_npu_pipeline_unload_models(td_void)
 {
+    (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX);
+    (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX);
     (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX);
     (td_void)sample_common_svp_npu_unload_model(SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX);
 }
@@ -1098,10 +1164,16 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     ot_size landmark_input_size = {0};
     td_u8 *det_input_virt = TD_NULL;
     td_u8 *landmark_input_virt = TD_NULL;
+    td_u8 *pose_det_input_virt = TD_NULL;
+    td_u8 *pose_lm_input_virt = TD_NULL;
     td_u32 det_input_size_bytes = 0;
     td_u32 landmark_input_size_bytes = 0;
+    td_u32 pose_det_input_size_bytes = 0;
+    td_u32 pose_lm_input_size_bytes = 0;
     td_u32 det_input_stride = 0;
     td_u32 landmark_input_stride = 0;
+    td_u32 pose_det_input_stride = 0;
+    td_u32 pose_lm_input_stride = 0;
 
     g_svp_npu_terminate_signal = TD_FALSE;
 
@@ -1117,6 +1189,8 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
 
     sample_svp_npu_acl_set_task_info(0, SAMPLE_SVP_NPU_FACE_DET_MODEL_IDX, TD_TRUE);
     sample_svp_npu_acl_set_task_info(1, SAMPLE_SVP_NPU_LANDMARK_MODEL_IDX, TD_TRUE);
+    sample_svp_npu_acl_set_task_info(2, SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX, TD_TRUE);
+    sample_svp_npu_acl_set_task_info(3, SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX, TD_TRUE);
 
     ret = sample_svp_npu_acl_init_task(SAMPLE_SVP_NPU_ACTIVE_TASK_NUM);
     if (ret != TD_SUCCESS) {
@@ -1164,6 +1238,26 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     g_landmark_expect_stride = landmark_input_stride;
     g_landmark_model_input_virt = landmark_input_virt;
 
+    ret = sample_common_svp_npu_get_input_data_buffer_info(&g_svp_npu_task[2], 0,
+        &pose_det_input_virt, &pose_det_input_size_bytes, &pose_det_input_stride);
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get pose detector input data buffer info failed\n");
+        goto init_fail;
+    }
+    g_pose_det_input_virt = pose_det_input_virt;
+    g_pose_det_input_size = pose_det_input_size_bytes;
+    g_pose_det_input_stride = pose_det_input_stride;
+
+    ret = sample_common_svp_npu_get_input_data_buffer_info(&g_svp_npu_task[3], 0,
+        &pose_lm_input_virt, &pose_lm_input_size_bytes, &pose_lm_input_stride);
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get pose landmark input data buffer info failed\n");
+        goto init_fail;
+    }
+    g_pose_lm_input_virt = pose_lm_input_virt;
+    g_pose_lm_input_size = pose_lm_input_size_bytes;
+    g_pose_lm_input_stride = pose_lm_input_stride;
+
     if (g_face_det_resized_buf != TD_NULL) {
         free(g_face_det_resized_buf);
         g_face_det_resized_buf = TD_NULL;
@@ -1184,6 +1278,16 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     sample_svp_trace_info("landmark model input: %ux%u size=%u stride=%u\n",
         landmark_input_size.width, landmark_input_size.height,
         landmark_input_size_bytes, landmark_input_stride);
+    sample_svp_trace_info("pose detector input: %ux%u size=%u stride=%u format=%d type=%d\n",
+        SAMPLE_SVP_POSE_DET_INPUT_W, SAMPLE_SVP_POSE_DET_INPUT_H,
+        pose_det_input_size_bytes, pose_det_input_stride,
+        sample_svp_model_input_format(SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX),
+        sample_svp_model_input_type(SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX));
+    sample_svp_trace_info("pose landmark input: %ux%u size=%u stride=%u format=%d type=%d\n",
+        SAMPLE_SVP_POSE_LM_INPUT_W, SAMPLE_SVP_POSE_LM_INPUT_H,
+        pose_lm_input_size_bytes, pose_lm_input_stride,
+        sample_svp_model_input_format(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX),
+        sample_svp_model_input_type(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX));
 
     return TD_SUCCESS;
 
@@ -1202,6 +1306,12 @@ init_fail:
     g_landmark_expect_h = 0;
     g_landmark_expect_size = 0;
     g_landmark_expect_stride = 0;
+    g_pose_det_input_virt = TD_NULL;
+    g_pose_det_input_size = 0;
+    g_pose_det_input_stride = 0;
+    g_pose_lm_input_virt = TD_NULL;
+    g_pose_lm_input_size = 0;
+    g_pose_lm_input_stride = 0;
     sample_svp_npu_acl_deinit_task(SAMPLE_SVP_NPU_ACTIVE_TASK_NUM);
     sample_svp_npu_pipeline_unload_models();
     sample_svp_npu_acl_deinit();
@@ -1230,6 +1340,12 @@ static td_void sample_svp_npu_pipeline_deinit(td_void)
     g_landmark_expect_h = 0;
     g_landmark_expect_size = 0;
     g_landmark_expect_stride = 0;
+    g_pose_det_input_virt = TD_NULL;
+    g_pose_det_input_size = 0;
+    g_pose_det_input_stride = 0;
+    g_pose_lm_input_virt = TD_NULL;
+    g_pose_lm_input_size = 0;
+    g_pose_lm_input_stride = 0;
 }
 
 /* ----------------------------- 单模型执行辅助 ----------------------------- */
@@ -1554,6 +1670,657 @@ static td_s32 sample_svp_estimate_head_from_landmarks(const sample_svp_landmark1
     return TD_SUCCESS;
 }
 
+
+/* ----------------------------- 低频坐姿检测 ----------------------------- */
+
+static td_float sample_svp_sigmoid_f32(td_float value)
+{
+    if (value < -80.0f) {
+        value = -80.0f;
+    } else if (value > 80.0f) {
+        value = 80.0f;
+    }
+    return 1.0f / (1.0f + expf(-value));
+}
+
+static td_float sample_svp_normalize_angle(td_float angle)
+{
+    while (angle > SAMPLE_SVP_PI_F) {
+        angle -= (2.0f * SAMPLE_SVP_PI_F);
+    }
+    while (angle < (td_float)-M_PI) {
+        angle += (2.0f * SAMPLE_SVP_PI_F);
+    }
+    return angle;
+}
+
+
+static td_u16 sample_svp_float_to_fp16(td_float value)
+{
+    union {
+        td_float f;
+        td_u32 u;
+    } in;
+    td_u32 sign;
+    td_s32 exp;
+    td_u32 mantissa;
+
+    in.f = value;
+    sign = (in.u >> 16) & 0x8000U;
+    exp = (td_s32)((in.u >> 23) & 0xffU) - 127 + 15;
+    mantissa = in.u & 0x7fffffU;
+
+    if (exp <= 0) {
+        if (exp < -10) {
+            return (td_u16)sign;
+        }
+        mantissa = (mantissa | 0x800000U) >> (td_u32)(1 - exp);
+        return (td_u16)(sign | ((mantissa + 0x1000U) >> 13));
+    }
+    if (exp >= 31) {
+        return (td_u16)(sign | 0x7c00U);
+    }
+    return (td_u16)(sign | ((td_u32)exp << 10) | ((mantissa + 0x1000U) >> 13));
+}
+
+static td_float sample_svp_fp16_to_float(td_u16 value)
+{
+    td_u32 sign = ((td_u32)value & 0x8000U) << 16;
+    td_u32 exp = ((td_u32)value >> 10) & 0x1fU;
+    td_u32 mantissa = (td_u32)value & 0x03ffU;
+    union {
+        td_u32 u;
+        td_float f;
+    } out;
+
+    if (exp == 0) {
+        if (mantissa == 0) {
+            out.u = sign;
+            return out.f;
+        }
+        while ((mantissa & 0x0400U) == 0) {
+            mantissa <<= 1;
+            exp--;
+        }
+        exp++;
+        mantissa &= 0x03ffU;
+    } else if (exp == 31) {
+        out.u = sign | 0x7f800000U | (mantissa << 13);
+        return out.f;
+    }
+
+    exp = exp + (127 - 15);
+    out.u = sign | (exp << 23) | (mantissa << 13);
+    return out.f;
+}
+
+static svp_acl_format sample_svp_model_input_format(td_u32 model_idx)
+{
+    sample_svp_npu_model_info *info = sample_common_svp_npu_get_model_info(model_idx);
+    if (info == TD_NULL || info->model_desc == TD_NULL) {
+        return SVP_ACL_FORMAT_UNDEFINED;
+    }
+    return svp_acl_mdl_get_input_format(info->model_desc, 0);
+}
+
+static svp_acl_data_type sample_svp_model_input_type(td_u32 model_idx)
+{
+    sample_svp_npu_model_info *info = sample_common_svp_npu_get_model_info(model_idx);
+    if (info == TD_NULL || info->model_desc == TD_NULL) {
+        return SVP_ACL_DT_UNDEFINED;
+    }
+    return svp_acl_mdl_get_input_data_type(info->model_desc, 0);
+}
+
+static svp_acl_data_type sample_svp_model_output_type(const sample_svp_npu_task_info *task, td_u32 idx)
+{
+    sample_svp_npu_model_info *info;
+    if (task == TD_NULL) {
+        return SVP_ACL_DT_UNDEFINED;
+    }
+    info = sample_common_svp_npu_get_model_info(task->cfg.model_idx);
+    if (info == TD_NULL || info->model_desc == TD_NULL) {
+        return SVP_ACL_DT_UNDEFINED;
+    }
+    return svp_acl_mdl_get_output_data_type(info->model_desc, idx);
+}
+
+static td_s32 sample_svp_model_input_dims(td_u32 model_idx, svp_acl_mdl_io_dims *dims)
+{
+    sample_svp_npu_model_info *info = sample_common_svp_npu_get_model_info(model_idx);
+    sample_svp_check_exps_return(info == TD_NULL || info->model_desc == TD_NULL || dims == TD_NULL,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose model dims args invalid\n");
+    return (svp_acl_mdl_get_input_dims(info->model_desc, 0, dims) == SVP_ACL_SUCCESS) ?
+        TD_SUCCESS : TD_FAILURE;
+}
+
+static td_bool sample_svp_input_layout_nhwc(td_u32 model_idx)
+{
+    svp_acl_mdl_io_dims dims = {0};
+    if (sample_svp_model_input_dims(model_idx, &dims) != TD_SUCCESS || dims.dim_count != 4) {
+        return TD_FALSE;
+    }
+    return (dims.dims[3] == 3) ? TD_TRUE : TD_FALSE;
+}
+
+static td_s32 sample_svp_write_rgb_to_model_input(td_u32 model_idx, td_u8 *dst, td_u32 size,
+    td_u32 stride, td_u32 w, td_u32 h, td_u32 x, td_u32 y, td_float r, td_float g, td_float b,
+    td_float scale, td_float bias)
+{
+    svp_acl_format format = sample_svp_model_input_format(model_idx);
+    svp_acl_data_type data_type = sample_svp_model_input_type(model_idx);
+    td_bool nhwc = sample_svp_input_layout_nhwc(model_idx);
+    td_float vr = r * scale + bias;
+    td_float vg = g * scale + bias;
+    td_float vb = b * scale + bias;
+    size_t idx;
+
+    (void)stride;
+    sample_svp_check_exps_return(dst == TD_NULL || x >= w || y >= h,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose input args invalid\n");
+
+    if (format == SVP_ACL_FORMAT_NC1HWC0 && data_type == SVP_ACL_FLOAT16) {
+        td_u16 *dst_h = (td_u16 *)dst;
+        sample_svp_check_exps_return(size < (size_t)w * h * 16 * sizeof(td_u16),
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose FP16 NC1HWC0 layout invalid\n");
+        idx = ((size_t)y * w + x) * 16;
+        dst_h[idx] = sample_svp_float_to_fp16(vr);
+        dst_h[idx + 1] = sample_svp_float_to_fp16(vg);
+        dst_h[idx + 2] = sample_svp_float_to_fp16(vb);
+        return TD_SUCCESS;
+    }
+    if (format == SVP_ACL_FORMAT_NC1HWC0 && data_type == SVP_ACL_FLOAT) {
+        td_float *dst_f = (td_float *)dst;
+        sample_svp_check_exps_return(size < (size_t)w * h * 16 * sizeof(td_float),
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose FP32 NC1HWC0 layout invalid\n");
+        idx = ((size_t)y * w + x) * 16;
+        dst_f[idx] = vr;
+        dst_f[idx + 1] = vg;
+        dst_f[idx + 2] = vb;
+        return TD_SUCCESS;
+    }
+    if (format == SVP_ACL_FORMAT_NCHW && data_type == SVP_ACL_FLOAT &&
+        size >= (size_t)w * h * 4 * sizeof(td_float)) {
+        td_float *dst_f = (td_float *)dst;
+        size_t plane = (size_t)w * h;
+        idx = (size_t)y * w + x;
+        dst_f[idx] = vr;
+        dst_f[plane + idx] = vg;
+        dst_f[2 * plane + idx] = vb;
+        return TD_SUCCESS;
+    }
+
+    if (data_type == SVP_ACL_FLOAT && nhwc == TD_TRUE) {
+        td_float *dst_f = (td_float *)dst;
+        td_u32 stride_f;
+        sample_svp_check_exps_return(stride == 0 || stride % sizeof(td_float) != 0,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose NHWC stride invalid\n");
+        stride_f = stride / sizeof(td_float);
+        sample_svp_check_exps_return(stride_f < w * 3 || size < h * stride,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose NHWC layout invalid\n");
+        idx = (size_t)y * stride_f + x * 3;
+        dst_f[idx] = vr;
+        dst_f[idx + 1] = vg;
+        dst_f[idx + 2] = vb;
+        return TD_SUCCESS;
+    }
+    if (data_type == SVP_ACL_FLOAT) {
+        td_float *dst_f = (td_float *)dst;
+        td_u32 stride_f;
+        sample_svp_check_exps_return(stride == 0 || stride % sizeof(td_float) != 0,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose NCHW stride invalid\n");
+        stride_f = stride / sizeof(td_float);
+        sample_svp_check_exps_return(stride_f < w || size < 3 * h * stride,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose NCHW layout invalid\n");
+        idx = (size_t)y * stride_f + x;
+        dst_f[idx] = vr;
+        dst_f[(size_t)h * stride_f + idx] = vg;
+        dst_f[(size_t)2 * h * stride_f + idx] = vb;
+        return TD_SUCCESS;
+    }
+
+    sample_svp_trace_err("unsupported pose input format=%d type=%d\n", format, data_type);
+    return TD_FAILURE;
+}
+
+static td_s32 sample_svp_prepare_pose_detector_input(td_void)
+{
+    const td_u8 *src = g_svp_npu_face_det_frame_virt;
+    const td_u8 *src_y;
+    const td_u8 *src_vu;
+    td_u32 src_w = g_svp_npu_face_det_frame.video_frame.width;
+    td_u32 src_h = g_svp_npu_face_det_frame.video_frame.height;
+    td_u32 src_stride_y = g_svp_npu_face_det_frame.video_frame.stride[0];
+    td_u32 src_stride_uv = g_svp_npu_face_det_frame.video_frame.stride[1];
+    td_float scale;
+    td_u32 resized_w;
+    td_u32 resized_h;
+    td_u32 pad_x;
+    td_u32 pad_y;
+    td_u32 x;
+    td_u32 y;
+    svp_acl_error acl_ret;
+
+    sample_svp_check_exps_return(src == TD_NULL || g_pose_det_input_virt == TD_NULL,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose detector input invalid\n");
+
+    (td_void)memset_s(g_pose_det_input_virt, g_pose_det_input_size, 0, g_pose_det_input_size);
+    src_y = src;
+    src_vu = src + (size_t)src_stride_y * src_h;
+    scale = fminf((td_float)SAMPLE_SVP_POSE_DET_INPUT_W / src_w,
+        (td_float)SAMPLE_SVP_POSE_DET_INPUT_H / src_h);
+    resized_w = (td_u32)floorf(src_w * scale + 0.5f);
+    resized_h = (td_u32)floorf(src_h * scale + 0.5f);
+    pad_x = (SAMPLE_SVP_POSE_DET_INPUT_W - resized_w) / 2;
+    pad_y = (SAMPLE_SVP_POSE_DET_INPUT_H - resized_h) / 2;
+
+    for (y = 0; y < resized_h; y++) {
+        td_u32 sy = (td_u32)fminf(floorf(((td_float)y + 0.5f) / scale), (td_float)(src_h - 1));
+        for (x = 0; x < resized_w; x++) {
+            td_u32 sx = (td_u32)fminf(floorf(((td_float)x + 0.5f) / scale), (td_float)(src_w - 1));
+            td_float r, g, b;
+            sample_svp_nv21_get_rgb(src_y, src_vu, src_stride_y, src_stride_uv, sx, sy, &r, &g, &b);
+            sample_svp_check_exps_return(sample_svp_write_rgb_to_model_input(
+                SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX, g_pose_det_input_virt,
+                g_pose_det_input_size, g_pose_det_input_stride,
+                SAMPLE_SVP_POSE_DET_INPUT_W, SAMPLE_SVP_POSE_DET_INPUT_H,
+                x + pad_x, y + pad_y, r, g, b, 1.0f / 127.5f, -1.0f) != TD_SUCCESS,
+                TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "write pose detector pixel failed\n");
+        }
+    }
+
+    acl_ret = svp_acl_rt_mem_flush(g_pose_det_input_virt, g_pose_det_input_size);
+    sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "flush pose detector input failed, ret=%d\n", acl_ret);
+    return TD_SUCCESS;
+}
+
+static td_void sample_svp_pose_anchor(td_u32 index, td_float *ax, td_float *ay)
+{
+    td_u32 base = 0;
+    td_u32 stride;
+    td_u32 anchors_per_cell;
+    td_u32 feature;
+    td_u32 cell;
+    td_u32 pos;
+
+    if (index < 28 * 28 * 2) {
+        stride = 8;
+        anchors_per_cell = 2;
+    } else if (index < 28 * 28 * 2 + 14 * 14 * 2) {
+        base = 28 * 28 * 2;
+        stride = 16;
+        anchors_per_cell = 2;
+    } else {
+        base = 28 * 28 * 2 + 14 * 14 * 2;
+        stride = 32;
+        anchors_per_cell = 6;
+    }
+    feature = (SAMPLE_SVP_POSE_DET_INPUT_W + stride - 1) / stride;
+    cell = (index - base) / anchors_per_cell;
+    pos = cell % feature;
+    *ax = ((td_float)pos + 0.5f) / feature;
+    *ay = ((td_float)(cell / feature) + 0.5f) / feature;
+}
+
+static td_s32 sample_svp_pose_output_f32(const sample_svp_npu_task_info *task, td_u32 idx,
+    td_float **data, td_u32 *num)
+{
+    svp_acl_data_buffer *buf = svp_acl_mdl_get_dataset_buffer(task->output_dataset, idx);
+    svp_acl_data_type data_type = sample_svp_model_output_type(task, idx);
+    size_t size;
+    td_u32 i;
+
+    sample_svp_check_exps_return(buf == TD_NULL || data == TD_NULL || num == TD_NULL,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose output args invalid\n");
+    *data = (td_float *)svp_acl_get_data_buffer_addr(buf);
+    size = svp_acl_get_data_buffer_size(buf);
+    sample_svp_check_exps_return(*data == TD_NULL || size == 0,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose output buffer invalid\n");
+
+    if (data_type == SVP_ACL_FLOAT) {
+        sample_svp_check_exps_return(size % sizeof(td_float) != 0,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose FP32 output size invalid\n");
+        *num = (td_u32)(size / sizeof(td_float));
+        return TD_SUCCESS;
+    }
+    if (data_type == SVP_ACL_FLOAT16) {
+        td_u16 *src = (td_u16 *)*data;
+        td_float *tmp = g_pose_output_tmp[idx & 1U];
+        sample_svp_check_exps_return(size % sizeof(td_u16) != 0,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose FP16 output size invalid\n");
+        *num = (td_u32)(size / sizeof(td_u16));
+        sample_svp_check_exps_return(*num > SAMPLE_SVP_POSE_ANCHOR_NUM * 12,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose FP16 output too large: %u\n", *num);
+        for (i = 0; i < *num; i++) {
+            tmp[i] = sample_svp_fp16_to_float(src[i]);
+        }
+        *data = tmp;
+        return TD_SUCCESS;
+    }
+
+    sample_svp_trace_err("unsupported pose output type=%d idx=%u\n", data_type, idx);
+    return TD_FAILURE;
+}
+
+static td_s32 sample_svp_decode_pose_detection(sample_svp_pose_detection *det,
+    td_float *pad_l, td_float *pad_t, td_float *scale_w, td_float *scale_h)
+{
+    td_float *boxes;
+    td_float *scores;
+    td_u32 i;
+    td_float best_score = 0.0f;
+    td_u32 best_idx = 0;
+    td_bool found = TD_FALSE;
+
+    sample_svp_check_exps_return(det == TD_NULL, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR,
+        "pose det result null\n");
+    {
+        td_float *out0;
+        td_float *out1;
+        td_u32 out0_num;
+        td_u32 out1_num;
+        sample_svp_check_exps_return(sample_svp_pose_output_f32(&g_svp_npu_task[2], 0, &out0, &out0_num) != TD_SUCCESS ||
+            sample_svp_pose_output_f32(&g_svp_npu_task[2], 1, &out1, &out1_num) != TD_SUCCESS,
+            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "get pose detector outputs failed\n");
+        if (out0_num >= SAMPLE_SVP_POSE_ANCHOR_NUM * 12 && out1_num >= SAMPLE_SVP_POSE_ANCHOR_NUM) {
+            boxes = out0;
+            scores = out1;
+        } else if (out1_num >= SAMPLE_SVP_POSE_ANCHOR_NUM * 12 && out0_num >= SAMPLE_SVP_POSE_ANCHOR_NUM) {
+            boxes = out1;
+            scores = out0;
+        } else {
+            sample_svp_trace_err("pose detector output size invalid out0=%u out1=%u\n",
+                out0_num, out1_num);
+            return TD_FAILURE;
+        }
+    }
+
+    for (i = 0; i < SAMPLE_SVP_POSE_ANCHOR_NUM; i++) {
+        td_float score = sample_svp_sigmoid_f32(scores[i]);
+        if (score > best_score) {
+            best_score = score;
+            best_idx = i;
+            found = TD_TRUE;
+        }
+    }
+    if (found != TD_TRUE || best_score < SAMPLE_SVP_POSE_DET_TH) {
+        return TD_FAILURE;
+    }
+
+    {
+        td_float ax;
+        td_float ay;
+        td_float *raw = boxes + best_idx * 12;
+        td_float x_center;
+        td_float y_center;
+        td_float width;
+        td_float height;
+        td_u32 k;
+
+        sample_svp_pose_anchor(best_idx, &ax, &ay);
+        x_center = raw[0] / SAMPLE_SVP_POSE_DET_INPUT_W + ax;
+        y_center = raw[1] / SAMPLE_SVP_POSE_DET_INPUT_H + ay;
+        width = raw[2] / SAMPLE_SVP_POSE_DET_INPUT_W;
+        height = raw[3] / SAMPLE_SVP_POSE_DET_INPUT_H;
+
+        det->score = best_score;
+        det->box[0] = (x_center - width * 0.5f - *pad_l) / *scale_w;
+        det->box[1] = (y_center - height * 0.5f - *pad_t) / *scale_h;
+        det->box[2] = (x_center + width * 0.5f - *pad_l) / *scale_w;
+        det->box[3] = (y_center + height * 0.5f - *pad_t) / *scale_h;
+        for (k = 0; k < 4; k++) {
+            det->keypoints[k][0] = (raw[4 + k * 2] / SAMPLE_SVP_POSE_DET_INPUT_W + ax - *pad_l) / *scale_w;
+            det->keypoints[k][1] = (raw[5 + k * 2] / SAMPLE_SVP_POSE_DET_INPUT_H + ay - *pad_t) / *scale_h;
+        }
+    }
+    return TD_SUCCESS;
+}
+
+static td_s32 sample_svp_pose_roi_from_detection(const sample_svp_pose_detection *det,
+    td_u32 image_w, td_u32 image_h, sample_svp_pose_roi *roi)
+{
+    td_float cx = det->keypoints[0][0] * image_w;
+    td_float cy = det->keypoints[0][1] * image_h;
+    td_float sx = det->keypoints[1][0] * image_w;
+    td_float sy = det->keypoints[1][1] * image_h;
+    td_float distance = hypotf(sx - cx, sy - cy);
+    td_float size = 2.0f * distance * 1.25f;
+
+    sample_svp_check_exps_return(roi == TD_NULL || det == TD_NULL || size < 8.0f || !isfinite(size),
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose roi invalid\n");
+    roi->cx = cx;
+    roi->cy = cy;
+    roi->size = size;
+    roi->rotation = sample_svp_normalize_angle((SAMPLE_SVP_PI_F * 0.5f) -
+        atan2f(-(sy - cy), sx - cx));
+    return TD_SUCCESS;
+}
+
+static td_s32 sample_svp_prepare_pose_landmark_input(const sample_svp_pose_roi *roi)
+{
+    const td_u8 *src = g_svp_npu_face_det_frame_virt;
+    td_u32 src_w = g_svp_npu_face_det_frame.video_frame.width;
+    td_u32 src_h = g_svp_npu_face_det_frame.video_frame.height;
+    td_u32 stride_y = g_svp_npu_face_det_frame.video_frame.stride[0];
+    td_u32 stride_uv = g_svp_npu_face_det_frame.video_frame.stride[1];
+    const td_u8 *src_y = src;
+    const td_u8 *src_vu = src + (size_t)stride_y * src_h;
+    td_float cs = cosf(roi->rotation);
+    td_float sn = sinf(roi->rotation);
+    td_u32 x;
+    td_u32 y;
+    svp_acl_error acl_ret;
+
+    sample_svp_check_exps_return(roi == TD_NULL || src == TD_NULL || g_pose_lm_input_virt == TD_NULL,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose landmark input invalid\n");
+    (td_void)memset_s(g_pose_lm_input_virt, g_pose_lm_input_size, 0, g_pose_lm_input_size);
+
+    for (y = 0; y < SAMPLE_SVP_POSE_LM_INPUT_H; y++) {
+        td_float local_y = (((td_float)y + 0.5f) / SAMPLE_SVP_POSE_LM_INPUT_H - 0.5f) * roi->size;
+        for (x = 0; x < SAMPLE_SVP_POSE_LM_INPUT_W; x++) {
+            td_float local_x = (((td_float)x + 0.5f) / SAMPLE_SVP_POSE_LM_INPUT_W - 0.5f) * roi->size;
+            td_s32 sx = (td_s32)floorf(roi->cx + local_x * cs - local_y * sn + 0.5f);
+            td_s32 sy = (td_s32)floorf(roi->cy + local_x * sn + local_y * cs + 0.5f);
+            td_float r, g, b;
+            sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h, stride_y, stride_uv,
+                sx, sy, &r, &g, &b);
+            sample_svp_check_exps_return(sample_svp_write_rgb_to_model_input(
+                SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX, g_pose_lm_input_virt,
+                g_pose_lm_input_size, g_pose_lm_input_stride,
+                SAMPLE_SVP_POSE_LM_INPUT_W, SAMPLE_SVP_POSE_LM_INPUT_H,
+                x, y, r, g, b, 1.0f / 255.0f, 0.0f) != TD_SUCCESS,
+                TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "write pose landmark pixel failed\n");
+        }
+    }
+    acl_ret = svp_acl_rt_mem_flush(g_pose_lm_input_virt, g_pose_lm_input_size);
+    sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "flush pose landmark input failed, ret=%d\n", acl_ret);
+    return TD_SUCCESS;
+}
+
+static td_void sample_svp_project_pose_landmarks(const sample_svp_pose_roi *roi,
+    sample_svp_pose_result *pose, const td_float *raw)
+{
+    td_float cs = cosf(roi->rotation);
+    td_float sn = sinf(roi->rotation);
+    td_u32 i;
+
+    pose->landmark_num = SAMPLE_SVP_POSE_LANDMARK_NUM;
+    for (i = 0; i < SAMPLE_SVP_POSE_LANDMARK_NUM; i++) {
+        td_float lx = (raw[i * 5] / SAMPLE_SVP_POSE_LM_INPUT_W - 0.5f) * roi->size;
+        td_float ly = (raw[i * 5 + 1] / SAMPLE_SVP_POSE_LM_INPUT_H - 0.5f) * roi->size;
+        pose->landmarks[i][0] = roi->cx + lx * cs - ly * sn;
+        pose->landmarks[i][1] = roi->cy + lx * sn + ly * cs;
+        pose->landmarks[i][2] = raw[i * 5 + 2] / SAMPLE_SVP_POSE_LM_INPUT_W * roi->size;
+        pose->landmarks[i][3] = sample_svp_sigmoid_f32(raw[i * 5 + 3]);
+        pose->landmarks[i][4] = sample_svp_sigmoid_f32(raw[i * 5 + 4]);
+    }
+}
+
+static td_bool sample_svp_pose_lm_ok(const sample_svp_pose_result *pose, td_u32 idx)
+{
+    return (idx < pose->landmark_num &&
+        pose->landmarks[idx][3] >= SAMPLE_SVP_POSE_VIS_TH &&
+        pose->landmarks[idx][4] >= SAMPLE_SVP_POSE_VIS_TH) ? TD_TRUE : TD_FALSE;
+}
+
+static td_void sample_svp_classify_posture(sample_svp_pose_result *pose)
+{
+    td_float lsx, lsy, rsx, rsy;
+    td_float shoulder_w;
+    td_float shoulder_tilt;
+    td_bool shoulder_ok;
+    td_bool hip_ok;
+
+    if (pose->has_pose != TD_TRUE) {
+        (td_void)strncpy_s(pose->label, sizeof(pose->label), "no_pose", sizeof(pose->label) - 1);
+        pose->posture_ok = TD_FALSE;
+        return;
+    }
+
+    shoulder_ok = sample_svp_pose_lm_ok(pose, 11) && sample_svp_pose_lm_ok(pose, 12);
+    hip_ok = sample_svp_pose_lm_ok(pose, 23) && sample_svp_pose_lm_ok(pose, 24);
+    if (shoulder_ok != TD_TRUE) {
+        (td_void)strncpy_s(pose->label, sizeof(pose->label), "unknown", sizeof(pose->label) - 1);
+        pose->posture_ok = TD_FALSE;
+        return;
+    }
+
+    lsx = pose->landmarks[11][0];
+    lsy = pose->landmarks[11][1];
+    rsx = pose->landmarks[12][0];
+    rsy = pose->landmarks[12][1];
+    shoulder_w = fmaxf(20.0f, hypotf(rsx - lsx, rsy - lsy));
+    shoulder_tilt = fabsf(rsy - lsy) / shoulder_w;
+    if (shoulder_tilt > 0.22f) {
+        (td_void)strncpy_s(pose->label, sizeof(pose->label), "shoulder_tilt", sizeof(pose->label) - 1);
+        pose->posture_ok = TD_FALSE;
+        return;
+    }
+
+    if (hip_ok == TD_TRUE) {
+        td_float shoulder_cx = (lsx + rsx) * 0.5f;
+        td_float hip_cx = (pose->landmarks[23][0] + pose->landmarks[24][0]) * 0.5f;
+        td_float lean = (shoulder_cx - hip_cx) / shoulder_w;
+        if (lean < -0.35f) {
+            (td_void)strncpy_s(pose->label, sizeof(pose->label), "lean_left", sizeof(pose->label) - 1);
+            pose->posture_ok = TD_FALSE;
+            return;
+        }
+        if (lean > 0.35f) {
+            (td_void)strncpy_s(pose->label, sizeof(pose->label), "lean_right", sizeof(pose->label) - 1);
+            pose->posture_ok = TD_FALSE;
+            return;
+        }
+    }
+
+    if (sample_svp_pose_lm_ok(pose, 0) == TD_TRUE) {
+        td_float shoulder_cx = (lsx + rsx) * 0.5f;
+        td_float nose_dx = fabsf(pose->landmarks[0][0] - shoulder_cx) / shoulder_w;
+        if (nose_dx > 0.65f) {
+            (td_void)strncpy_s(pose->label, sizeof(pose->label), "head_offset", sizeof(pose->label) - 1);
+            pose->posture_ok = TD_FALSE;
+            return;
+        }
+    }
+
+    (td_void)strncpy_s(pose->label, sizeof(pose->label), "normal", sizeof(pose->label) - 1);
+    pose->posture_ok = TD_TRUE;
+}
+
+static td_s32 sample_svp_run_pose_once(sample_svp_pose_result *pose)
+{
+    td_s32 ret;
+    sample_svp_pose_detection det = {0};
+    sample_svp_pose_roi roi = {0};
+    td_float frame_w = (td_float)g_svp_npu_face_det_frame.video_frame.width;
+    td_float frame_h = (td_float)g_svp_npu_face_det_frame.video_frame.height;
+    td_float scale = fminf((td_float)SAMPLE_SVP_POSE_DET_INPUT_W / frame_w,
+        (td_float)SAMPLE_SVP_POSE_DET_INPUT_H / frame_h);
+    td_float resized_w = frame_w * scale;
+    td_float resized_h = frame_h * scale;
+    td_float pad_l = ((td_float)SAMPLE_SVP_POSE_DET_INPUT_W - resized_w) * 0.5f /
+        SAMPLE_SVP_POSE_DET_INPUT_W;
+    td_float pad_t = ((td_float)SAMPLE_SVP_POSE_DET_INPUT_H - resized_h) * 0.5f /
+        SAMPLE_SVP_POSE_DET_INPUT_H;
+    td_float scale_w = resized_w / SAMPLE_SVP_POSE_DET_INPUT_W;
+    td_float scale_h = resized_h / SAMPLE_SVP_POSE_DET_INPUT_H;
+    td_float *raw_lm;
+    td_float *score_data;
+    td_u32 raw_num;
+    td_u32 score_num;
+
+    (td_void)memset_s(pose, sizeof(*pose), 0, sizeof(*pose));
+    ret = sample_svp_prepare_pose_detector_input();
+    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare pose detector failed\n");
+    ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[2]);
+    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "run pose detector failed\n");
+    if (sample_svp_decode_pose_detection(&det, &pad_l, &pad_t, &scale_w, &scale_h) != TD_SUCCESS ||
+        sample_svp_pose_roi_from_detection(&det, (td_u32)frame_w, (td_u32)frame_h, &roi) != TD_SUCCESS) {
+        pose->detection_score = det.score;
+        sample_svp_classify_posture(pose);
+        return TD_SUCCESS;
+    }
+
+    ret = sample_svp_prepare_pose_landmark_input(&roi);
+    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare pose landmark failed\n");
+    ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[3]);
+    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
+        SAMPLE_SVP_ERR_LEVEL_ERROR, "run pose landmark failed\n");
+    sample_svp_check_exps_return(sample_svp_pose_output_f32(&g_svp_npu_task[3], 0, &raw_lm, &raw_num) != TD_SUCCESS ||
+        sample_svp_pose_output_f32(&g_svp_npu_task[3], 1, &score_data, &score_num) != TD_SUCCESS,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "get pose landmark outputs failed\n");
+    sample_svp_check_exps_return(raw_num < SAMPLE_SVP_POSE_LANDMARK_NUM * 5 || score_num < 1,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose landmark output size invalid\n");
+
+    pose->score = score_data[0];
+    if (pose->score < 0.0f || pose->score > 1.0f) {
+        pose->score = sample_svp_sigmoid_f32(pose->score);
+    }
+    pose->detection_score = det.score;
+    if (pose->score >= SAMPLE_SVP_POSE_SCORE_TH) {
+        pose->has_pose = TD_TRUE;
+        sample_svp_project_pose_landmarks(&roi, pose, raw_lm);
+    }
+    sample_svp_classify_posture(pose);
+    return TD_SUCCESS;
+}
+
+static td_void sample_svp_copy_pose_cached(sample_svp_frame_result *result, td_double now)
+{
+    result->pose = g_pose_cached;
+    result->pose.updated = TD_FALSE;
+    result->pose.age_s = (td_float)fmax(0.0, now - g_pose_last_run_s);
+}
+
+static td_void sample_svp_maybe_run_pose(sample_svp_frame_result *result, td_double now)
+{
+    sample_svp_pose_result pose = {0};
+
+    if (now - g_pose_last_run_s < SAMPLE_SVP_POSE_INTERVAL_S) {
+        sample_svp_copy_pose_cached(result, now);
+        return;
+    }
+    if (sample_svp_run_pose_once(&pose) == TD_SUCCESS) {
+        pose.updated = TD_TRUE;
+        pose.age_s = 0.0f;
+        g_pose_cached = pose;
+        g_pose_last_run_s = now;
+        result->pose = pose;
+        sample_svp_trace_info("pose posture=%s ok=%d score=%.3f det=%.3f interval=%.1fs\n",
+            pose.label, pose.posture_ok, pose.score, pose.detection_score,
+            (td_float)SAMPLE_SVP_POSE_INTERVAL_S);
+    } else {
+        sample_svp_copy_pose_cached(result, now);
+        sample_svp_trace_err("pose low-frequency inference failed; keeping cached result\n");
+    }
+}
+
+
 static td_void sample_svp_update_face_state(const sample_svp_landmark106_result *lm,
     const sample_svp_attention_result *attention, sample_svp_face_state *state)
 {
@@ -1769,6 +2536,7 @@ static td_s32 sample_svp_npu_run_frame_pipeline_once(sample_svp_frame_result *re
     ret = sample_svp_npu_run_face_det_with_video_frame(&faces);
     sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "run face_detection.om failed\n");
     t1 = sample_svp_now_seconds();
+    sample_svp_maybe_run_pose(result, t1);
 
     if (!sample_svp_select_largest_face(&faces, width, height, &best_face)) {
         result->has_face = TD_FALSE;
