@@ -60,8 +60,8 @@ int parse_radar_frame(const unsigned char *buffer, int len, RadarData *out_data)
                 out_data->distance_cm = buffer[i+7] | (buffer[i+8] << 8);
 
                 for (j = 0; j < 16; j++) {
-                    /* 运动能量 (偏移 13 + j*4) */
-                    raw_energy = buffer[i+13 + j*4] | (buffer[i+14 + j*4] << 8) | (buffer[i+15 + j*4] << 16) | (buffer[i+16 + j*4] << 24);
+                    /* 运动能量 (偏移 9 + j*4) */
+                    raw_energy = buffer[i+9 + j*4] | (buffer[i+10 + j*4] << 8) | (buffer[i+11 + j*4] << 16) | (buffer[i+12 + j*4] << 24);
                     if (raw_energy > 0) {
                         out_data->motion_energy_db[j] = 10.0 * log10((double)raw_energy);
                         out_data->energy_db[j] = out_data->motion_energy_db[j];
@@ -70,8 +70,8 @@ int parse_radar_frame(const unsigned char *buffer, int len, RadarData *out_data)
                         out_data->energy_db[j] = 0.0;
                     }
                     
-                    /* 静止能量 (偏移 77 + j*4) */
-                    unsigned int raw_static = buffer[i+77 + j*4] | (buffer[i+78 + j*4] << 8) | (buffer[i+79 + j*4] << 16) | (buffer[i+80 + j*4] << 24);
+                    /* 静止能量 (偏移 73 + j*4) */
+                    unsigned int raw_static = buffer[i+73 + j*4] | (buffer[i+74 + j*4] << 8) | (buffer[i+75 + j*4] << 16) | (buffer[i+76 + j*4] << 24);
                     if (raw_static > 0) {
                         out_data->static_energy_db[j] = 10.0 * log10((double)raw_static);
                     } else {
