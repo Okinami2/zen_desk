@@ -2085,7 +2085,6 @@ static td_s32 sample_svp_prepare_pose_detector_input(td_void)
     sample_svp_check_exps_return(src == TD_NULL || g_pose_det_input_virt == TD_NULL,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose detector input invalid\n");
 
-    (td_void)memset_s(g_pose_det_input_virt, g_pose_det_input_size, 0, g_pose_det_input_size);
     src_y = src;
     src_vu = src + (size_t)src_stride_y * src_h;
     scale = fminf((td_float)SAMPLE_SVP_POSE_DET_INPUT_W / src_w,
@@ -2094,6 +2093,18 @@ static td_s32 sample_svp_prepare_pose_detector_input(td_void)
     resized_h = (td_u32)floorf(src_h * scale + 0.5f);
     pad_x = (SAMPLE_SVP_POSE_DET_INPUT_W - resized_w) / 2;
     pad_y = (SAMPLE_SVP_POSE_DET_INPUT_H - resized_h) / 2;
+
+    (td_void)memset_s(g_pose_det_input_virt, g_pose_det_input_size, 0, g_pose_det_input_size);
+    for (y = 0; y < SAMPLE_SVP_POSE_DET_INPUT_H; y++) {
+        for (x = 0; x < SAMPLE_SVP_POSE_DET_INPUT_W; x++) {
+            sample_svp_check_exps_return(sample_svp_write_rgb_to_model_input(
+                SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX, g_pose_det_input_virt,
+                g_pose_det_input_size, g_pose_det_input_stride,
+                SAMPLE_SVP_POSE_DET_INPUT_W, SAMPLE_SVP_POSE_DET_INPUT_H,
+                x, y, 0.0f, 0.0f, 0.0f, 1.0f / 127.5f, -1.0f) != TD_SUCCESS,
+                TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "clear pose detector input failed\n");
+        }
+    }
 
     for (y = 0; y < resized_h; y++) {
         td_u32 sy = (td_u32)fminf(floorf(((td_float)y + 0.5f) / scale), (td_float)(src_h - 1));
@@ -2105,7 +2116,7 @@ static td_s32 sample_svp_prepare_pose_detector_input(td_void)
                 SAMPLE_SVP_NPU_POSE_DET_MODEL_IDX, g_pose_det_input_virt,
                 g_pose_det_input_size, g_pose_det_input_stride,
                 SAMPLE_SVP_POSE_DET_INPUT_W, SAMPLE_SVP_POSE_DET_INPUT_H,
-                x + pad_x, y + pad_y, r, g, b, 1.0f / 255.0f, 0.0f) != TD_SUCCESS,
+                x + pad_x, y + pad_y, r, g, b, 1.0f / 127.5f, -1.0f) != TD_SUCCESS,
                 TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "write pose detector pixel failed\n");
         }
     }
@@ -2218,16 +2229,14 @@ static td_s32 sample_svp_decode_pose_detection(sample_svp_pose_detection *det,
     }
 
     for (i = 0; i < SAMPLE_SVP_POSE_ANCHOR_NUM; i++) {
-        td_float score = scores[i];
-        if (score < 0.0f || score > 1.0f) {
-            score = sample_svp_sigmoid_f32(score);
-        }
+        td_float score = sample_svp_sigmoid_f32(scores[i]);
         if (score > best_score) {
             best_score = score;
             best_idx = i;
             found = TD_TRUE;
         }
     }
+    det->score = best_score;
     if (found != TD_TRUE || best_score < SAMPLE_SVP_POSE_DET_TH) {
         return TD_FAILURE;
     }
@@ -2525,10 +2534,8 @@ static td_s32 sample_svp_run_pose_once(sample_svp_pose_result *pose)
     sample_svp_check_exps_return(raw_num < SAMPLE_SVP_POSE_LANDMARK_NUM * 5 || score_num < 1,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose landmark output size invalid\n");
 
-    pose->score = score_data[0];
-    if (pose->score < 0.0f || pose->score > 1.0f) {
-        pose->score = sample_svp_sigmoid_f32(pose->score);
-    }
+    /* MediaPipe pose presence is a raw logit. */
+    pose->score = sample_svp_sigmoid_f32(score_data[0]);
     pose->detection_score = det.score;
     if (pose->score >= SAMPLE_SVP_POSE_SCORE_TH) {
         pose->has_pose = TD_TRUE;
