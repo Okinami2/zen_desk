@@ -236,6 +236,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         sendTcpCommandWithArgs(ASR_CMD_LAMP_SET_COLOR_TEMP, 0, ratio);
     });
 
+    connect(controlPage, &ControlPage::calibrationRequested, this, [this]() {
+        sendTcpCommand(ASR_CMD_CALIBRATION_START);
+    });
+
     // HomePage 中的"进入专注"按钮
     connect(homePage, &HomePage::enterStudyRequested, this, &MainWindow::showStudySetupDialog);
 

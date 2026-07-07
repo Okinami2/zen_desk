@@ -14,6 +14,10 @@ void app();
 //{playid:10601,voice:你已经学习四十分钟啦，该休息了。}
 //{playid:10602,voice:专注模式已结束，请休息，喝点水吧。}
 //{playid:10603,voice:检测到长时间分神，请认真学习。}
+//{playid:10701,voice:请保持眼睛睁开，注视摄像头}
+//{playid:10702,voice:请保持面部姿势不变，闭上眼睛}
+//{playid:10703,voice:请注视学习区}
+//{playid:10704,voice:校准完成}
 // 魔术指令配置区
 /*
  * Zen Desk ASRPRO 离线语音识别固件代码
@@ -208,6 +212,14 @@ void app() {
         play_audio(10602);
       } else if (cmd == 0xF3) {
         play_audio(10603);
+      } else if (cmd == 0xF4) {
+        play_audio(10701);
+      } else if (cmd == 0xF5) {
+        play_audio(10702);
+      } else if (cmd == 0xF6) {
+        play_audio(10703);
+      } else if (cmd == 0xF7) {
+        play_audio(10704);
       }
     }
     delay(10);

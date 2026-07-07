@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "npu_process.h"
+#include "config.h"
 #include "ot_common_sys.h"
 #include "sdk_module_init.h"
 #include "vision_debug.h"
@@ -258,6 +259,24 @@ static td_void *vision_control_thread(td_void *arg)
             strncmp(buffer, "stop", 4) == 0 ||
             strncmp(buffer, "0", 1) == 0) {
             vision_monitoring_set(ctx, TD_FALSE);
+        } else if (strncmp(buffer, "calib_eye_open", 14) == 0) {
+            sample_svp_set_calibration_state(1);
+        } else if (strncmp(buffer, "calib_eye_closed", 16) == 0) {
+            sample_svp_set_calibration_state(2);
+        } else if (strncmp(buffer, "calib_desk", 10) == 0) {
+            sample_svp_set_calibration_state(3);
+        } else if (strncmp(buffer, "calib_save", 10) == 0) {
+            sample_svp_set_calibration_state(4);
+            // Save config to file
+            td_float eye_th, pitch_off, yaw_off;
+            sample_svp_get_calibration_offsets(&eye_th, &pitch_off, &yaw_off);
+            
+            Config g_conf;
+            config_load("/root/zen_desk_config.txt", &g_conf);
+            g_conf.eye_close_threshold = eye_th;
+            g_conf.head_pitch_offset = pitch_off;
+            g_conf.head_yaw_offset = yaw_off;
+            config_save("/root/zen_desk_config.txt", &g_conf);
         } else {
             fprintf(stderr, "vision: ignored control command: %s\n", buffer);
         }

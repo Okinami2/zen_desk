@@ -181,6 +181,62 @@ static td_u32 g_pose_lm_input_stride = 0;
 static td_u8 *g_pose_lm_input_virt = TD_NULL;
 static td_double g_pose_last_run_s = -1000.0;
 static sample_svp_pose_result g_pose_cached = {0};
+
+/* Calibration variables */
+static td_float g_eye_closed_th = SAMPLE_SVP_EYE_CLOSED_TH;
+static td_float g_head_pitch_offset = 0.0f;
+static td_float g_head_yaw_offset = 0.0f;
+
+static td_s32 g_calib_state = 0;
+static td_float g_calib_eye_open_sum = 0.0f;
+static td_u32 g_calib_eye_open_count = 0;
+static td_float g_calib_eye_closed_sum = 0.0f;
+static td_u32 g_calib_eye_closed_count = 0;
+static td_float g_calib_pitch_sum = 0.0f;
+static td_float g_calib_yaw_sum = 0.0f;
+static td_u32 g_calib_desk_count = 0;
+
+td_void sample_svp_set_calibration_state(td_s32 state) {
+    g_calib_state = state;
+    if (state == 1) { // eye open
+        g_calib_eye_open_sum = 0.0f;
+        g_calib_eye_open_count = 0;
+    } else if (state == 2) { // eye closed
+        g_calib_eye_closed_sum = 0.0f;
+        g_calib_eye_closed_count = 0;
+    } else if (state == 3) { // desk
+        g_calib_pitch_sum = 0.0f;
+        g_calib_yaw_sum = 0.0f;
+        g_calib_desk_count = 0;
+    } else if (state == 4) { // save
+        if (g_calib_eye_open_count > 0 && g_calib_eye_closed_count > 0) {
+            td_float avg_open = g_calib_eye_open_sum / g_calib_eye_open_count;
+            td_float avg_closed = g_calib_eye_closed_sum / g_calib_eye_closed_count;
+            g_eye_closed_th = (avg_open + avg_closed) / 2.0f;
+            printf("CALIB: Eye threshold updated to %.3f (open=%.3f, closed=%.3f)\n", g_eye_closed_th, avg_open, avg_closed);
+        }
+        if (g_calib_desk_count > 0) {
+            g_head_pitch_offset = g_calib_pitch_sum / g_calib_desk_count;
+            g_head_yaw_offset = g_calib_yaw_sum / g_calib_desk_count;
+            printf("CALIB: Head offsets updated: pitch=%.3f, yaw=%.3f\n", g_head_pitch_offset, g_head_yaw_offset);
+        }
+        g_calib_state = 0;
+    }
+}
+
+td_void sample_svp_set_calibration_offsets(td_float eye_th, td_float pitch_off, td_float yaw_off) {
+    if (eye_th > 0.0f) {
+        g_eye_closed_th = eye_th;
+    }
+    g_head_pitch_offset = pitch_off;
+    g_head_yaw_offset = yaw_off;
+}
+
+td_void sample_svp_get_calibration_offsets(td_float *eye_th, td_float *pitch_off, td_float *yaw_off) {
+    if (eye_th) *eye_th = g_eye_closed_th;
+    if (pitch_off) *pitch_off = g_head_pitch_offset;
+    if (yaw_off) *yaw_off = g_head_yaw_offset;
+}
 /* Temporal smoothing state (see SAMPLE_SVP_POSE_EMA_* macros). */
 static td_bool g_pose_ema_valid = TD_FALSE;
 static td_float g_pose_ema_tilt = 0.0f;
@@ -2665,18 +2721,30 @@ static td_void sample_svp_update_face_state(const sample_svp_landmark106_result 
     td_float alpha = 0.25f, beta = 0.35f;
     td_double now = sample_svp_now_seconds();
 
+    if (g_calib_state == 1) { // eye open
+        g_calib_eye_open_sum += eye_open;
+        g_calib_eye_open_count++;
+    } else if (g_calib_state == 2) { // eye closed
+        g_calib_eye_closed_sum += eye_open;
+        g_calib_eye_closed_count++;
+    } else if (g_calib_state == 3) { // desk
+        g_calib_pitch_sum += attention->pitch_deg;
+        g_calib_yaw_sum += attention->yaw_deg;
+        g_calib_desk_count++;
+    }
+
     if (state->smooth_yaw == 0.0f && state->smooth_pitch == 0.0f) {
-        state->smooth_yaw = attention->yaw_deg;
-        state->smooth_pitch = attention->pitch_deg;
+        state->smooth_yaw = attention->yaw_deg - g_head_yaw_offset;
+        state->smooth_pitch = attention->pitch_deg - g_head_pitch_offset;
     } else {
-        state->smooth_yaw = (1.0f - alpha) * state->smooth_yaw + alpha * attention->yaw_deg;
-        state->smooth_pitch = (1.0f - alpha) * state->smooth_pitch + alpha * attention->pitch_deg;
+        state->smooth_yaw = (1.0f - alpha) * state->smooth_yaw + alpha * (attention->yaw_deg - g_head_yaw_offset);
+        state->smooth_pitch = (1.0f - alpha) * state->smooth_pitch + alpha * (attention->pitch_deg - g_head_pitch_offset);
     }
 
     state->smooth_eye_open = (state->smooth_eye_open == 0.0f) ? eye_open : ((1.0f - beta) * state->smooth_eye_open + beta * eye_open);
     state->smooth_mouth_open = (state->smooth_mouth_open == 0.0f) ? mouth_open : ((1.0f - beta) * state->smooth_mouth_open + beta * mouth_open);
 
-    state->eyes_closed = (state->smooth_eye_open < SAMPLE_SVP_EYE_CLOSED_TH);
+    state->eyes_closed = (state->smooth_eye_open < g_eye_closed_th);
 
     if (state->eyes_closed) {
         state->closed_frames++;

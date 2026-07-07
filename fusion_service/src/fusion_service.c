@@ -11,8 +11,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
-
 static FusionService g_fusion_service;
 static pthread_t g_server_thread;
 static int g_running = 0;
@@ -138,6 +139,41 @@ static int recv_all(int fd, void *buf, size_t len)
     return 0;
 }
 
+static void send_vision_control_cmd(const char *cmd) {
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) return;
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    dest.sin_addr.s_addr = inet_addr("127.0.0.1");
+    dest.sin_port = htons(9101); // VISION_CONTROL_PORT
+    sendto(sock, cmd, strlen(cmd), 0, (struct sockaddr *)&dest, sizeof(dest));
+    close(sock);
+}
+
+static void* calibration_thread_func(void* arg) {
+    LOG_INFO("Calibration step 1: Eyes open");
+    fusion_send_asr_command(ASR_CMD_PLAY_CALIB_EYES_OPEN);
+    send_vision_control_cmd("calib_eye_open");
+    sleep(3);
+
+    LOG_INFO("Calibration step 2: Eyes closed");
+    fusion_send_asr_command(ASR_CMD_PLAY_CALIB_EYES_CLOSED);
+    send_vision_control_cmd("calib_eye_closed");
+    sleep(3);
+
+    LOG_INFO("Calibration step 3: Look at desk");
+    fusion_send_asr_command(ASR_CMD_PLAY_CALIB_DESK);
+    send_vision_control_cmd("calib_desk");
+    sleep(3);
+
+    LOG_INFO("Calibration step 4: Save");
+    send_vision_control_cmd("calib_save");
+    fusion_send_asr_command(ASR_CMD_PLAY_CALIB_DONE);
+
+    return NULL;
+}
+
 static void* tcp_client_handler(void *arg)
 {
     int client_fd = *(int*)arg;
@@ -200,6 +236,12 @@ static void* tcp_client_handler(void *arg)
                 case ASR_CMD_WAKEUP:
                     LOG_INFO("ASR Wakeup received, broadcasting to UI");
                     fusion_send_ui_event(UI_EVENT_WAKEUP_ASR);
+                    break;
+                case ASR_CMD_CALIBRATION_START:
+                    LOG_INFO("Calibration started from QT");
+                    pthread_t calib_tid;
+                    pthread_create(&calib_tid, NULL, calibration_thread_func, NULL);
+                    pthread_detach(calib_tid);
                     break;
                 case ASR_CMD_STUDY_START:
                     g_fusion_service.current_state = STATE_FOCUSED;

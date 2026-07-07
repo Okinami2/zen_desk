@@ -112,6 +112,9 @@ td_void sample_svp_npu_deinit_runtime(td_void);
 td_s32 sample_svp_npu_process_frame(const ot_video_frame_info *frame,
     const td_u8 *frame_virt, sample_svp_frame_result *result);
 
+/* 0:none, 1:eye_open, 2:eye_closed, 3:desk, 4:save */
+td_void sample_svp_set_calibration_state(td_s32 state);
+
 #ifdef __cplusplus
 #if __cplusplus
 }

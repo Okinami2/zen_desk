@@ -106,6 +106,23 @@ ControlPage::ControlPage(QWidget *parent) : QWidget(parent), focusIndex(0), inEd
 
     mainLay->addWidget(colorTempCard);
 
+    // 校准按钮
+    calibBtn = new QPushButton("自动校准", this);
+    calibBtn->setStyleSheet(
+        "QPushButton {"
+        "  background: rgba(255,255,255,0.05);"
+        "  color: white;"
+        "  font-size: 18px;"
+        "  border-radius: 20px;"
+        "  border: 2px solid transparent;"
+        "  padding: 15px;"
+        "}"
+        "QPushButton[zenFocus=\"true\"] {"
+        "  border: 2px solid #10B981;"
+        "}"
+    );
+    mainLay->addWidget(calibBtn);
+
     mainLay->addStretch();
 
     // 信号绑定
@@ -118,6 +135,10 @@ ControlPage::ControlPage(QWidget *parent) : QWidget(parent), focusIndex(0), inEd
         colorTempValLabel->setText(QString("%1%").arg(v));
         float ratio = v / 100.0f;
         emit colorTempChanged(ratio);
+    });
+
+    connect(calibBtn, &QPushButton::clicked, this, [this]() {
+        emit calibrationRequested();
     });
 
     updateFocusStyle();
@@ -168,6 +189,10 @@ void ControlPage::updateFocusStyle()
     colorTempSlider->setProperty("zenEdit", QVariant((bool)(inEditMode && focusIndex == 1)));
     colorTempSlider->style()->unpolish(colorTempSlider);
     colorTempSlider->style()->polish(colorTempSlider);
+
+    calibBtn->setProperty("zenFocus", QVariant((bool)(!inEditMode && focusIndex == 2)));
+    calibBtn->style()->unpolish(calibBtn);
+    calibBtn->style()->polish(calibBtn);
 }
 
 void ControlPage::handleKnobLeft()
@@ -179,7 +204,7 @@ void ControlPage::handleKnobLeft()
         activeSlider->setValue(val);
     } else {
         focusIndex--;
-        if (focusIndex < 0) focusIndex = 1;
+        if (focusIndex < 0) focusIndex = 2;
         updateFocusStyle();
     }
 }
@@ -193,13 +218,17 @@ void ControlPage::handleKnobRight()
         activeSlider->setValue(val);
     } else {
         focusIndex++;
-        if (focusIndex > 1) focusIndex = 0;
+        if (focusIndex > 2) focusIndex = 0;
         updateFocusStyle();
     }
 }
 
 void ControlPage::handleKnobPress()
 {
+    if (focusIndex == 2) {
+        calibBtn->click();
+        return;
+    }
     inEditMode = !inEditMode;
     updateFocusStyle();
 }

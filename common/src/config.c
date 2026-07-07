@@ -19,6 +19,8 @@ void config_default(Config *config) {
     config->vision_enable_hdmi_preview = 1;
     config->eye_close_threshold = 0.7f;
     config->yawn_threshold = 0.6f;
+    config->head_pitch_offset = 0.0f;
+    config->head_yaw_offset = 0.0f;
 
     // 雷达配置
     config->radar_port = 8002;
@@ -34,15 +36,27 @@ void config_default(Config *config) {
 }
 
 int config_load(const char *config_file, Config *config) {
+    config_default(config); // 先加载默认值
     FILE *fp = fopen(config_file, "r");
     if (!fp) {
         LOG_WARN("Config file not found, using defaults");
-        config_default(config);
         return -1;
     }
 
-    // TODO: 实现配置文件解析（JSON格式）
-    config_default(config);
+    char line[256];
+    while (fgets(line, sizeof(line), fp)) {
+        char key[64];
+        float val;
+        if (sscanf(line, "%63[^=]=%f", key, &val) == 2) {
+            if (strcmp(key, "eye_close_threshold") == 0) {
+                config->eye_close_threshold = val;
+            } else if (strcmp(key, "head_pitch_offset") == 0) {
+                config->head_pitch_offset = val;
+            } else if (strcmp(key, "head_yaw_offset") == 0) {
+                config->head_yaw_offset = val;
+            }
+        }
+    }
 
     fclose(fp);
     return 0;
@@ -51,11 +65,13 @@ int config_load(const char *config_file, Config *config) {
 int config_save(const char *config_file, const Config *config) {
     FILE *fp = fopen(config_file, "w");
     if (!fp) {
-        LOG_ERROR("Failed to save config file");
+        LOG_ERROR("Failed to save config file: %s", config_file);
         return -1;
     }
 
-    // TODO: 实现配置文件保存（JSON格式）
+    fprintf(fp, "eye_close_threshold=%.4f\n", config->eye_close_threshold);
+    fprintf(fp, "head_pitch_offset=%.4f\n", config->head_pitch_offset);
+    fprintf(fp, "head_yaw_offset=%.4f\n", config->head_yaw_offset);
 
     fclose(fp);
     return 0;

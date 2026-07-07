@@ -29,6 +29,7 @@ public:
 signals:
     void brightnessChanged(int percent);
     void colorTempChanged(float ratio);
+    void calibrationRequested();
 
 private:
     void updateFocusStyle();
@@ -41,7 +42,9 @@ private:
     QSlider *colorTempSlider;
     QLabel *colorTempValLabel;
 
-    int focusIndex; // 0 for brightness, 1 for color temp
+    QPushButton *calibBtn;
+
+    int focusIndex; // 0 for brightness, 1 for color temp, 2 for calibBtn
     bool inEditMode;
 };
 
