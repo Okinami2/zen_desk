@@ -12,7 +12,7 @@
 #include "config.h"
 
 #define VISION_UVC_DEV_PATH       "/dev/video0"
-#define VISION_UVC_PIX_FMT        "MJPEG"
+#define VISION_UVC_PIX_FMT        "YUVV"
 #define VISION_UVC_WIDTH          1280
 #define VISION_UVC_HEIGHT         720
 #define VISION_UVC_TIMEOUT_MS     2000

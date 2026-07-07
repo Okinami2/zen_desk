@@ -259,6 +259,9 @@ static td_void *vision_control_thread(td_void *arg)
             strncmp(buffer, "stop", 4) == 0 ||
             strncmp(buffer, "0", 1) == 0) {
             vision_monitoring_set(ctx, TD_FALSE);
+        } else if (strncmp(buffer, "calib_idle", 10) == 0) {
+            /* settle phase: stop accumulating samples (state 0 = no capture) */
+            sample_svp_set_calibration_state(0);
         } else if (strncmp(buffer, "calib_eye_open", 14) == 0) {
             sample_svp_set_calibration_state(1);
         } else if (strncmp(buffer, "calib_eye_closed", 16) == 0) {

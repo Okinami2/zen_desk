@@ -151,22 +151,52 @@ static void send_vision_control_cmd(const char *cmd) {
     close(sock);
 }
 
+/*
+ * Calibration timing. Each step is split into two phases:
+ *   - SETTLE: the voice prompt has just played; give the user time to hear it,
+ *     assume the requested pose, and let the face model's pitch/yaw/eye output
+ *     converge. NO samples are collected during this phase (vision state=idle).
+ *   - SAMPLE: the pose is now stable; collect samples for a fixed window and
+ *     average them. Must be long enough for a reliable mean.
+ * The old code collapsed both phases into a single 3s window that started the
+ * instant the prompt played, so it averaged in frames from before the user had
+ * even reacted (e.g. eyes still open while sampling the "eyes closed" step).
+ */
+#define CALIB_SETTLE_S   5   /* prompt playback + user reaction + model settle */
+#define CALIB_SAMPLE_S   10  /* stable sampling window per step */
+
 static void* calibration_thread_func(void* arg) {
-    LOG_INFO("Calibration step 1: Eyes open");
+    (void)arg;
+
+    /* Step 1: Eyes open */
+    LOG_INFO("Calibration step 1: Eyes open - prompt, settling %ds", CALIB_SETTLE_S);
     fusion_send_asr_command(ASR_CMD_PLAY_CALIB_EYES_OPEN);
+    send_vision_control_cmd("calib_idle");   /* ensure no sampling during settle */
+    sleep(CALIB_SETTLE_S);
+    LOG_INFO("Calibration step 1: sampling %ds", CALIB_SAMPLE_S);
     send_vision_control_cmd("calib_eye_open");
-    sleep(3);
+    sleep(CALIB_SAMPLE_S);
+    send_vision_control_cmd("calib_idle");   /* stop sampling before next prompt */
 
-    LOG_INFO("Calibration step 2: Eyes closed");
+    /* Step 2: Eyes closed */
+    LOG_INFO("Calibration step 2: Eyes closed - prompt, settling %ds", CALIB_SETTLE_S);
     fusion_send_asr_command(ASR_CMD_PLAY_CALIB_EYES_CLOSED);
+    sleep(CALIB_SETTLE_S);
+    LOG_INFO("Calibration step 2: sampling %ds", CALIB_SAMPLE_S);
     send_vision_control_cmd("calib_eye_closed");
-    sleep(3);
+    sleep(CALIB_SAMPLE_S);
+    send_vision_control_cmd("calib_idle");
 
-    LOG_INFO("Calibration step 3: Look at desk");
+    /* Step 3: Look at desk */
+    LOG_INFO("Calibration step 3: Look at desk - prompt, settling %ds", CALIB_SETTLE_S);
     fusion_send_asr_command(ASR_CMD_PLAY_CALIB_DESK);
+    sleep(CALIB_SETTLE_S);
+    LOG_INFO("Calibration step 3: sampling %ds", CALIB_SAMPLE_S);
     send_vision_control_cmd("calib_desk");
-    sleep(3);
+    sleep(CALIB_SAMPLE_S);
+    send_vision_control_cmd("calib_idle");
 
+    /* Step 4: Save */
     LOG_INFO("Calibration step 4: Save");
     send_vision_control_cmd("calib_save");
     fusion_send_asr_command(ASR_CMD_PLAY_CALIB_DONE);
