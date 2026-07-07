@@ -150,6 +150,7 @@ static void send_asr_command_to_fusion(uint8_t cmd) {
     memset(&msg, 0, sizeof(Message));
     
     AsrCommand asr_cmd;
+    memset(&asr_cmd, 0, sizeof(AsrCommand));
     asr_cmd.command_id = cmd;
     asr_cmd.timestamp = time(NULL);
 

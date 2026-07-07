@@ -32,6 +32,7 @@ void fusion_send_asr_command(uint8_t cmd_id) {
         Message msg;
         memset(&msg, 0, sizeof(Message));
         AsrCommand asr_cmd;
+        memset(&asr_cmd, 0, sizeof(AsrCommand));
         asr_cmd.command_id = cmd_id;
         asr_cmd.timestamp = time(NULL);
 
@@ -844,7 +845,20 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
 
     pthread_mutex_lock(&g_fusion_service.mutex);
     g_fusion_service.latest_vision = *vs;
-    seated = vision_seat_update(vs, &face_diag_sq, &face_cx, &face_cy, &center_ok);
+    
+    int vision_seated = vision_seat_update(vs, &face_diag_sq, &face_cx, &face_cy, &center_ok);
+    int radar_seated = 0;
+    
+    now_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
+    if (g_fusion_service.latest_radar.timestamp != 0 &&
+        now_ms >= g_fusion_service.latest_radar.timestamp &&
+        now_ms - g_fusion_service.latest_radar.timestamp < 5000) {
+        if (g_fusion_service.latest_radar.presence == 1) {
+            radar_seated = 1;
+        }
+    }
+    
+    seated = vision_seated || radar_seated;
 
     if (!seated) {
         if (g_fusion_service.current_state != STATE_ABSENT) {

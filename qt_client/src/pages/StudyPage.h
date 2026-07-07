@@ -43,6 +43,9 @@ public:
 
 signals:
     void studyFinished();   // 倒计时结束 / 用户点击结束
+    void studyPaused();
+    void studyResumed();
+
 
 private slots:
     void tick();

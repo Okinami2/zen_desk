@@ -200,8 +200,10 @@ StudyPage::StudyPage(QWidget *parent) : QWidget(parent)
     connect(pauseBtn, &QPushButton::clicked, this, [this](){
         if (timer->isActive()) {
             pauseTimer();
+            emit studyPaused();
         } else {
             resumeTimer();
+            emit studyResumed();
         }
     });
     connect(stopBtn, &QPushButton::clicked, this, &StudyPage::studyFinished);

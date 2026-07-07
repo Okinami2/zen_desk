@@ -248,6 +248,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         sendTcpCommand(ASR_CMD_STUDY_STOP);
     });
 
+    connect(studyPage, &StudyPage::studyPaused, this, [this]() {
+        sendTcpCommand(ASR_CMD_STUDY_PAUSE);
+    });
+
+    connect(studyPage, &StudyPage::studyResumed, this, [this]() {
+        sendTcpCommand(ASR_CMD_STUDY_RESUME);
+    });
+
     // 全局接管事件：此句是突破“焦点陷阱”的核心！
     qApp->installEventFilter(this);
 
