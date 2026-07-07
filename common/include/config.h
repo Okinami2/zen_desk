@@ -20,6 +20,8 @@ typedef struct {
     uint8_t vision_enable_hdmi_preview;
     float eye_close_threshold;
     float yawn_threshold;
+    float head_pitch_offset;
+    float head_yaw_offset;
 
     // 雷达配置
     uint16_t radar_port;

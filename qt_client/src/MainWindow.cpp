@@ -236,6 +236,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         sendTcpCommandWithArgs(ASR_CMD_LAMP_SET_COLOR_TEMP, 0, ratio);
     });
 
+    connect(controlPage, &ControlPage::calibrationRequested, this, [this]() {
+        sendTcpCommand(ASR_CMD_CALIBRATION_START);
+    });
+
     // HomePage 中的"进入专注"按钮
     connect(homePage, &HomePage::enterStudyRequested, this, &MainWindow::showStudySetupDialog);
 
@@ -740,11 +744,10 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     const double poseDetectionScore = obj.value("pose_detection_score").toDouble(0.0);
     const double poseAgeMs = obj.value("pose_age_ms").toDouble(0.0);
     const bool poseUpdated = obj.value("pose_updated").toBool(false);
-    statsPage->updatePostureStatus(posture, postureOk, posePresent,
+    statusPage->updatePostureStatus(posture, postureOk, posePresent,
         poseScore, poseDetectionScore, poseAgeMs, poseUpdated,
         obj.value("shoulder_tilt").toDouble(0.0),
         obj.value("body_lean").toDouble(0.0),
-        obj.value("head_drop").toDouble(0.0),
         obj.value("hand_support_score").toDouble(0.0));
 
     VisionState state;

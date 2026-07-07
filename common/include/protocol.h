@@ -107,7 +107,12 @@ typedef enum {
     // 自下而上反向播报指令 (Fusion -> ASR)
     ASR_CMD_PLAY_BREAK_40M     = 0xF1, // 正计时每40分钟播报
     ASR_CMD_PLAY_END_REST      = 0xF2, // 倒计时结束播报
-    ASR_CMD_PLAY_DISTRACTED    = 0xF3  // 走神播报
+    ASR_CMD_PLAY_DISTRACTED    = 0xF3, // 走神播报
+    ASR_CMD_PLAY_CALIB_EYES_OPEN   = 0xF4,
+    ASR_CMD_PLAY_CALIB_EYES_CLOSED = 0xF5,
+    ASR_CMD_PLAY_CALIB_DESK        = 0xF6,
+    ASR_CMD_PLAY_CALIB_DONE        = 0xF7,
+    ASR_CMD_CALIBRATION_START  = 0x50  // QT发送给Fusion开始校准
 } AsrCommandType;
 
 typedef struct {

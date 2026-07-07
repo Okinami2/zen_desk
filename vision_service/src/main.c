@@ -7,6 +7,9 @@
 #include <string.h>
 
 #include "vision_service.h"
+#include "ot_common_sys.h"
+#include "npu_process.h"
+#include "config.h"
 
 #define VISION_UVC_DEV_PATH       "/dev/video0"
 #define VISION_UVC_PIX_FMT        "MJPEG"
@@ -229,8 +232,18 @@ int main(int argc, char *argv[])
     }
 
     if (vision_is_encoded_format(config.pixel_format) == TD_TRUE) {
-        fprintf(stderr, "vision: warning: %s uses MPP VDEC; prefer YUYV/NV12/NV21 if capture fails\n",
+        printf("vision: starting with '%s' (mpp=%d) (will decode %s)\n",
+            config.device_path, config.mpp_attached, config.pixel_format);
+    } else {
+        printf("vision: starting with '%s' (mpp=%d) (%s)\n",
+            config.device_path, config.mpp_attached,
             config.pixel_format);
+    }
+
+    Config g_conf;
+    if (config_load("/root/zen_desk_config.txt", &g_conf) == 0) {
+        sample_svp_set_calibration_offsets(g_conf.eye_close_threshold, g_conf.head_pitch_offset, g_conf.head_yaw_offset);
+        printf("vision: loaded calib offsets: eye_th=%.3f pitch=%.3f yaw=%.3f\n", g_conf.eye_close_threshold, g_conf.head_pitch_offset, g_conf.head_yaw_offset);
     }
 
     return (vision_service_run(&config) == TD_SUCCESS) ? 0 : 1;
