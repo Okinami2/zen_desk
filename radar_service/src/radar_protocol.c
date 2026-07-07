@@ -49,13 +49,8 @@ int parse_radar_frame(const unsigned char *buffer, int len, RadarData *out_data)
             if (buffer[i+137] == 0xF8 && buffer[i+138] == 0xF7 &&
                 buffer[i+139] == 0xF6 && buffer[i+140] == 0xF5) {
 
-                /* 解析目标状态和距离 (雷达数据字头长: 4头 + 2长度 + 1指令 = 7字节) */
-                /* 所以目标状态是在第8字节(偏移7)，但根据测试数据它是buffer[i+6]吗?
-                 * 看数据：F4 F3 F2 F1 (4头) + 83 00 (长度0x83=131) + 01 (控制字) + 7E (目标状态)
-                 * 测试包: F4 F3 F2 F1 83 00 01 7E 00 00 ...
-                 * 那么目标状态在 offset 7 (即0x7E)。原来代码是 buffer[i+6] 是错的。
-                 * 让我们保持和之前一样的解析方式： */
-
+                /* 解析目标状态和距离 (雷达数据字头长: 4头 + 2长度 = 6字节) */
+                /* 所以目标状态是在第7字节(偏移6) */
                 out_data->has_target  = buffer[i+6];
                 out_data->distance_cm = buffer[i+7] | (buffer[i+8] << 8);
 

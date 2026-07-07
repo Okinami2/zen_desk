@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from train import RadarNet
 
-def test_model(csv_file="test_data1.csv", model_path="radar_model.pth"):
+def test_model(csv_file="test_data.csv", model_path="radar_model.pth"):
     print(f"正在加载测试数据: {csv_file}")
     try:
         df = pd.read_csv(csv_file)
@@ -23,8 +23,10 @@ def test_model(csv_file="test_data1.csv", model_path="radar_model.pth"):
     for i in range(len(X_raw) - window_size + 1):
         window_labels = y_raw[i : i + window_size]
         if len(set(window_labels)) == 1:
-            X_windows.append(X_raw[i : i + window_size].T) # 转置为 (Channels, Time_Steps)
-            y_windows.append(window_labels[0])
+            lbl = window_labels[0]
+            if lbl in [0, 1]:  # 同样过滤掉标签2
+                X_windows.append(X_raw[i : i + window_size].T) # 转置为 (Channels, Time_Steps)
+                y_windows.append(lbl)
             
     if len(X_windows) == 0:
         print("[错误] 没有提取到有效的测试窗口，数据量太少或者标签跳变太频繁！")

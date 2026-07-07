@@ -90,6 +90,3 @@ make clean && make
 
 收集数据用以下指令：
 
-./radar_collect 0 600 /tmp/radar_data.csv  无人
-./radar_collect 1 600 /tmp/radar_data.csv  有人
-./radar_collect 2 180 /tmp/radar_data.csv  乱动

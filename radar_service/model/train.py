@@ -84,8 +84,10 @@ def load_and_preprocess_data(csv_path, window_size=10):
         # 检查窗口内的标签是否一致，如果不一致则跳过（过渡态）
         window_labels = labels[i : i + window_size]
         if len(set(window_labels)) == 1:
-            X.append(features[i : i + window_size])
-            y.append(window_labels[-1])
+            lbl = window_labels[-1]
+            if lbl in [0, 1]:  # 只使用有人和没人的数据
+                X.append(features[i : i + window_size])
+                y.append(lbl)
             
     X = np.array(X)
     y = np.array(y)
@@ -100,7 +102,7 @@ def generate_mock_data(csv_path):
     data = []
     # 为了让滑动窗口(10帧)能提取到同标签的数据，我们按“块”生成连续动作
     for _ in range(50): # 50个动作块
-        label = np.random.choice([0, 1, 2])
+        label = np.random.choice([0, 1])
         for _ in range(20): # 每个动作保持 20 帧 (2秒)
             if label == 0:
                 features = np.random.normal(loc=30, scale=2, size=32) # AWAY: 底噪
