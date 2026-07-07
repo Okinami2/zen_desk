@@ -740,11 +740,10 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
     const double poseDetectionScore = obj.value("pose_detection_score").toDouble(0.0);
     const double poseAgeMs = obj.value("pose_age_ms").toDouble(0.0);
     const bool poseUpdated = obj.value("pose_updated").toBool(false);
-    statsPage->updatePostureStatus(posture, postureOk, posePresent,
+    statusPage->updatePostureStatus(posture, postureOk, posePresent,
         poseScore, poseDetectionScore, poseAgeMs, poseUpdated,
         obj.value("shoulder_tilt").toDouble(0.0),
         obj.value("body_lean").toDouble(0.0),
-        obj.value("head_drop").toDouble(0.0),
         obj.value("hand_support_score").toDouble(0.0));
 
     VisionState state;

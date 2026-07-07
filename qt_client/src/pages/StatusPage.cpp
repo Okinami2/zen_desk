@@ -34,6 +34,18 @@ StatusPage::StatusPage(QWidget *parent) : QWidget(parent)
     grid->addWidget(makeStatusCard("人脸检测", &faceValue, &faceDetail, QColor(0x4F, 0x46, 0xE5)), 0, 1);
     grid->addWidget(makeStatusCard("视线方向", &attentionValue, &attentionDetail, QColor(0xF5, 0x9E, 0x0B)), 1, 0);
     grid->addWidget(makeStatusCard("融合判断", &fusionValue, &fusionDetail, QColor(0x06, 0xB6, 0xD4)), 1, 1);
+
+    // 坐姿监测卡片，跨两列铺满底部一行
+    QWidget *postureCard = makeStatusCard("坐姿监测", &postureValue, &postureDetail,
+        QColor(0xEC, 0x48, 0x99));
+    postureMetric = new QLabel("肩斜 0.00 · 侧倾 0.00 · 扶头 0.00");
+    postureMetric->setWordWrap(true);
+    postureMetric->setStyleSheet("font-size: 13px; color: #94A3B8; background: transparent;");
+    if (QVBoxLayout *cardLay = qobject_cast<QVBoxLayout *>(postureCard->layout())) {
+        // 插到卡片底部 stretch 之前
+        cardLay->insertWidget(cardLay->count() - 1, postureMetric);
+    }
+    grid->addWidget(postureCard, 2, 0, 1, 2);
     root->addLayout(grid, 1);
 
     setSeatPresent(false, 0.0f, 0.0f);
@@ -42,6 +54,8 @@ StatusPage::StatusPage(QWidget *parent) : QWidget(parent)
     setFusionState(STATE_ABSENT, 0.0f);
     fusionValue->setText("等待融合");
     fusionDetail->setText("尚未收到 fusion_service 状态");
+    updatePostureStatus("waiting", false, false, 0.0, 0.0, 0.0, false,
+        0.0, 0.0, 0.0);
 }
 
 QWidget *StatusPage::makeStatusCard(const QString &title, QLabel **value, QLabel **detail,
@@ -130,6 +144,82 @@ void StatusPage::setFusionState(LearningState state, float score)
     fusionDetail->setText(QString("融合状态 %1 · 置信度 %2%")
         .arg(static_cast<int>(state))
         .arg(qRound(score * 100.0f)));
+}
+
+void StatusPage::updatePostureStatus(const QString &label, bool ok, bool present,
+                                     double poseScore, double detectionScore,
+                                     double ageMs, bool updated,
+                                     double shoulderTilt, double bodyLean,
+                                     double handSupportScore)
+{
+    Q_UNUSED(ageMs);
+    Q_UNUSED(updated);
+    Q_UNUSED(detectionScore);
+
+    QString title = "等待数据";
+    QString detail = "pose 模型低频运行，约 2 秒刷新一次。";
+    QColor color(0x9C, 0xA3, 0xAF);
+
+    if (!present) {
+        title = "未检测";
+        detail = "请确认上半身进入摄像头画面。";
+        color = QColor(0x9C, 0xA3, 0xAF);
+    } else if (ok || label == "normal") {
+        title = "坐姿规范";
+        detail = "肩部基本水平，头部和躯干位置正常。";
+        color = QColor(0x10, 0xB9, 0x81);
+    } else if (label == "hunchback") {
+        title = "疑似驼背";
+        detail = "头部相对肩线过低，建议挺直背部并抬高视线。";
+        color = QColor(0xEF, 0x44, 0x44);
+    } else if (label == "shoulder_tilt") {
+        title = "斜肩";
+        detail = "左右肩高度差偏大，建议放松肩膀并调整坐姿。";
+        color = QColor(0xF5, 0x9E, 0x0B);
+    } else if (label == "hand_support_head") {
+        title = "疑似单手撑头";
+        detail = "手腕靠近头部，可能正在撑头，建议双手离开脸部。";
+        color = QColor(0xEF, 0x44, 0x44);
+    } else if (label == "lean_left") {
+        title = "身体左倾";
+        detail = "肩部中心相对髋部偏左，建议回到椅子中央。";
+        color = QColor(0xF5, 0x9E, 0x0B);
+    } else if (label == "lean_right") {
+        title = "身体右倾";
+        detail = "肩部中心相对髋部偏右，建议回到椅子中央。";
+        color = QColor(0xF5, 0x9E, 0x0B);
+    } else if (label == "head_offset") {
+        title = "头部偏移";
+        detail = "头部相对肩部中心偏移明显，建议回正头部。";
+        color = QColor(0xF5, 0x9E, 0x0B);
+    } else if (label == "unknown") {
+        title = "关键点不足";
+        detail = "肩部或头部关键点置信度不足，请检查画面遮挡和光照。";
+        color = QColor(0x9C, 0xA3, 0xAF);
+    } else if (label == "waiting") {
+        title = "等待";
+        detail = "pose 模型低频运行，约 2 秒刷新一次。";
+        color = QColor(0x9C, 0xA3, 0xAF);
+    } else {
+        title = label.isEmpty() ? "等待数据" : label;
+        detail = "收到未知坐姿标签。";
+        color = QColor(0x9C, 0xA3, 0xAF);
+    }
+
+    if (postureValue) {
+        postureValue->setText(title);
+        setValueStyle(postureValue, color);
+    }
+    if (postureDetail) {
+        postureDetail->setText(detail);
+    }
+    if (postureMetric) {
+        postureMetric->setText(QString("肩斜 %1 · 侧倾 %2 · 扶头 %3 · pose %4")
+            .arg(shoulderTilt, 0, 'f', 2)
+            .arg(bodyLean, 0, 'f', 2)
+            .arg(handSupportScore, 0, 'f', 2)
+            .arg(poseScore, 0, 'f', 2));
+    }
 }
 
 QString StatusPage::attentionText(const QString &attention) const

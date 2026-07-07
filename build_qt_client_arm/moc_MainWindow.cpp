@@ -201,8 +201,8 @@ void Overlay::clicked()
     QMetaObject::activate(this, &staticMetaObject, 0, nullptr);
 }
 struct qt_meta_stringdata_MainWindow_t {
-    QByteArrayData data[16];
-    char stringdata0[191];
+    QByteArrayData data[20];
+    char stringdata0[236];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -216,25 +216,30 @@ QT_MOC_LITERAL(1, 11, 8), // "showHome"
 QT_MOC_LITERAL(2, 20, 0), // ""
 QT_MOC_LITERAL(3, 21, 10), // "showStatus"
 QT_MOC_LITERAL(4, 32, 9), // "showStats"
-QT_MOC_LITERAL(5, 42, 20), // "showStudySetupDialog"
-QT_MOC_LITERAL(6, 63, 10), // "startStudy"
-QT_MOC_LITERAL(7, 74, 7), // "minutes"
-QT_MOC_LITERAL(8, 82, 9), // "stopStudy"
-QT_MOC_LITERAL(9, 92, 17), // "closeActiveDialog"
-QT_MOC_LITERAL(10, 110, 14), // "onUdpReadyRead"
-QT_MOC_LITERAL(11, 125, 11), // "hideMicIcon"
-QT_MOC_LITERAL(12, 137, 14), // "sendTcpCommand"
-QT_MOC_LITERAL(13, 152, 7), // "uint8_t"
-QT_MOC_LITERAL(14, 160, 6), // "cmd_id"
-QT_MOC_LITERAL(15, 167, 23) // "onStudyAccumulationTick"
+QT_MOC_LITERAL(5, 42, 11), // "showControl"
+QT_MOC_LITERAL(6, 54, 20), // "showStudySetupDialog"
+QT_MOC_LITERAL(7, 75, 10), // "startStudy"
+QT_MOC_LITERAL(8, 86, 7), // "minutes"
+QT_MOC_LITERAL(9, 94, 9), // "stopStudy"
+QT_MOC_LITERAL(10, 104, 17), // "closeActiveDialog"
+QT_MOC_LITERAL(11, 122, 14), // "onUdpReadyRead"
+QT_MOC_LITERAL(12, 137, 11), // "hideMicIcon"
+QT_MOC_LITERAL(13, 149, 14), // "sendTcpCommand"
+QT_MOC_LITERAL(14, 164, 7), // "uint8_t"
+QT_MOC_LITERAL(15, 172, 6), // "cmd_id"
+QT_MOC_LITERAL(16, 179, 22), // "sendTcpCommandWithArgs"
+QT_MOC_LITERAL(17, 202, 4), // "arg1"
+QT_MOC_LITERAL(18, 207, 4), // "arg2"
+QT_MOC_LITERAL(19, 212, 23) // "onStudyAccumulationTick"
 
     },
     "MainWindow\0showHome\0\0showStatus\0"
-    "showStats\0showStudySetupDialog\0"
+    "showStats\0showControl\0showStudySetupDialog\0"
     "startStudy\0minutes\0stopStudy\0"
     "closeActiveDialog\0onUdpReadyRead\0"
     "hideMicIcon\0sendTcpCommand\0uint8_t\0"
-    "cmd_id\0onStudyAccumulationTick"
+    "cmd_id\0sendTcpCommandWithArgs\0arg1\0"
+    "arg2\0onStudyAccumulationTick"
 };
 #undef QT_MOC_LITERAL
 
@@ -244,7 +249,7 @@ static const uint qt_meta_data_MainWindow[] = {
        8,       // revision
        0,       // classname
        0,    0, // classinfo
-      12,   14, // methods
+      14,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -252,31 +257,35 @@ static const uint qt_meta_data_MainWindow[] = {
        0,       // signalCount
 
  // slots: name, argc, parameters, tag, flags
-       1,    0,   74,    2, 0x08 /* Private */,
-       3,    0,   75,    2, 0x08 /* Private */,
-       4,    0,   76,    2, 0x08 /* Private */,
-       5,    0,   77,    2, 0x08 /* Private */,
-       6,    1,   78,    2, 0x08 /* Private */,
-       6,    0,   81,    2, 0x28 /* Private | MethodCloned */,
-       8,    0,   82,    2, 0x08 /* Private */,
-       9,    0,   83,    2, 0x08 /* Private */,
-      10,    0,   84,    2, 0x08 /* Private */,
-      11,    0,   85,    2, 0x08 /* Private */,
-      12,    1,   86,    2, 0x08 /* Private */,
-      15,    0,   89,    2, 0x08 /* Private */,
+       1,    0,   84,    2, 0x08 /* Private */,
+       3,    0,   85,    2, 0x08 /* Private */,
+       4,    0,   86,    2, 0x08 /* Private */,
+       5,    0,   87,    2, 0x08 /* Private */,
+       6,    0,   88,    2, 0x08 /* Private */,
+       7,    1,   89,    2, 0x08 /* Private */,
+       7,    0,   92,    2, 0x28 /* Private | MethodCloned */,
+       9,    0,   93,    2, 0x08 /* Private */,
+      10,    0,   94,    2, 0x08 /* Private */,
+      11,    0,   95,    2, 0x08 /* Private */,
+      12,    0,   96,    2, 0x08 /* Private */,
+      13,    1,   97,    2, 0x08 /* Private */,
+      16,    3,  100,    2, 0x08 /* Private */,
+      19,    0,  107,    2, 0x08 /* Private */,
 
  // slots: parameters
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
-    QMetaType::Void, QMetaType::Int,    7,
+    QMetaType::Void,
+    QMetaType::Void, QMetaType::Int,    8,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
-    QMetaType::Void, 0x80000000 | 13,   14,
+    QMetaType::Void, 0x80000000 | 14,   15,
+    QMetaType::Void, 0x80000000 | 14, 0x80000000 | 14, QMetaType::Float,   15,   17,   18,
     QMetaType::Void,
 
        0        // eod
@@ -291,15 +300,17 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 0: _t->showHome(); break;
         case 1: _t->showStatus(); break;
         case 2: _t->showStats(); break;
-        case 3: _t->showStudySetupDialog(); break;
-        case 4: _t->startStudy((*reinterpret_cast< int(*)>(_a[1]))); break;
-        case 5: _t->startStudy(); break;
-        case 6: _t->stopStudy(); break;
-        case 7: _t->closeActiveDialog(); break;
-        case 8: _t->onUdpReadyRead(); break;
-        case 9: _t->hideMicIcon(); break;
-        case 10: _t->sendTcpCommand((*reinterpret_cast< uint8_t(*)>(_a[1]))); break;
-        case 11: _t->onStudyAccumulationTick(); break;
+        case 3: _t->showControl(); break;
+        case 4: _t->showStudySetupDialog(); break;
+        case 5: _t->startStudy((*reinterpret_cast< int(*)>(_a[1]))); break;
+        case 6: _t->startStudy(); break;
+        case 7: _t->stopStudy(); break;
+        case 8: _t->closeActiveDialog(); break;
+        case 9: _t->onUdpReadyRead(); break;
+        case 10: _t->hideMicIcon(); break;
+        case 11: _t->sendTcpCommand((*reinterpret_cast< uint8_t(*)>(_a[1]))); break;
+        case 12: _t->sendTcpCommandWithArgs((*reinterpret_cast< uint8_t(*)>(_a[1])),(*reinterpret_cast< uint8_t(*)>(_a[2])),(*reinterpret_cast< float(*)>(_a[3]))); break;
+        case 13: _t->onStudyAccumulationTick(); break;
         default: ;
         }
     }
@@ -334,13 +345,13 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 12)
+        if (_id < 14)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 12;
+        _id -= 14;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 12)
+        if (_id < 14)
             *reinterpret_cast<int*>(_a[0]) = -1;
-        _id -= 12;
+        _id -= 14;
     }
     return _id;
 }
