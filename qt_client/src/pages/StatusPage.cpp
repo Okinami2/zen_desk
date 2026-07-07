@@ -12,8 +12,8 @@ StatusPage::StatusPage(QWidget *parent) : QWidget(parent)
     setAttribute(Qt::WA_StyledBackground, false);
 
     QVBoxLayout *root = new QVBoxLayout(this);
-    root->setContentsMargins(40, 34, 40, 36);
-    root->setSpacing(22);
+    root->setContentsMargins(40, 26, 40, 26);
+    root->setSpacing(16);
 
     QHBoxLayout *header = new QHBoxLayout();
     QLabel *title = new QLabel("实时学习状态");
@@ -29,7 +29,11 @@ StatusPage::StatusPage(QWidget *parent) : QWidget(parent)
 
     QGridLayout *grid = new QGridLayout();
     grid->setHorizontalSpacing(20);
-    grid->setVerticalSpacing(20);
+    grid->setVerticalSpacing(16);
+    // 前两行是双元素卡片，底部坐姿卡片有 4 个文本行，需要更多高度
+    grid->setRowStretch(0, 3);
+    grid->setRowStretch(1, 3);
+    grid->setRowStretch(2, 4);
     grid->addWidget(makeStatusCard("在座状态", &seatValue, &seatDetail, QColor(0x10, 0xB9, 0x81)), 0, 0);
     grid->addWidget(makeStatusCard("人脸检测", &faceValue, &faceDetail, QColor(0x4F, 0x46, 0xE5)), 0, 1);
     grid->addWidget(makeStatusCard("视线方向", &attentionValue, &attentionDetail, QColor(0xF5, 0x9E, 0x0B)), 1, 0);
