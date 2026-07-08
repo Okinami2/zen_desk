@@ -79,11 +79,11 @@ bool DatabaseManager::initDb()
     return true;
 }
 
-void DatabaseManager::loadTodayStats(int &effective, int &absent, int &distracted_cnt, int &distracted_sec)
+void DatabaseManager::loadTodayStats(int &effective, int &absent, int &distracted_cnt, int &distracted_sec, QDate date)
 {
     if (!db.isOpen()) return;
 
-    QString today = QDateTime::currentDateTime().toString("yyyy-MM-dd");
+    QString today = date.isNull() ? QDateTime::currentDateTime().toString("yyyy-MM-dd") : date.toString("yyyy-MM-dd");
     QSqlQuery query;
     query.prepare("SELECT effective_seconds, absent_count, distracted_count, distracted_seconds "
                   "FROM daily_stats WHERE date = :date");
@@ -104,11 +104,11 @@ void DatabaseManager::loadTodayStats(int &effective, int &absent, int &distracte
     }
 }
 
-void DatabaseManager::saveTodayStats(int effective, int absent, int distracted_cnt, int distracted_sec)
+void DatabaseManager::saveTodayStats(int effective, int absent, int distracted_cnt, int distracted_sec, QDate date)
 {
     if (!db.isOpen()) return;
 
-    QString today = QDateTime::currentDateTime().toString("yyyy-MM-dd");
+    QString today = date.isNull() ? QDateTime::currentDateTime().toString("yyyy-MM-dd") : date.toString("yyyy-MM-dd");
     QSqlQuery query;
     // Uses REPLACE INTO (SQLite specific) which acts as an UPSERT since date is PRIMARY KEY
     query.prepare("REPLACE INTO daily_stats (date, effective_seconds, absent_count, distracted_count, distracted_seconds) "
@@ -126,11 +126,11 @@ void DatabaseManager::saveTodayStats(int effective, int absent, int distracted_c
     }
 }
 
-void DatabaseManager::loadHourlyStats(QVector<int> &focus, QVector<int> &distracted, QVector<int> &absent)
+void DatabaseManager::loadHourlyStats(QVector<int> &focus, QVector<int> &distracted, QVector<int> &absent, QDate date)
 {
     if (!db.isOpen()) return;
 
-    QString today = QDateTime::currentDateTime().toString("yyyy-MM-dd");
+    QString today = date.isNull() ? QDateTime::currentDateTime().toString("yyyy-MM-dd") : date.toString("yyyy-MM-dd");
     QSqlQuery query;
     query.prepare("SELECT hour, focus_seconds, distracted_seconds, absent_seconds FROM hourly_stats WHERE date = :date");
     query.bindValue(":date", today);
@@ -154,11 +154,11 @@ void DatabaseManager::loadHourlyStats(QVector<int> &focus, QVector<int> &distrac
     }
 }
 
-void DatabaseManager::saveHourlyStats(const QVector<int> &focus, const QVector<int> &distracted, const QVector<int> &absent)
+void DatabaseManager::saveHourlyStats(const QVector<int> &focus, const QVector<int> &distracted, const QVector<int> &absent, QDate date)
 {
     if (!db.isOpen()) return;
 
-    QString today = QDateTime::currentDateTime().toString("yyyy-MM-dd");
+    QString today = date.isNull() ? QDateTime::currentDateTime().toString("yyyy-MM-dd") : date.toString("yyyy-MM-dd");
     
     db.transaction();
     

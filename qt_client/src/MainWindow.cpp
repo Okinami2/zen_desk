@@ -159,6 +159,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     distractedBucketSeconds.fill(0, 24);
     absentBucketSeconds.fill(0, 24);
     
+    currentStudyDate = QDateTime::currentDateTime().date();
+
     DatabaseManager::instance().loadHourlyStats(
         focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds
     );
@@ -291,6 +293,40 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 }
 
 void MainWindow::onStudyAccumulationTick() {
+    QDate today = QDateTime::currentDateTime().date();
+    if (today != currentStudyDate) {
+        // Save the previous day's stats before resetting
+        DatabaseManager::instance().saveTodayStats(
+            effectiveStudySeconds, absentCount, distractedCount, distractedSeconds, currentStudyDate
+        );
+        DatabaseManager::instance().saveHourlyStats(
+            focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds, currentStudyDate
+        );
+
+        // Day has changed, reset all accumulators
+        currentStudyDate = today;
+        effectiveStudySeconds = 0;
+        absentCount = 0;
+        distractedCount = 0;
+        distractedSeconds = 0;
+        focusBucketSeconds.fill(0, 24);
+        distractedBucketSeconds.fill(0, 24);
+        absentBucketSeconds.fill(0, 24);
+        
+        // Also load today's stats if any exist
+        DatabaseManager::instance().loadTodayStats(
+            effectiveStudySeconds, absentCount, distractedCount, distractedSeconds, currentStudyDate
+        );
+        DatabaseManager::instance().loadHourlyStats(
+            focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds, currentStudyDate
+        );
+
+        // Update stats page immediately if we are on it
+        if (stack->currentWidget() == statsPage) {
+            updateStatsPageData();
+        }
+    }
+
     if (!inStudyMode) {
         return;
     }
@@ -314,8 +350,8 @@ void MainWindow::onStudyAccumulationTick() {
     }
 
     if (effectiveStudySeconds % 60 == 0) {
-        DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
-        DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds);
+        DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds, currentStudyDate);
+        DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds, currentStudyDate);
     }
 }
 
@@ -636,8 +672,8 @@ void MainWindow::stopStudy()
     isDistracted = false;
     studyPage->stopTimer();
     
-    DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds);
-    DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds);
+    DatabaseManager::instance().saveTodayStats(effectiveStudySeconds, absentCount, distractedCount, distractedSeconds, currentStudyDate);
+    DatabaseManager::instance().saveHourlyStats(focusBucketSeconds, distractedBucketSeconds, absentBucketSeconds, currentStudyDate);
 
     stack->setCurrentWidget(homePage);
     setActiveNav(btnHome);

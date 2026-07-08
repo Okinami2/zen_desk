@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QVector>
+#include <QDate>
 
 class DatabaseManager : public QObject
 {
@@ -17,16 +18,16 @@ public:
     bool initDb();
     
     // 加载当天的数据
-    void loadTodayStats(int &effective, int &absent, int &distracted_cnt, int &distracted_sec);
+    void loadTodayStats(int &effective, int &absent, int &distracted_cnt, int &distracted_sec, QDate date = QDate());
     
     // 保存/更新当天的数据
-    void saveTodayStats(int effective, int absent, int distracted_cnt, int distracted_sec);
+    void saveTodayStats(int effective, int absent, int distracted_cnt, int distracted_sec, QDate date = QDate());
 
     // 加载当天的24小时分布数据
-    void loadHourlyStats(QVector<int> &focus, QVector<int> &distracted, QVector<int> &absent);
+    void loadHourlyStats(QVector<int> &focus, QVector<int> &distracted, QVector<int> &absent, QDate date = QDate());
     
     // 保存/更新当天的24小时分布数据
-    void saveHourlyStats(const QVector<int> &focus, const QVector<int> &distracted, const QVector<int> &absent);
+    void saveHourlyStats(const QVector<int> &focus, const QVector<int> &distracted, const QVector<int> &absent, QDate date = QDate());
 
 private:
     explicit DatabaseManager(QObject *parent = nullptr);

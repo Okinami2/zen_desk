@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QVector>
 #include <QStringList>
+#include <QDate>
 #include "protocol.h"
 
 // 定义四大交互层级
@@ -159,6 +160,7 @@ private:
     QVector<int> absentBucketSeconds;
 
     bool isDistracted = false;
+    QDate currentStudyDate;
 
     QTimer *studyAccumulationTimer = nullptr;
 
