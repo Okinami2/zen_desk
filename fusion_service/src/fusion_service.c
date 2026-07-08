@@ -869,6 +869,9 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
             LOG_INFO("Vision seat -> ABSENT (face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d)",
                      vs->face_present, face_diag_sq > 0.0f ? sqrtf(face_diag_sq) : 0.0f,
                      face_cx, face_cy, center_ok);
+                     
+            LOG_INFO("Dual-sensor absence detected, disabling vision model inference");
+            send_vision_control_cmd("disable");
         }
         fs.current_state = g_fusion_service.current_state;
         pthread_mutex_unlock(&g_fusion_service.mutex);
@@ -978,10 +981,19 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     }
 }
 
-/* 雷达已不再参与入座/离座判断。摄像头的人脸框大小是当前唯一在座依据。 */
 static void radar_to_fusion_and_dispatch(const RadarState *rs)
 {
-    (void)rs;
+    static int last_radar_seated = -1;
+    
+    if (rs->presence == 1 && last_radar_seated != 1) {
+        LOG_INFO("Radar detects presence, enabling vision model inference");
+        send_vision_control_cmd("enable");
+        last_radar_seated = 1;
+    } else if (rs->presence == 0 && last_radar_seated != 0) {
+        // We do NOT disable vision here. We let the dual-sensor logic in 
+        // vision_to_fusion_and_dispatch transition to ABSENT and disable it there.
+        last_radar_seated = 0;
+    }
 }
 
 int fusion_service_init(const Config *config) {
