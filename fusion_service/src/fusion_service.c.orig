@@ -724,7 +724,7 @@ static VisionFocusVote vision_state_to_vote(const VisionState *vs)
         return VISION_VOTE_UNKNOWN;
     }
 
-    now_ms = fusion_monotonic_ms();
+    now_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
 
     if (vs->face_present == 0 ||
         vs->attention_region == VISION_ATTENTION_NO_FACE ||
@@ -853,7 +853,7 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     int vision_seated = vision_seat_update(vs, &face_diag_sq, &face_cx, &face_cy, &center_ok);
     int radar_seated = 0;
     
-    now_ms = fusion_monotonic_ms();
+    now_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
     if (g_fusion_service.latest_radar.timestamp != 0 &&
         now_ms >= g_fusion_service.latest_radar.timestamp &&
         now_ms - g_fusion_service.latest_radar.timestamp < 5000) {
@@ -895,7 +895,7 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
             restore_state = STATE_FOCUSED;
         }
         g_fusion_service.current_state = restore_state;
-        g_fusion_service.last_tick_ms = fusion_monotonic_ms();
+        g_fusion_service.last_tick_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
         vision_focus_reset(restore_state == STATE_DISTRACTED);
         should_dispatch = 1;
         LOG_INFO("Vision seat -> PRESENT (face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d restore=%d)",
@@ -919,7 +919,7 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
         g_vision_filter.is_distracted = 1;
     }
 
-    now_ms = fusion_monotonic_ms();
+    now_ms = (vs->timestamp != 0) ? vs->timestamp : fusion_monotonic_ms();
     vote = vision_state_to_vote(vs);
     if (vision_focus_apply_vote(vote, now_ms, &next_state)) {
         if (g_fusion_service.current_state != next_state) {
@@ -995,36 +995,6 @@ static void radar_to_fusion_and_dispatch(const RadarState *rs)
         LOG_INFO("Radar detects presence, enabling vision model inference");
         send_vision_control_cmd("enable");
         last_radar_seated = 1;
-
-        /* ---- 核心修复：雷达检测到人时，直接触发入座状态转换 ---- */
-        /* 离座期间视觉服务已停止，不能等视觉数据到达才转换状态。
-         * 雷达是唯一能感知"人回来了"的传感器，必须由它直接开灯。 */
-        pthread_mutex_lock(&g_fusion_service.mutex);
-        if (g_fusion_service.current_state == STATE_ABSENT) {
-            LearningState restore_state = g_vision_seat_filter.state_before_absent;
-            if (restore_state == STATE_ABSENT) {
-                restore_state = STATE_SEATED_IDLE;
-            } else if (restore_state == STATE_DISTRACTED) {
-                restore_state = STATE_FOCUSED;
-            }
-            g_fusion_service.current_state = restore_state;
-            g_fusion_service.last_tick_ms = fusion_monotonic_ms();
-            g_vision_seat_filter.seated = 1;
-            g_vision_seat_filter.enter_count = 0;
-            g_vision_seat_filter.exit_start_ms = 0;
-            vision_focus_reset(restore_state == STATE_DISTRACTED);
-            LOG_INFO("Radar seat -> PRESENT (restore=%d)", restore_state);
-            pthread_mutex_unlock(&g_fusion_service.mutex);
-
-            FusionState fs;
-            memset(&fs, 0, sizeof(fs));
-            fs.current_state = restore_state;
-            fs.timestamp = time(NULL);
-            fusion_send_state(&fs);
-            device_handle_fusion_state(&fs);
-        } else {
-            pthread_mutex_unlock(&g_fusion_service.mutex);
-        }
     } else if (rs->presence == 0 && last_radar_seated != 0) {
         // We do NOT disable vision here. We let the dual-sensor logic in 
         // vision_to_fusion_and_dispatch transition to ABSENT and disable it there.
@@ -1127,7 +1097,6 @@ void fusion_update_vision(const VisionState *state) {
 void fusion_update_radar(const RadarState *state) {
     pthread_mutex_lock(&g_fusion_service.mutex);
     g_fusion_service.latest_radar = *state;
-    g_fusion_service.latest_radar.timestamp = fusion_monotonic_ms();
     pthread_mutex_unlock(&g_fusion_service.mutex);
 }
 

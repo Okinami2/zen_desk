@@ -318,6 +318,9 @@ td_s32 vision_display_start(const td_char *ready_file)
     //     vision_display_stop();
     //     return TD_FAILURE;
     // }
+    if (ioctl(g_display.fb_fd, FBIO_REFRESH, &g_display.canvas_buf) < 0) {
+        perror("vision display: FBIO_REFRESH failed");
+    }
 
     if (write_ready_file(&g_display, ready_file) != TD_SUCCESS) {
         vision_display_stop();
