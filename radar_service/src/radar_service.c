@@ -249,81 +249,26 @@ static void* radar_process_thread(void *arg)
         else if (count[2] > count[0] && count[2] > count[1]) majority_pred = 2;
         else majority_pred = 0;
 
-        /* -- 步骤 7: 积分漏桶与非对称状态机 (Asymmetric Leaky Bucket) -- */
-        int s;
-        for (s = 0; s < 3; s++) {
-            if (s == majority_pred) {
-                g_state_confidence[s] += 2; /* 预测对加2分 (漏桶注水) */
-            } else {
-                g_state_confidence[s] -= 1; /* 预测错缓慢扣1分 (漏桶漏水) */
-            }
-            /* 限制置信度在 0 ~ 200 之间 */
-            if (g_state_confidence[s] > 200) g_state_confidence[s] = 200;
-            if (g_state_confidence[s] < 0)   g_state_confidence[s] = 0;
-        }
+        /* -- 步骤 7: 简化状态，直接使用 1 秒内的多数决作为当前状态 -- */
+        /* 用户要求：有人乱动(2)舍弃，统一视为有人(1)。无人(0)即离座。 */
+        g_current_state = (majority_pred > 0) ? STATE_NORMAL : STATE_AWAY;
 
-        int next_state = g_current_state;
-
-        if (g_current_state == STATE_AWAY) {
-            /* 场景 1: 入座极快。只需要 15 帧 (1.5秒) * 2 = 30 分 */
-            if (g_state_confidence[STATE_NORMAL] >= 30) {
-                next_state = STATE_NORMAL;
-            }
-        } 
-        else if (g_current_state == STATE_NORMAL) {
-            /* 场景 2: 离座极慢。需要 80 帧 (8.0秒) * 2 = 160 分 */
-            if (g_state_confidence[STATE_AWAY] >= 160) {
-                next_state = STATE_AWAY;
-            }
-            /* 场景 3: 乱动适中。需要 30 帧 (3.0秒) * 2 = 60 分 */
-            else if (g_state_confidence[STATE_FIDGET] >= 60) {
-                next_state = STATE_FIDGET;
-            }
-        }
-        else if (g_current_state == STATE_FIDGET) {
-            /* 场景 4: 恢复正常。需要 50 帧 (5.0秒) * 2 = 100 分 */
-            if (g_state_confidence[STATE_NORMAL] >= 100) {
-                next_state = STATE_NORMAL;
-            }
-            /* 场景 5: 乱动时直接离开 (极少数情况) */
-            else if (g_state_confidence[STATE_AWAY] >= 160) {
-                next_state = STATE_AWAY;
-            }
-        }
-
-        /* 执行状态切换 */
-        if (next_state != g_current_state) {
-            LOG_INFO("<<< STATE CHANGED: %s -> %s >>> (Leaky Bucket triggered)", 
-                     state_name(g_current_state), state_name(next_state));
-            
-            /* 状态切换后，重置旧状态的置信度，并给新状态加上初始分数，防止反复横跳 */
-            g_state_confidence[g_current_state] = 0;
-            g_state_confidence[next_state] = 100; // 给新状态一个较高初始值，避免立刻跌落
-            
-            g_current_state = next_state;
-        }
-
-        /* -- 步骤 8: 周期心跳日志 (每 ~1 秒), 便于观测内部状态 -- */
+        /* -- 步骤 8: 周期心跳日志与持续发送 (每 ~1 秒) -- */
         {
             static int heartbeat = 0;
             if (++heartbeat >= 10) {
                 heartbeat = 0;
-                LOG_INFO("TGT:%d | 预测:[%d %d %d] | 多数决:%s | 置信度:[%d %d %d] | 状态:%s",
+                LOG_INFO("TGT:%d | 预测:[%d %d %d] | 多数决:%s | 状态:%s (dist=%d cm)",
                          radar_data.has_target,
                          count[0], count[1], count[2],
                          state_name(majority_pred), 
-                         g_state_confidence[0], g_state_confidence[1], g_state_confidence[2],
-                         state_name(g_current_state));
+                         state_name(g_current_state),
+                         radar_data.distance_cm);
+                
+                /* 每秒向融合中心发送一次数据，由融合中心负责容错计时 */
+                send_radar_state(&radar_data);
+                g_last_state = g_current_state;
             }
-        }
-
-        /* -- 步骤 9: 状态发生改变时，推送给 Fusion 服务 -- */
-        if (g_current_state != g_last_state) {
-            LOG_INFO("Radar FSM: %s -> %s (dist=%d cm)",
-                     state_name(g_last_state), state_name(g_current_state),
-                     radar_data.distance_cm);
-            send_radar_state(&radar_data);
-            g_last_state = g_current_state;
         }
     }
 

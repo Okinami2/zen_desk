@@ -92,14 +92,21 @@ typedef struct {
 
 typedef struct {
     int seated;
-    int enter_count;
-    uint64_t exit_start_ms;
+    int score;                      // Leaky bucket score (0~100)
+    uint64_t last_msg_ms;           // Last time a vision msg was received
     LearningState state_before_absent;
     uint64_t last_debug_ms;
 } VisionSeatFilter;
 
+typedef struct {
+    int seated;
+    int score;                      // Leaky bucket score (0~50)
+    uint64_t last_msg_ms;           // Last time a heartbeat was received
+} RadarSeatFilter;
+
 static VisionFocusFilter g_vision_filter;
 static VisionSeatFilter g_vision_seat_filter;
+static RadarSeatFilter g_radar_seat_filter;
 
 void fusion_send_ui_event(UiEventType type) {
     if (g_udp_fd < 0) return;
@@ -119,6 +126,7 @@ void fusion_send_ui_event_custom_start(uint32_t mins) {
 }
 
 /* ==================== 前置声明 ==================== */
+static void fusion_evaluate_global_seat(void);
 static void radar_to_fusion_and_dispatch(const RadarState *rs);
 static void vision_to_fusion_and_dispatch(const VisionState *vs);
 static void vision_focus_reset(int is_distracted);
@@ -483,6 +491,21 @@ static void* tcp_server_thread(void *arg)
         if (last_state_heartbeat_ms == 0 ||
             now_ms - last_state_heartbeat_ms >= FUSION_STATE_HEARTBEAT_MS) {
             fusion_send_current_state_snapshot();
+            
+            // Radar disconnect / timeout penalty (no message for 5 seconds)
+            if (now_ms - g_radar_seat_filter.last_msg_ms > 5000 && g_radar_seat_filter.last_msg_ms != 0) {
+                int old_seated = g_radar_seat_filter.seated;
+                g_radar_seat_filter.score -= 10;
+                if (g_radar_seat_filter.score < 0) g_radar_seat_filter.score = 0;
+                
+                if (g_radar_seat_filter.score <= 0) {
+                    g_radar_seat_filter.seated = 0;
+                }
+                if (g_radar_seat_filter.seated != old_seated) {
+                    fusion_evaluate_global_seat();
+                }
+            }
+            
             last_state_heartbeat_ms = now_ms;
         }
         if (ret <= 0) continue;
@@ -632,37 +655,43 @@ static int vision_seat_update(const VisionState *vs, float *diag_sq_out,
         *center_ok_out = center_ok;
     }
 
-    if (g_vision_seat_filter.seated) {
-        if (seen_as_seated_keep) {
-            g_vision_seat_filter.exit_start_ms = 0;
-        } else {
-            if (g_vision_seat_filter.exit_start_ms == 0) {
-                g_vision_seat_filter.exit_start_ms = now_ms;
-            } else if (now_ms - g_vision_seat_filter.exit_start_ms >= 5000) {
-                g_vision_seat_filter.seated = 0;
-                g_vision_seat_filter.enter_count = 0;
-                g_vision_seat_filter.exit_start_ms = 0;
-            }
-        }
-    } else {
-        if (seen_as_seated_enter) {
-            if (++g_vision_seat_filter.enter_count >= VISION_SEAT_ENTER_SAMPLES) {
-                g_vision_seat_filter.seated = 1;
-                g_vision_seat_filter.enter_count = 0;
-                g_vision_seat_filter.exit_start_ms = 0;
-            }
-        } else {
-            g_vision_seat_filter.enter_count = 0;
-        }
+    if (g_vision_seat_filter.last_msg_ms == 0) {
+        g_vision_seat_filter.last_msg_ms = now_ms;
+    }
+    
+    uint64_t delta_ms = now_ms - g_vision_seat_filter.last_msg_ms;
+    g_vision_seat_filter.last_msg_ms = now_ms;
+    
+    /* 防御性保护，避免系统时间跳变导致极大 delta */
+    if (delta_ms > 2000) delta_ms = 2000;
+
+    if (seen_as_seated_enter) {
+        /* 入座极快，设定为 500ms 达到 100 分 */
+        int add_score = (int)((delta_ms * 100) / 500);
+        if (add_score < 1) add_score = 1;
+        g_vision_seat_filter.score += add_score;
+    } else if (!seen_as_seated_keep) {
+        /* 离座极慢，设定为 5000ms (5秒) 扣完 100 分 */
+        int sub_score = (int)((delta_ms * 100) / 5000);
+        if (sub_score < 1 && delta_ms > 0) sub_score = 1; 
+        g_vision_seat_filter.score -= sub_score;
+    }
+
+    if (g_vision_seat_filter.score > 100) g_vision_seat_filter.score = 100;
+    if (g_vision_seat_filter.score < 0)   g_vision_seat_filter.score = 0;
+
+    if (g_vision_seat_filter.score >= 80) {
+        g_vision_seat_filter.seated = 1;
+    } else if (g_vision_seat_filter.score <= 0) {
+        g_vision_seat_filter.seated = 0;
     }
 
     if (g_vision_seat_filter.last_debug_ms == 0 ||
         now_ms - g_vision_seat_filter.last_debug_ms >= VISION_SEAT_DEBUG_INTERVAL_MS) {
-        LOG_INFO("Vision seat sample: face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d seated=%d enter_count=%d exit_timer=%llu",
+        LOG_INFO("Vision seat sample: face=%u diag=%.1f center_ok=%d score=%d seated=%d",
                  vs != NULL ? vs->face_present : 0,
                  diag_sq > 0.0f ? sqrtf(diag_sq) : 0.0f,
-                 face_cx, face_cy, center_ok, g_vision_seat_filter.seated,
-                 g_vision_seat_filter.enter_count, g_vision_seat_filter.exit_start_ms == 0 ? 0 : now_ms - g_vision_seat_filter.exit_start_ms);
+                 center_ok, g_vision_seat_filter.score, g_vision_seat_filter.seated);
         g_vision_seat_filter.last_debug_ms = now_ms;
     }
 
@@ -831,7 +860,6 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     VisionFocusVote vote;
     int should_dispatch = 0;
     uint64_t now_ms;
-    int seated;
     float face_diag_sq = 0.0f;
     float face_cx = 0.0f;
     float face_cy = 0.0f;
@@ -850,68 +878,26 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     pthread_mutex_lock(&g_fusion_service.mutex);
     g_fusion_service.latest_vision = *vs;
     
-    int vision_seated = vision_seat_update(vs, &face_diag_sq, &face_cx, &face_cy, &center_ok);
-    int radar_seated = 0;
+    int old_vision_seated = g_vision_seat_filter.seated;
+    vision_seat_update(vs, &face_diag_sq, &face_cx, &face_cy, &center_ok);
     
-    now_ms = fusion_monotonic_ms();
-    if (g_fusion_service.latest_radar.timestamp != 0 &&
-        now_ms >= g_fusion_service.latest_radar.timestamp &&
-        now_ms - g_fusion_service.latest_radar.timestamp < 5000) {
-        if (g_fusion_service.latest_radar.presence == 1) {
-            radar_seated = 1;
-        }
+    pthread_mutex_unlock(&g_fusion_service.mutex);
+    
+    if (g_vision_seat_filter.seated != old_vision_seated) {
+        fusion_evaluate_global_seat();
     }
     
-    seated = vision_seated || radar_seated;
-
-    if (!seated) {
-        if (g_fusion_service.current_state != STATE_ABSENT) {
-            g_vision_seat_filter.state_before_absent = g_fusion_service.current_state;
-            g_fusion_service.current_state = STATE_ABSENT;
-            should_dispatch = 1;
-            vision_focus_reset(0);
-            LOG_INFO("Vision seat -> ABSENT (face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d)",
-                     vs->face_present, face_diag_sq > 0.0f ? sqrtf(face_diag_sq) : 0.0f,
-                     face_cx, face_cy, center_ok);
-                     
-            LOG_INFO("Dual-sensor absence detected, disabling vision model inference");
-            send_vision_control_cmd("disable");
-        }
-        fs.current_state = g_fusion_service.current_state;
+    pthread_mutex_lock(&g_fusion_service.mutex);
+    
+    if (g_fusion_service.current_state == STATE_ABSENT) {
         pthread_mutex_unlock(&g_fusion_service.mutex);
-
-        if (should_dispatch) {
-            fusion_send_state(&fs);
-            device_handle_fusion_state(&fs);
-        }
         return;
     }
-
-    if (g_fusion_service.current_state == STATE_ABSENT) {
-        LearningState restore_state = g_vision_seat_filter.state_before_absent;
-        if (restore_state == STATE_ABSENT) {
-            restore_state = STATE_SEATED_IDLE;
-        } else if (restore_state == STATE_DISTRACTED) {
-            restore_state = STATE_FOCUSED;
-        }
-        g_fusion_service.current_state = restore_state;
-        g_fusion_service.last_tick_ms = fusion_monotonic_ms();
-        vision_focus_reset(restore_state == STATE_DISTRACTED);
-        should_dispatch = 1;
-        LOG_INFO("Vision seat -> PRESENT (face=%u diag=%.1f center=(%.1f,%.1f) center_ok=%d restore=%d)",
-                 vs->face_present, face_diag_sq > 0.0f ? sqrtf(face_diag_sq) : 0.0f,
-                 face_cx, face_cy, center_ok, restore_state);
-    }
-
+    
     if (g_fusion_service.current_state != STATE_FOCUSED &&
         g_fusion_service.current_state != STATE_DISTRACTED) {
         vision_focus_reset(0);
         pthread_mutex_unlock(&g_fusion_service.mutex);
-        if (should_dispatch) {
-            fs.current_state = g_fusion_service.current_state;
-            fusion_send_state(&fs);
-            device_handle_fusion_state(&fs);
-        }
         return;
     }
 
@@ -987,48 +973,72 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
     }
 }
 
+static void fusion_evaluate_global_seat(void) {
+    int seated = g_vision_seat_filter.seated || g_radar_seat_filter.seated;
+    int should_dispatch = 0;
+    FusionState fs;
+    memset(&fs, 0, sizeof(fs));
+    fs.timestamp = time(NULL);
+
+    pthread_mutex_lock(&g_fusion_service.mutex);
+    
+    if (!seated && g_fusion_service.current_state != STATE_ABSENT) {
+        g_vision_seat_filter.state_before_absent = g_fusion_service.current_state;
+        g_fusion_service.current_state = STATE_ABSENT;
+        should_dispatch = 1;
+        vision_focus_reset(0);
+        LOG_INFO("Global seat -> ABSENT (v=%d r=%d). Disabling vision model", 
+                 g_vision_seat_filter.seated, g_radar_seat_filter.seated);
+        send_vision_control_cmd("disable");
+    } else if (seated && g_fusion_service.current_state == STATE_ABSENT) {
+        LearningState restore_state = g_vision_seat_filter.state_before_absent;
+        if (restore_state == STATE_ABSENT) {
+            restore_state = STATE_SEATED_IDLE;
+        } else if (restore_state == STATE_DISTRACTED) {
+            restore_state = STATE_FOCUSED;
+        }
+        g_fusion_service.current_state = restore_state;
+        g_fusion_service.last_tick_ms = fusion_monotonic_ms();
+        vision_focus_reset(restore_state == STATE_DISTRACTED);
+        should_dispatch = 1;
+        LOG_INFO("Global seat -> PRESENT (v=%d r=%d) restore=%d. Enabling vision model", 
+                 g_vision_seat_filter.seated, g_radar_seat_filter.seated, restore_state);
+        send_vision_control_cmd("enable");
+    }
+    
+    if (should_dispatch) {
+        fs.current_state = g_fusion_service.current_state;
+    }
+    pthread_mutex_unlock(&g_fusion_service.mutex);
+
+    if (should_dispatch) {
+        fusion_send_state(&fs);
+        device_handle_fusion_state(&fs);
+    }
+}
+
 static void radar_to_fusion_and_dispatch(const RadarState *rs)
 {
-    static int last_radar_seated = -1;
+    g_radar_seat_filter.last_msg_ms = fusion_monotonic_ms();
     
-    if (rs->presence == 1 && last_radar_seated != 1) {
-        LOG_INFO("Radar detects presence, enabling vision model inference");
-        send_vision_control_cmd("enable");
-        last_radar_seated = 1;
-
-        /* ---- 核心修复：雷达检测到人时，直接触发入座状态转换 ---- */
-        /* 离座期间视觉服务已停止，不能等视觉数据到达才转换状态。
-         * 雷达是唯一能感知"人回来了"的传感器，必须由它直接开灯。 */
-        pthread_mutex_lock(&g_fusion_service.mutex);
-        if (g_fusion_service.current_state == STATE_ABSENT) {
-            LearningState restore_state = g_vision_seat_filter.state_before_absent;
-            if (restore_state == STATE_ABSENT) {
-                restore_state = STATE_SEATED_IDLE;
-            } else if (restore_state == STATE_DISTRACTED) {
-                restore_state = STATE_FOCUSED;
-            }
-            g_fusion_service.current_state = restore_state;
-            g_fusion_service.last_tick_ms = fusion_monotonic_ms();
-            g_vision_seat_filter.seated = 1;
-            g_vision_seat_filter.enter_count = 0;
-            g_vision_seat_filter.exit_start_ms = 0;
-            vision_focus_reset(restore_state == STATE_DISTRACTED);
-            LOG_INFO("Radar seat -> PRESENT (restore=%d)", restore_state);
-            pthread_mutex_unlock(&g_fusion_service.mutex);
-
-            FusionState fs;
-            memset(&fs, 0, sizeof(fs));
-            fs.current_state = restore_state;
-            fs.timestamp = time(NULL);
-            fusion_send_state(&fs);
-            device_handle_fusion_state(&fs);
-        } else {
-            pthread_mutex_unlock(&g_fusion_service.mutex);
-        }
-    } else if (rs->presence == 0 && last_radar_seated != 0) {
-        // We do NOT disable vision here. We let the dual-sensor logic in 
-        // vision_to_fusion_and_dispatch transition to ABSENT and disable it there.
-        last_radar_seated = 0;
+    if (rs->presence == 1) {
+        g_radar_seat_filter.score += 25; /* 入座快，2秒达标 */
+    } else {
+        g_radar_seat_filter.score -= 10; /* 离座慢，5秒达标 */
+    }
+    
+    if (g_radar_seat_filter.score > 50) g_radar_seat_filter.score = 50;
+    if (g_radar_seat_filter.score < 0)  g_radar_seat_filter.score = 0;
+    
+    int old_seated = g_radar_seat_filter.seated;
+    if (g_radar_seat_filter.score >= 40) {
+        g_radar_seat_filter.seated = 1;
+    } else if (g_radar_seat_filter.score <= 0) {
+        g_radar_seat_filter.seated = 0;
+    }
+    
+    if (g_radar_seat_filter.seated != old_seated) {
+        fusion_evaluate_global_seat();
     }
 }
 
