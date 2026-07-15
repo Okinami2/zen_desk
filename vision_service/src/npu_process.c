@@ -44,7 +44,7 @@
 
 #define SAMPLE_SVP_NPU_FACE_DET_MODEL_PATH   "./data/model/face_detection.om"
 #define SAMPLE_SVP_NPU_LANDMARK_MODEL_PATH   "./data/model/landmark106.om"
-#define SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_PATH "./data/model/pose_landmarks_detector.om"
+#define SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_PATH "./data/model/yolo26n-pose.om"
 
 #define SAMPLE_SVP_LANDMARK_INPUT_BIN_PATH   "./data/input/landmark_input.bin"
 
@@ -83,7 +83,7 @@
 /* Shoulder tilt: |dY|/shoulder_w ~= sin(angle). Sitting upright already reads
  * ~0.20 because the shoulders are never perfectly level to the sensor, so the
  * onset is set well above that baseline (0.32 ~= 18 deg) to stop false alarms. */
-#define SAMPLE_SVP_POSE_TILT_TH       0.32f   /* shoulder tilt onset (~18 deg)   */
+#define SAMPLE_SVP_POSE_TILT_TH       0.11f   /* shoulder tilt onset (~7 deg)    */
 #define SAMPLE_SVP_POSE_TILT_SANE     0.70f   /* above this: treat as noise      */
 #define SAMPLE_SVP_POSE_TILT_SPAN     0.20f   /* onset..full-score width         */
 /* Head lateral offset: (nose_x - shoulder_center_x)/shoulder_w. */
@@ -92,10 +92,10 @@
 #define SAMPLE_SVP_POSE_OFFSET_SPAN   0.25f   /* onset..full-score width         */
 /* Hand-supporting-head: wrist(15/16) distance to ear(7/8)/nose(0), normalized by
  * shoulder width. Relaxed so a hand merely resting near the head is detected. */
-#define SAMPLE_SVP_POSE_HAND_NEAR     0.55f   /* wrist-head dist onset (rel width) */
+#define SAMPLE_SVP_POSE_HAND_NEAR     0.48f   /* wrist-head dist onset (rel width) */
 #define SAMPLE_SVP_POSE_HAND_FULL     0.18f   /* dist at which score saturates    */
-#define SAMPLE_SVP_POSE_HAND_CONF_TH  0.60f   /* min wrist visibility to trust    */
-#define SAMPLE_SVP_POSE_HAND_SCORE_TH 0.40f   /* score above which label fires    */
+#define SAMPLE_SVP_POSE_HAND_CONF_TH  0.40f   /* min wrist visibility to trust    */
+#define SAMPLE_SVP_POSE_HAND_SCORE_TH 0.15f   /* score above which label fires    */
 /* Temporal stabilization. Pose runs ~every 2s. Metrics are EMA-smoothed before
  * thresholding and a label only flips after CONFIRM consecutive agreeing runs,
  * which removes the single-frame flicker seen while the subject sits still. */
@@ -163,6 +163,8 @@ static sample_svp_face_state g_face_state = {0};
 static sample_svp_npu_task_info g_svp_npu_task[SAMPLE_SVP_NPU_OFFLINE_TASK_NUM] = {0};
 static td_u32 g_face_det_debug_frame_idx = 0;
 static td_u32 g_face_det_expect_w = 0;
+static td_u32 g_pose_expect_w = 0;
+static td_u32 g_pose_expect_h = 0;
 static td_u32 g_face_det_expect_h = 0;
 static td_u32 g_face_det_expect_size = 0;
 static td_u32 g_face_det_expect_stride = 0;
@@ -1335,6 +1337,15 @@ static td_s32 sample_svp_npu_pipeline_init(td_void)
     g_landmark_expect_stride = landmark_input_stride;
     g_landmark_model_input_virt = landmark_input_virt;
 
+    ot_size pose_input_size;
+    ret = sample_common_svp_npu_get_input_resolution(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX, 0, &pose_input_size);
+    if (ret != TD_SUCCESS) {
+        sample_svp_trace_err("get pose landmark input resolution failed\n");
+        goto init_fail;
+    }
+    g_pose_expect_w = pose_input_size.width;
+    g_pose_expect_h = pose_input_size.height;
+
     ret = sample_common_svp_npu_get_input_data_buffer_info(&g_svp_npu_task[2], 0,
         &pose_lm_input_virt, &pose_lm_input_size_bytes, &pose_lm_input_stride);
     if (ret != TD_SUCCESS) {
@@ -2270,77 +2281,80 @@ static td_s32 sample_svp_pose_roi_from_face(const sample_svp_face_box *face,
     return TD_SUCCESS;
 }
 
-static td_s32 sample_svp_prepare_pose_landmark_input(const sample_svp_pose_roi *roi)
+static td_s32 sample_svp_prepare_pose_landmark_input(td_u32 frame_w, td_u32 frame_h)
 {
-    const td_u8 *src = g_svp_npu_face_det_frame_virt;
-    td_u32 src_w = g_svp_npu_face_det_frame.video_frame.width;
-    td_u32 src_h = g_svp_npu_face_det_frame.video_frame.height;
-    td_u32 stride_y = g_svp_npu_face_det_frame.video_frame.stride[0];
-    td_u32 stride_uv = g_svp_npu_face_det_frame.video_frame.stride[1];
-    const td_u8 *src_y = src;
-    const td_u8 *src_vu = src + (size_t)stride_y * src_h;
-    td_float cs = cosf(roi->rotation);
-    td_float sn = sinf(roi->rotation);
-    td_u32 x;
-    td_u32 y;
-    td_bool is_yuv;
-    td_u32 y_stride;
-    svp_acl_error acl_ret;
-
-    sample_svp_check_exps_return(roi == TD_NULL || src == TD_NULL || g_pose_lm_input_virt == TD_NULL,
+    const ot_video_frame_info *frame = &g_svp_npu_face_det_frame;
+    const td_u8 *src_y = g_svp_npu_face_det_frame_virt;
+    td_u32 src_w = frame->video_frame.width;
+    td_u32 src_h = frame->video_frame.height;
+    td_u32 stride_y = frame->video_frame.stride[0];
+    td_u32 stride_uv = frame->video_frame.stride[1];
+    const td_u8 *src_vu = src_y + stride_y * src_h;
+    
+    td_bool is_yuv = (sample_svp_model_input_type(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX) == SVP_ACL_UINT8) ? TD_TRUE : TD_FALSE;
+    td_u32 dst_w = g_pose_expect_w;
+    td_u32 dst_h = g_pose_expect_h;
+    
+    sample_svp_check_exps_return(src_y == TD_NULL || g_pose_lm_input_virt == TD_NULL || src_w == 0 || src_h == 0,
         TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose landmark input invalid\n");
-
-    /* When the om input is uint8, it consumes raw YUV420SP (pre-AIPP) bytes; the
-     * on-chip AIPP does YUV->RGB CSC + normalization. Lay out NV12 raw bytes only. */
-    is_yuv = (sample_svp_model_input_type(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX) == SVP_ACL_UINT8)
-        ? TD_TRUE : TD_FALSE;
-
-    if (is_yuv == TD_TRUE) {
-        y_stride = (g_pose_lm_input_stride > SAMPLE_SVP_POSE_LM_INPUT_W)
-            ? g_pose_lm_input_stride : SAMPLE_SVP_POSE_LM_INPUT_W;
-        sample_svp_check_exps_return(
-            g_pose_lm_input_size < (size_t)y_stride * SAMPLE_SVP_POSE_LM_INPUT_H * 3 / 2,
-            TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose landmark YUV buffer too small\n");
-        sample_svp_yuv420sp_fill_black(g_pose_lm_input_virt,
-            SAMPLE_SVP_POSE_LM_INPUT_H, y_stride);
-        for (y = 0; y < SAMPLE_SVP_POSE_LM_INPUT_H; y++) {
-            td_float local_y = (((td_float)y + 0.5f) / SAMPLE_SVP_POSE_LM_INPUT_H - 0.5f) * roi->size;
-            for (x = 0; x < SAMPLE_SVP_POSE_LM_INPUT_W; x++) {
-                td_float local_x = (((td_float)x + 0.5f) / SAMPLE_SVP_POSE_LM_INPUT_W - 0.5f) * roi->size;
-                td_s32 sx = (td_s32)floorf(roi->cx + local_x * cs - local_y * sn + 0.5f);
-                td_s32 sy = (td_s32)floorf(roi->cy + local_x * sn + local_y * cs + 0.5f);
+        
+    td_float scale = fminf((td_float)dst_w / src_w, (td_float)dst_h / src_h);
+    td_u32 resized_w = (td_u32)(src_w * scale + 0.5f);
+    td_u32 resized_h = (td_u32)(src_h * scale + 0.5f);
+    td_u32 pad_x = (dst_w - resized_w) / 2;
+    td_u32 pad_y = (dst_h - resized_h) / 2;
+    
+    if (is_yuv) {
+        td_u32 y_stride = (g_pose_lm_input_stride > dst_w) ? g_pose_lm_input_stride : dst_w;
+        sample_svp_yuv420sp_fill_black(g_pose_lm_input_virt, dst_h, y_stride);
+        for (td_u32 y = 0; y < resized_h; y++) {
+            td_u32 sy = (y * src_h) / resized_h;
+            td_u32 dy = y + pad_y;
+            for (td_u32 x = 0; x < resized_w; x++) {
+                td_u32 sx = (x * src_w) / resized_w;
+                td_u32 dx = x + pad_x;
                 td_u8 yv, u, v;
-                if (sample_svp_nv21_get_yuv_bounded(src_y, src_vu, src_w, src_h, stride_y, stride_uv,
-                        sx, sy, &yv, &u, &v) != TD_TRUE) {
-                    continue; /* out-of-bounds: leave neutral black */
+                if (sample_svp_nv21_get_yuv_bounded(src_y, src_vu, src_w, src_h, stride_y, stride_uv, sx, sy, &yv, &u, &v) == TD_TRUE) {
+                    sample_svp_yuv420sp_set_pixel(g_pose_lm_input_virt, dst_h, y_stride, dx, dy, yv, u, v);
                 }
-                sample_svp_yuv420sp_set_pixel(g_pose_lm_input_virt,
-                    SAMPLE_SVP_POSE_LM_INPUT_H, y_stride, x, y, yv, u, v);
             }
         }
     } else {
         (td_void)memset_s(g_pose_lm_input_virt, g_pose_lm_input_size, 0, g_pose_lm_input_size);
-        for (y = 0; y < SAMPLE_SVP_POSE_LM_INPUT_H; y++) {
-            td_float local_y = (((td_float)y + 0.5f) / SAMPLE_SVP_POSE_LM_INPUT_H - 0.5f) * roi->size;
-            for (x = 0; x < SAMPLE_SVP_POSE_LM_INPUT_W; x++) {
-                td_float local_x = (((td_float)x + 0.5f) / SAMPLE_SVP_POSE_LM_INPUT_W - 0.5f) * roi->size;
-                td_s32 sx = (td_s32)floorf(roi->cx + local_x * cs - local_y * sn + 0.5f);
-                td_s32 sy = (td_s32)floorf(roi->cy + local_x * sn + local_y * cs + 0.5f);
-                td_float r, g, b;
-                sample_svp_nv21_get_rgb_or_black(src_y, src_vu, src_w, src_h, stride_y, stride_uv,
-                    sx, sy, &r, &g, &b);
-                sample_svp_check_exps_return(sample_svp_write_rgb_to_model_input(
-                    SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX, g_pose_lm_input_virt,
-                    g_pose_lm_input_size, g_pose_lm_input_stride,
-                    SAMPLE_SVP_POSE_LM_INPUT_W, SAMPLE_SVP_POSE_LM_INPUT_H,
-                    x, y, r, g, b, 1.0f / 255.0f, 0.0f) != TD_SUCCESS,
-                    TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "write pose landmark pixel failed\n");
+        td_float *dst_f = (td_float *)g_pose_lm_input_virt;
+        td_u32 stride_f = g_pose_lm_input_stride / sizeof(td_float);
+        td_float *plane_r = dst_f;
+        td_float *plane_g = dst_f + dst_h * stride_f;
+        td_float *plane_b = dst_f + 2 * dst_h * stride_f;
+        
+        for (td_u32 y = 0; y < resized_h; y++) {
+            td_u32 sy = (y * src_h) / resized_h;
+            td_u32 dy = y + pad_y;
+            
+            const td_u8 *row_y = src_y + sy * stride_y;
+            const td_u8 *row_vu = src_vu + (sy / 2) * stride_uv;
+            
+            td_float *out_r = plane_r + dy * stride_f + pad_x;
+            td_float *out_g = plane_g + dy * stride_f + pad_x;
+            td_float *out_b = plane_b + dy * stride_f + pad_x;
+            
+            for (td_u32 x = 0; x < resized_w; x++) {
+                td_u32 sx = (x * src_w) / resized_w;
+                
+                td_float fy = row_y[sx];
+                td_float fv = row_vu[(sx / 2) * 2] - 128.0f;
+                td_float fu = row_vu[(sx / 2) * 2 + 1] - 128.0f;
+                
+                td_float r = fy + 1.402f * fv;
+                td_float g = fy - 0.34414f * fu - 0.71414f * fv;
+                td_float b = fy + 1.772f * fu;
+                
+                *out_r++ = sample_svp_clamp_f32(r, 0.0f, 255.0f) / 255.0f;
+                *out_g++ = sample_svp_clamp_f32(g, 0.0f, 255.0f) / 255.0f;
+                *out_b++ = sample_svp_clamp_f32(b, 0.0f, 255.0f) / 255.0f;
             }
         }
     }
-    acl_ret = svp_acl_rt_mem_flush(g_pose_lm_input_virt, g_pose_lm_input_size);
-    sample_svp_check_exps_return(acl_ret != SVP_ACL_SUCCESS, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "flush pose landmark input failed, ret=%d\n", acl_ret);
     return TD_SUCCESS;
 }
 
@@ -2584,92 +2598,153 @@ static td_void sample_svp_classify_posture(sample_svp_pose_result *pose)
  * the landmark-based ROI cannot be built (too few visible joints) tracking is
  * dropped so the next frame re-initializes from the face box.
  */
-static td_s32 sample_svp_run_pose_once(sample_svp_pose_result *pose,
-    const sample_svp_face_box *face)
+typedef struct {
+    td_float x1, y1, x2, y2, score;
+    td_float kpts[11][3];
+    td_float area;
+} yolo_pose_box;
+
+static td_s32 sample_svp_run_pose_once(sample_svp_pose_result *pose, const sample_svp_face_box *face)
 {
     td_s32 ret;
-    sample_svp_pose_roi roi = {0};
     td_u32 frame_w = g_svp_npu_face_det_frame.video_frame.width;
     td_u32 frame_h = g_svp_npu_face_det_frame.video_frame.height;
-    td_float *raw_lm;
-    td_float *score_data;
+    td_float *raw_data;
     td_u32 raw_num;
-    td_u32 score_num;
+    td_u32 dst_w = g_pose_expect_w;
+    td_u32 dst_h = g_pose_expect_h;
+    td_float scale = fminf((td_float)dst_w / frame_w, (td_float)dst_h / frame_h);
+    td_u32 resized_w = (td_u32)floorf(frame_w * scale + 0.5f);
+    td_u32 resized_h = (td_u32)floorf(frame_h * scale + 0.5f);
+    td_u32 pad_x = (dst_w - resized_w) / 2;
+    td_u32 pad_y = (dst_h - resized_h) / 2;
 
     (td_void)memset_s(pose, sizeof(*pose), 0, sizeof(*pose));
     sample_svp_pose_debug_begin();
 
-    /* 1. ROI is ALWAYS derived from the current (stable) face box. We deliberately
-     * do NOT track the ROI from the previous frame's landmarks anymore: that
-     * detect-then-track loop was self-exciting (a slightly-off ROI produced worse
-     * landmarks, which produced an even-worse next ROI), making the posture label
-     * oscillate wildly while the subject sat still. The face box is stable frame to
-     * frame, so anchoring to it every run breaks the feedback loop. */
-    sample_svp_check_exps_return(face == TD_NULL, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "pose has no face to init ROI\n");
-    if (sample_svp_pose_roi_from_face(face, frame_w, frame_h, &roi) != TD_SUCCESS) {
-        /* face box unusable this frame; report no pose and reset smoothing. */
+    ret = sample_svp_prepare_pose_landmark_input(frame_w, frame_h);
+    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare pose failed\n");
+
+    ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX]);
+    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "run pose failed\n");
+
+    sample_svp_check_exps_return(sample_svp_pose_output_f32(&g_svp_npu_task[SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX], 0, &raw_data, &raw_num) != TD_SUCCESS,
+        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "get pose landmark outputs failed\n");
+
+    // raw_data is [1, 56, 8400] for 17-keypoint YOLOv8-pose
+    td_u32 channels = 56;
+    td_u32 num_anchors = raw_num / channels;
+    yolo_pose_box best_box = {0};
+    td_bool found = TD_FALSE;
+    
+    for (td_u32 i = 0; i < num_anchors; i++) {
+        td_float score = raw_data[4 * num_anchors + i];
+        if (score < 0.35f) continue;
+        
+        td_float xc = raw_data[0 * num_anchors + i];
+        td_float yc = raw_data[1 * num_anchors + i];
+        td_float w = raw_data[2 * num_anchors + i];
+        td_float h = raw_data[3 * num_anchors + i];
+        td_float area = w * h;
+        
+        if (!found || area > best_box.area) {
+            found = TD_TRUE;
+            best_box.score = score;
+            best_box.area = area;
+            best_box.x1 = xc - w / 2;
+            best_box.y1 = yc - h / 2;
+            best_box.x2 = xc + w / 2;
+            best_box.y2 = yc + h / 2;
+            for (td_u32 k = 0; k < 11; k++) {
+                best_box.kpts[k][0] = raw_data[(5 + k * 3) * num_anchors + i];
+                best_box.kpts[k][1] = raw_data[(6 + k * 3) * num_anchors + i];
+                best_box.kpts[k][2] = raw_data[(7 + k * 3) * num_anchors + i];
+            }
+        }
+    }
+    
+    if (!found) {
+        svp_acl_data_type dtype = sample_svp_model_input_type(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX);
+        svp_acl_format format = sample_svp_model_input_format(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX);
+        sample_svp_trace_info("pose OM info: dtype=%d, format=%d, is_yuv=%d\n", dtype, format, (dtype == SVP_ACL_UINT8));
+        sample_svp_trace_info("pose output raw_num=%u, channels=%u, num_anchors=%u\n", raw_num, channels, num_anchors);
+        
+        td_float max_score = 0;
+        td_u32 max_i = 0;
+        td_float max_score_transpose = 0;
+        td_u32 max_i_transpose = 0;
+        for (td_u32 i = 0; i < num_anchors; i++) {
+            if (raw_data[4 * num_anchors + i] > max_score) {
+                max_score = raw_data[4 * num_anchors + i];
+                max_i = i;
+            }
+            if (raw_data[i * 56 + 4] > max_score_transpose) {
+                max_score_transpose = raw_data[i * 56 + 4];
+                max_i_transpose = i;
+            }
+        }
+        sample_svp_trace_info("max_score=%.3f at %u\n", max_score, max_i);
+        sample_svp_trace_info("max_score_transpose=%.3f at %u\n", max_score_transpose, max_i_transpose);
+        
         sample_svp_pose_stab_reset("no_pose");
         sample_svp_classify_posture(pose);
         return TD_SUCCESS;
     }
-
-    /* 2. run the landmark model on the chosen ROI. */
-    ret = sample_svp_prepare_pose_landmark_input(&roi);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "prepare pose landmark failed\n");
-    sample_svp_pose_debug_write_blob("lm_input.bin", g_pose_lm_input_virt, g_pose_lm_input_size);
-    ret = sample_common_svp_npu_model_execute(&g_svp_npu_task[SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX]);
-    sample_svp_check_exps_return(ret != TD_SUCCESS, TD_FAILURE,
-        SAMPLE_SVP_ERR_LEVEL_ERROR, "run pose landmark failed\n");
-    sample_svp_pose_debug_dump_outputs(SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX, "lm");
-    sample_svp_check_exps_return(sample_svp_pose_output_f32(&g_svp_npu_task[SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX], 0, &raw_lm, &raw_num) != TD_SUCCESS ||
-        sample_svp_pose_output_f32(&g_svp_npu_task[SAMPLE_SVP_NPU_POSE_LANDMARK_MODEL_IDX], 1, &score_data, &score_num) != TD_SUCCESS,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "get pose landmark outputs failed\n");
-    sample_svp_check_exps_return(raw_num < SAMPLE_SVP_POSE_LANDMARK_NUM * 5 || score_num < 1,
-        TD_FAILURE, SAMPLE_SVP_ERR_LEVEL_ERROR, "pose landmark output size invalid\n");
-
-    /* 3. Project the landmarks first. out0 (idx 0) always carries valid keypoints
-     * with their own per-joint visibility/presence logits. The model's global
-     * presence outputs proved unusable (dump analysis): output idx 1 is actually
-     * the 120 world-landmark coordinates, and idx 2 jumps erratically (0.0002 ..
-     * 0.93) even while the subject stays in frame. So we ignore score_data entirely
-     * and derive presence from the core joints' visibility, which the dump showed
-     * to be stable and high (>0.85) whenever a body is present. */
-    (void)score_data;
-    (void)score_num;
-    sample_svp_project_pose_landmarks(&roi, pose, raw_lm);
-
-    {
-        /* Acceptance score from the reliable UPPER-body joints only: nose and the
-         * two shoulders. The hips (23/24) are extrapolated in an upper-body view
-         * and carry low visibility, so including them structurally dragged the
-         * average below SCORE_TH and the pose was never accepted. We already do
-         * not judge hip-based posture, so they must not gate acceptance either. */
-        static const td_u32 core_lm[] = {
-            SAMPLE_SVP_POSE_LM_NOSE, SAMPLE_SVP_POSE_LM_LSHOULDER,
-            SAMPLE_SVP_POSE_LM_RSHOULDER
-        };
-        td_float sum = 0.0f;
-        td_u32 i;
-        for (i = 0; i < sizeof(core_lm) / sizeof(core_lm[0]); i++) {
-            sum += sample_svp_pose_lm_conf(pose, core_lm[i]);
-        }
-        pose->score = sum / (td_float)(sizeof(core_lm) / sizeof(core_lm[0]));
+    
+    // Convert back to original frame coordinates
+    pose->landmark_num = 17; // We map 11 kpts to the old 17 kpts layout to minimize changes
+    for (td_u32 k = 0; k < pose->landmark_num; k++) {
+        pose->landmarks[k][3] = 0.0f; // mask invalid
+        pose->landmarks[k][4] = 0.0f;
     }
-    pose->detection_score = pose->score; /* no separate detector stage now */
-
-    /* 4. accept / reject. No ROI tracking to update: the next run re-derives the
-     * ROI from the face box regardless. On rejection we also reset the temporal
-     * smoothing so a returning body starts a clean EMA / confirmation streak. */
-    if (pose->score >= SAMPLE_SVP_POSE_SCORE_TH) {
-        pose->has_pose = TD_TRUE;
-    } else {
-        sample_svp_pose_stab_reset("no_pose");
+    
+    // Map YOLO26-Pose (11 kpts) to original 17 kpts format (COCO)
+    // YOLO 11 points: 0=nose, 1=leye, 2=reye, 3=lear, 4=rear, 5=lsho, 6=rsho, 7=lelb, 8=relb, 9=lwri, 10=rwri
+    // COCO 17 points: 0=nose, 1=leye, 2=reye, 3=lear, 4=rear, 5=lsho, 6=rsho, 7=lelb, 8=relb, 9=lwri, 10=rwri, ...
+    // Wait, the python script says YOLO 11 points are exactly 0-10!
+    // So we just map them 1:1. But wait, in the old C code:
+    // "11: lsho, 12: rsho, 15: lwri, 16: rwri" ??? Wait.
+    // The previous code in sample_svp_classify_posture uses:
+    // lsx = pose->landmarks[11][0]; rsx = pose->landmarks[12][0];
+    // This is because the previous model output was BlazePose (33 keypoints)!
+    // BlazePose: 11=lsho, 12=rsho, 13=lelb, 14=relb, 15=lwri, 16=rwri.
+    // So we must map YOLO 11 to BlazePose indices:
+    // YOLO(0) -> BP(0)
+    // YOLO(1) -> BP(1)
+    // YOLO(2) -> BP(2)
+    // YOLO(3) -> BP(3)
+    // YOLO(4) -> BP(4)
+    // YOLO(5) -> BP(11) // lsho
+    // YOLO(6) -> BP(12) // rsho
+    // YOLO(7) -> BP(13) // lelb
+    // YOLO(8) -> BP(14) // relb
+    // YOLO(9) -> BP(15) // lwri
+    // YOLO(10)-> BP(16) // rwri
+    
+    td_u32 map[11] = {0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16};
+    for (td_u32 k = 0; k < 11; k++) {
+        td_u32 bp_idx = map[k];
+        td_float x = best_box.kpts[k][0];
+        td_float y = best_box.kpts[k][1];
+        td_float conf = best_box.kpts[k][2];
+        
+        x = (x - pad_x) / scale;
+        y = (y - pad_y) / scale;
+        
+        pose->landmarks[bp_idx][0] = x;
+        pose->landmarks[bp_idx][1] = y;
+        pose->landmarks[bp_idx][2] = 0.0f; // z
+        pose->landmarks[bp_idx][3] = conf; // visibility
+        pose->landmarks[bp_idx][4] = conf; // presence
     }
-
+    
+    pose->has_pose = TD_TRUE;
+    pose->score = best_box.score;
+    pose->detection_score = best_box.score;
+    
+    pose->landmark_num = 17; // ensure it covers up to 16
     sample_svp_classify_posture(pose);
-    sample_svp_pose_debug_write_meta(pose, TD_NULL, &roi, 1.0f, 0.0f, 0.0f);
+    
     return TD_SUCCESS;
 }
 
