@@ -50,6 +50,7 @@ typedef struct {
     uint64_t timestamp;         // 时间戳
     uint32_t blink_count;        // 眨眼计数
     uint32_t yawn_count;         // 哈欠计数
+    uint8_t posture_ok;         // 坐姿是否端正
 } VisionState;
 
 // 雷达状态数据
@@ -112,6 +113,7 @@ typedef enum {
     ASR_CMD_PLAY_CALIB_EYES_CLOSED = 0xF5,
     ASR_CMD_PLAY_CALIB_DESK        = 0xF6,
     ASR_CMD_PLAY_CALIB_DONE        = 0xF7,
+    ASR_CMD_PLAY_POSTURE_BAD       = 0xF8, // 坐姿不端正播报
     ASR_CMD_CALIBRATION_START  = 0x50  // QT发送给Fusion开始校准
 } AsrCommandType;
 

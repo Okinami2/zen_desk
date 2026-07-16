@@ -18,6 +18,7 @@ void app();
 //{playid:10702,voice:请保持面部姿势不变，闭上眼睛}
 //{playid:10703,voice:请注视学习区}
 //{playid:10704,voice:校准完成}
+//{playid:10604,voice:检测到坐姿不端正，请调整坐姿。}
 // 魔术指令配置区
 /*
  * Zen Desk ASRPRO 离线语音识别固件代码
@@ -220,6 +221,8 @@ void app() {
         play_audio(10703);
       } else if (cmd == 0xF7) {
         play_audio(10704);
+      } else if (cmd == 0xF8) {
+        play_audio(10604);
       }
     }
     delay(10);

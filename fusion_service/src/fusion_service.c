@@ -88,6 +88,7 @@ typedef struct {
     uint64_t last_transition_ms;
     uint64_t eyes_closed_since_ms;
     uint8_t last_attention_region;
+    uint64_t last_posture_prompt_ms; // 坐姿提示冷却时间
 } VisionFocusFilter;
 
 typedef struct {
@@ -422,8 +423,17 @@ static void* tcp_client_handler(void *arg)
             
             // 只有状态改变时才向外广播状态，触发后续联动（UI/灯光）
             if ((cmd->command_id >= ASR_CMD_STUDY_START && cmd->command_id <= ASR_CMD_STUDY_START_60) ||
-                (cmd->command_id >= ASR_CMD_STUDY_START_CUSTOM_BASE && cmd->command_id <= ASR_CMD_STUDY_START_CUSTOM_BASE + 24) ||
-                cmd->command_id == ASR_CMD_STUDY_DISTRACTED || cmd->command_id == ASR_CMD_STUDY_FOCUSED) {
+                (cmd->command_id >= ASR_CMD_STUDY_START_CUSTOM_BASE && cmd->command_id <= ASR_CMD_STUDY_START_CUSTOM_BASE + 24)) {
+                
+                // 如果用户主动开启/恢复了专注模式，为了防止雷达单点故障导致系统一直处于“离座死机”状态，
+                // 强制下发开启视觉推理的指令，进行降级保护。
+                if (fs.current_state == STATE_FOCUSED) {
+                    send_vision_control_cmd("enable");
+                }
+                
+                fusion_send_state(&fs);
+                device_handle_fusion_state(&fs);
+            } else if (cmd->command_id == ASR_CMD_STUDY_DISTRACTED || cmd->command_id == ASR_CMD_STUDY_FOCUSED) {
                 fusion_send_state(&fs);
                 device_handle_fusion_state(&fs);
             }
@@ -913,6 +923,15 @@ static void vision_to_fusion_and_dispatch(const VisionState *vs)
             should_dispatch = 1;
             LOG_INFO("Vision fusion state -> %s",
                 next_state == STATE_DISTRACTED ? "DISTRACTED" : "FOCUSED");
+        }
+    }
+    
+    if (!vs->posture_ok && (g_fusion_service.current_state == STATE_FOCUSED || g_fusion_service.current_state == STATE_DISTRACTED)) {
+        if (g_vision_filter.last_posture_prompt_ms == 0 ||
+            (now_ms - g_vision_filter.last_posture_prompt_ms > 30000ULL)) {
+            fusion_send_asr_command(ASR_CMD_PLAY_POSTURE_BAD);
+            g_vision_filter.last_posture_prompt_ms = now_ms;
+            LOG_INFO("Bad posture detected. Sent ASR prompt (cooldown 30s).");
         }
     }
 

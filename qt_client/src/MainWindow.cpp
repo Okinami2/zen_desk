@@ -813,6 +813,7 @@ void MainWindow::handleVisionTelemetry(const QByteArray &data)
         obj.value("timestamp_ms").toDouble(QDateTime::currentMSecsSinceEpoch()));
     state.blink_count = static_cast<uint32_t>(qMax(0, blink_count));
     state.yawn_count = static_cast<uint32_t>(qMax(0, yawn_count));
+    state.posture_ok = postureOk ? 1 : 0;
     sendTcpVisionState(state);
 }
 
